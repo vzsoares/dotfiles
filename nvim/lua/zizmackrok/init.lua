@@ -2,10 +2,6 @@ require("zizmackrok.set")
 require("zizmackrok.remap")
 require("zizmackrok.packer")
 
--- DO NOT INCLUDE THIS
--- vim.opt.rtp:append("~/personal/streamer-tools")
--- DO NOT INCLUDE THIS
-
 local augroup = vim.api.nvim_create_augroup
 local zizmackrokGroup = augroup('zizmackrok', {})
 
@@ -33,8 +29,8 @@ autocmd({"BufWritePre"}, {
     command = [[%s/\s\+$//e]],
 })
 
-vim.g.netrw_browse_split = 0
-vim.g.netrw_banner = 0
-vim.g.netrw_winsize = 50
-vim.g.netrw_bufsettings = 'noma nomod nu rnu nobl nowrap ro'
+-- disable netrw at the very start of your init.lua
+vim.g.loaded_netrw = 1
+vim.g.loaded_netrwPlugin = 1
+
 vim.filetype.add({ pattern = { [".*%.ansible%..*"] = "yaml.ansible" } })

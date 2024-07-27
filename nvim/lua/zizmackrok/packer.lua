@@ -41,7 +41,12 @@ return require('packer').startup(function(use)
             ts_update()
         end, }
     use("nvim-treesitter/playground")
-    use("theprimeagen/harpoon")
+    use "nvim-lua/plenary.nvim"
+    use {
+        "ThePrimeagen/harpoon",
+        branch = "harpoon2",
+        requires = { { "nvim-lua/plenary.nvim" } }
+    }
     use("theprimeagen/refactoring.nvim")
     use("mbbill/undotree")
     use("tpope/vim-fugitive")
@@ -79,9 +84,12 @@ return require('packer').startup(function(use)
 
     use { 'tpope/vim-commentary' }
 
-    use("folke/zen-mode.nvim")
     use("b0o/schemastore.nvim")
-    -- use("github/copilot.vim")
-    use("eandrju/cellular-automaton.nvim")
     use("laytan/cloak.nvim")
+    use {
+        'nvim-tree/nvim-tree.lua',
+        requires = {
+            'nvim-tree/nvim-web-devicons', -- optional
+        },
+    }
 end)
