@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# set -e
+set -e
 
 OHMYZSH_DIR=~/.oh-my-zsh
 
