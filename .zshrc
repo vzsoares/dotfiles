@@ -102,12 +102,6 @@ source $ZSH/oh-my-zsh.sh
 
 bindkey -e
 
-export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-
-DENO_INSTALL="/home/zizmackrok/.deno"
-
 alias aws-approva-dev="export AWS_PROFILE=approva-dev"
 alias aws-approva-prod="export AWS_PROFILE=approva-prod"
 alias aws-myself="export AWS_PROFILE=myself"
@@ -128,6 +122,7 @@ export PATH=$PATH:$ANDROID_HOME/tools/bin
 export PATH=$PATH:$ANDROID_HOME/platform-tools
 export PATH=$PATH:~/android-studio/bin
 export PATH=$PATH:/usr/local/go/bin
+DENO_INSTALL="/home/zizmackrok/.deno"
 PATH="$DENO_INSTALL/bin:$PATH"
 
 export GOPATH="$HOME/go"
@@ -136,8 +131,12 @@ export PATH="$GOPATH/bin:$PATH"
 export VISUAL=nvim
 export EDITOR="$VISUAL"
 
-# if command -v tmux &> /dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
-#   exec tmux
-# fi
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
+if command -v tmux &> /dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
+  exec tmux
+fi
 # Generated for envman. Do not edit.
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"

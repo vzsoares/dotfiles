@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
 
-rm -rf ~/.config/tmux
-ln -s $(pwd) ~/.config/tmux
+# set -e
+
+OHMYZSH_DIR=~/.oh-my-zsh
+
+if [ -d "$OHMYZSH_DIR" ]; then
+    rm -f ~/.zshrc
+    ln -s "$(pwd)/.zshrc" ~/.zshrc
+    rm -f $OHMYZSH_DIR/themes/zenha.zsh-theme
+    ln -s "$(pwd)/zenha.zsh-theme" $OHMYZSH_DIR/themes/zenha.zsh-theme
+else
+    echo "please install oh-my-zsh"
+fi
+
+rm -f ~/.gitconfig
+ln -s "$(pwd)/.gitconfig" ~/.gitconfig
