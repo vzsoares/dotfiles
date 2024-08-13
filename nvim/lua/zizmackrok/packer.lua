@@ -92,4 +92,5 @@ return require('packer').startup(function(use)
             'nvim-tree/nvim-web-devicons', -- optional
         },
     }
+    use 'mfussenegger/nvim-lint'
 end)
