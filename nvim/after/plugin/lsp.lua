@@ -92,6 +92,11 @@ require('mason-lspconfig').setup({
                     },
                 },
             }
+        end,
+        gopls = function()
+            require('lspconfig').gopls.setup {
+                filetypes = { "go", "gomod", "gotmpl" }
+            }
         end
     }
 })

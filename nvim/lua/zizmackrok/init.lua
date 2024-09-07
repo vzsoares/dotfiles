@@ -23,7 +23,7 @@ autocmd('TextYankPost', {
     end,
 })
 
-autocmd({"BufWritePre"}, {
+autocmd({ "BufWritePre" }, {
     group = zizmackrokGroup,
     pattern = "*",
     command = [[%s/\s\+$//e]],
@@ -34,3 +34,11 @@ vim.g.loaded_netrw = 1
 vim.g.loaded_netrwPlugin = 1
 
 vim.filetype.add({ pattern = { [".*%.ansible%..*"] = "yaml.ansible" } })
+vim.filetype.add({
+    extension = {
+        gotmpl = 'gotmpl',
+    },
+    pattern = {
+        [".*%.go.tmpl"] = "gotmpl"
+    },
+})
