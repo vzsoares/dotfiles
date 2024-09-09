@@ -1,6 +1,12 @@
 require('lint').linters_by_ft = {
-    markdown = { 'vale', },
+    markdown = { 'markdownlint', },
     python = { 'flake8', }
+}
+
+local markdownlint = require('lint').linters.markdownlint
+markdownlint.args = {
+    '--disable=MD030',
+    '-'
 }
 
 vim.api.nvim_create_autocmd({ "BufWritePost" }, {
