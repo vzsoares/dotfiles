@@ -109,6 +109,8 @@ alias aws-myself="export AWS_PROFILE=myself"
 alias ts="tsx"
 alias n="nvim"
 
+alias sourcepy="source .venv/bin/activate"
+
 source /usr/share/nvm/init-nvm.sh
 
 export ANDROID_SDK_ROOT=$HOME/Android/Sdk
