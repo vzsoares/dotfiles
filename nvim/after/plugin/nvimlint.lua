@@ -1,6 +1,6 @@
 require('lint').linters_by_ft = {
     markdown = { 'markdownlint', },
-    python = { 'flake8', }
+    python = { 'ruff', 'flake8' }
 }
 
 local markdownlint = require('lint').linters.markdownlint
