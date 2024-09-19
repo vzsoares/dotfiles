@@ -108,6 +108,7 @@ alias aws-myself="export AWS_PROFILE=myself"
 
 alias ts="tsx"
 alias n="nvim"
+alias tf="terraform"
 
 alias sourcepy="source .venv/bin/activate"
 
