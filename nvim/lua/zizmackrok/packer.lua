@@ -82,8 +82,6 @@ return require('packer').startup(function(use)
         end,
     })
 
-    use { 'tpope/vim-commentary' }
-
     use("b0o/schemastore.nvim")
     use("laytan/cloak.nvim")
     use {
