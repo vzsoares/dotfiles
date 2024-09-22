@@ -18,7 +18,10 @@ cmp_mappings['<Tab>'] = nil
 cmp_mappings['<S-Tab>'] = nil
 
 lsp.setup_nvim_cmp({
-    mapping = cmp_mappings
+    mapping = cmp_mappings,
+    view = {
+        entries = { name = 'custom', selection_order = 'near_cursor' }
+    }
 })
 
 lsp.set_preferences({
