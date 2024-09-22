@@ -21,6 +21,15 @@ lsp.setup_nvim_cmp({
     mapping = cmp_mappings,
     view = {
         entries = { name = 'custom', selection_order = 'near_cursor' }
+    },
+    formatting = {
+        format = function(entry, vim_item)
+            -- Kind icons
+            vim_item.kind = string.sub(vim_item.kind, 0, 4)
+            -- Source
+            vim_item.menu = (vim_item.menu or '') .. ' '
+            return vim_item
+        end
     }
 })
 
