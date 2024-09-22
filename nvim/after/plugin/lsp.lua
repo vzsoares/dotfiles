@@ -28,6 +28,7 @@ lsp.setup_nvim_cmp({
             vim_item.kind = string.sub(vim_item.kind, 0, 4)
             -- Source
             vim_item.menu = (vim_item.menu or '') .. ' '
+            vim_item.abbr = (string.sub(vim_item.abbr, 0, 20) or '') .. ' '
             return vim_item
         end
     }
