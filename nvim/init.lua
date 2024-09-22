@@ -1,2 +1,2 @@
-require("zizmackrok")
+require("master")
 

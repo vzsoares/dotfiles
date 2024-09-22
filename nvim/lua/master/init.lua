@@ -1,9 +1,9 @@
-require("zizmackrok.set")
-require("zizmackrok.remap")
-require("zizmackrok.packer")
+require("master.set")
+require("master.remap")
+require("master.packer")
 
 local augroup = vim.api.nvim_create_augroup
-local zizmackrokGroup = augroup('zizmackrok', {})
+local masterGroup = augroup('master', {})
 
 local autocmd = vim.api.nvim_create_autocmd
 local yank_group = augroup('HighlightYank', {})
@@ -24,7 +24,7 @@ autocmd('TextYankPost', {
 })
 
 autocmd({ "BufWritePre" }, {
-    group = zizmackrokGroup,
+    group = masterGroup,
     pattern = "*",
     command = [[%s/\s\+$//e]],
 })
