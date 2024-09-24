@@ -29,7 +29,8 @@ lsp.setup_nvim_cmp({
             -- Kind icons
             vim_item.kind = string.sub(vim_item.kind, 0, 4)
             -- Source
-            vim_item.menu = (vim_item.menu or '') .. ' '
+            vim_item.menu = (string.sub(vim_item.menu or "", 0, 20) or '') .. ' '
+            vim_item.word = (string.sub(vim_item.word or "", 0, 20) or '') .. ' '
             -- Content
             vim_item.abbr = (string.sub(vim_item.abbr, 0, 20) or '') .. ' '
             return vim_item
