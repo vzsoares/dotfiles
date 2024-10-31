@@ -33,6 +33,12 @@ return require('packer').startup(function(use)
             }
         end
     })
+    use({
+        "folke/ts-comments.nvim",
+        config = function()
+            require('ts-comments').setup()
+        end
+    })
 
     use {
         'nvim-treesitter/nvim-treesitter',
