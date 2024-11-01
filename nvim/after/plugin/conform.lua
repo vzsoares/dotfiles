@@ -23,4 +23,6 @@ builtin.formatters.prettier = {
     prepend_args = { "--tab-width", "4" },
 }
 
-vim.keymap.set("n", "<leader>f", builtin.format)
+vim.keymap.set("n", "<leader>f", function()
+    builtin.format { async = true, lsp_fallback = true, timeout_ms = 2500 }
+end)
