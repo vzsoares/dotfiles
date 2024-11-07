@@ -45,7 +45,8 @@ lsp.set_preferences({
         warn = 'W',
         hint = 'H',
         info = 'I'
-    }
+    },
+    autoformat = false
 })
 
 lsp.on_attach(function(client, bufnr)

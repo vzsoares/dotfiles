@@ -23,12 +23,6 @@ autocmd('TextYankPost', {
     end,
 })
 
-autocmd({ "BufWritePre" }, {
-    group = masterGroup,
-    pattern = "*",
-    command = [[%s/\s\+$//e]],
-})
-
 -- disable netrw at the very start of your init.lua
 vim.g.loaded_netrw = 1
 vim.g.loaded_netrwPlugin = 1
