@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set -e
+
+rm -f ~/.alacritty.toml
+ln -s "$(pwd)/.alacritty.toml" ~/.alacritty.toml

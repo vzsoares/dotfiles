@@ -19,3 +19,4 @@
 - fzf
 - ripgrep
 - gpg
+- nerdfonts (Hack Nerd Font) ttf-hack-nerd
