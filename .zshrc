@@ -102,6 +102,8 @@ source $ZSH/oh-my-zsh.sh
 
 bindkey -e
 
+# Aliases
+
 alias aws-approva-dev="export AWS_PROFILE=approva-dev"
 alias aws-approva-prod="export AWS_PROFILE=approva-prod"
 alias aws-myself="export AWS_PROFILE=myself"
@@ -112,7 +114,7 @@ alias tf="terraform"
 
 alias sourcepy="source .venv/bin/activate"
 
-#######################
+###############################
 
 # Configs
 export VISUAL=nvim
