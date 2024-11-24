@@ -7,3 +7,6 @@
 
 [window]
   dimensions = { columns = 80, lines = 30 }
+
+[shell]
+    program = "/bin/zsh"

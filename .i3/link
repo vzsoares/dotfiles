@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+rm -f ~/.i3/config
+mkdir -p ~/.i3
+ln -s "$(pwd)/config" ~/.i3/config

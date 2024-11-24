@@ -14,9 +14,11 @@
 
 ### Requirements
 
-- nvim
+- nvim  aur:neovim
     - packer
-- fzf
-- ripgrep
+    - fzf
+    - ripgrep
 - gpg
-- nerdfonts (Hack Nerd Font) ttf-hack-nerd
+- nerdfonts (Hack Nerd Font) aur:ttf-hack-nerd
+- ohmyzsh
+- alacritty
