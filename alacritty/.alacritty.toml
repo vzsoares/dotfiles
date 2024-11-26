@@ -10,3 +10,7 @@
 
 [shell]
     program = "/bin/zsh"
+
+[[keyboard.bindings]]
+    key = "NumpadEnter"
+    chars = "\r"
