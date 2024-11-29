@@ -15,3 +15,5 @@
 	defaultBranch = main
 [merge]
 	ff = no
+[pull]
+    rebase = yes
