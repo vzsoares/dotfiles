@@ -16,4 +16,4 @@
 [merge]
 	ff = no
 [pull]
-    rebase = yes
+	rebase = true
