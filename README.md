@@ -22,3 +22,6 @@
 - nerdfonts (Hack Nerd Font) aur:ttf-hack-nerd
 - ohmyzsh
 - alacritty
+
+- i3
+    - playerctl
