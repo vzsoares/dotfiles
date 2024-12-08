@@ -321,10 +321,11 @@ exec --no-startup-id xautolock -time 10 -locker blurlock
 exec_always --no-startup-id ff-theme-util
 exec_always --no-startup-id fix_xcursor
 
-exec discord
-exec alacritty
+exec --no-startup-id discord
+exec --no-startup-id alacritty
 # delay buggy fkers
-exec "sleep 3; spotify; google-chrome-stable"
+exec --no-startup-id "sleep 3; google-chrome-stable"
+exec --no-startup-id "sleep 6; spotify"
 
 # Color palette used for the terminal ( ~/.Xresources file )
 # Colors are gathered based on the documentation:
