@@ -4,12 +4,23 @@
 ###############################################################################
 ###########################  VARIABLES  #######################################
 ###############################################################################
+#mocha rose pine map
+#overlay
 set $bg-color #1f1d2e
+#gold
 set $active-color #f6c177
+#muted
 set $inactive-bg-color #6e6a86
+#text
 set $text-color #e0def4
+#base
 set $inactive-text-color #191724
+#love
 set $urgent-bg-color #eb6f92
+#rose
+set $primary-color #ebbcba
+#pine
+set $secondary-color #31748f
 ###############################################################################
 
 # Set mod key (Mod1=<Alt>, Mod4=<Super>)
@@ -363,11 +374,11 @@ bar {
 
     colors {
         background $bg-color
-        statusline #F9FAF9
-        separator  #454947
+        statusline $text-color
+        separator  $inactive-bg-color
 
-#                      border  backgr. text
-        focused_workspace  $bg-color $bg-color $text-color
+#                          border  backgr. text
+        focused_workspace  $active-color $bg-color $text-color
         active_workspace   #595B5B #353836 #FDF6E3
         inactive_workspace $inactive-bg-color $inactive-bg-color $inactive-text-color
         binding_mode       #16a085 #2C2C2C #F9FAF9
@@ -380,7 +391,7 @@ bindsym $mod+m bar mode toggle
 
 # Theme colors
 # class                   border             backgr.            text                 indic.  child_border
-  client.focused          $active-color      $bg-color          $text-color          #FDF6E3
+  client.focused          $bg-color      $active-color          $text-color          #FDF6E3
   client.unfocused        $inactive-bg-color $inactive-bg-color $inactive-text-color #454948
   client.focused_inactive $inactive-bg-color $inactive-bg-color $inactive-text-color #454948
   client.urgent           $urgent-bg-color   $urgent-bg-color   $text-color          #268BD2
@@ -394,7 +405,7 @@ bindsym $mod+m bar mode toggle
 #############################
 
 # Set inner/outer gaps
-gaps inner 1
+gaps inner 2
 gaps outer -2
 
 # Additionally, you can issue commands with the following syntax. This is useful to bind keys to changing the gap size.
