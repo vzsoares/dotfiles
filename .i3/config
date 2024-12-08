@@ -4,11 +4,12 @@
 ###############################################################################
 ###########################  VARIABLES  #######################################
 ###############################################################################
-set $bg-color #f6c177
-set $inactive-bg-color #2f343f
-set $text-color #f3f4f5
-set $inactive-text-color #676E7D
-set $urgent-bg-color #E53935
+set $bg-color #1f1d2e
+set $active-color #f6c177
+set $inactive-bg-color #6e6a86
+set $text-color #e0def4
+set $inactive-text-color #191724
+set $urgent-bg-color #eb6f92
 ###############################################################################
 
 # Set mod key (Mod1=<Alt>, Mod4=<Super>)
@@ -361,7 +362,7 @@ bar {
 	strip_workspace_numbers yes
 
     colors {
-        background $inactive-bg-color
+        background $bg-color
         statusline #F9FAF9
         separator  #454947
 
@@ -379,7 +380,7 @@ bindsym $mod+m bar mode toggle
 
 # Theme colors
 # class                   border             backgr.            text                 indic.  child_border
-  client.focused          $bg-color          $bg-color          $text-color          #FDF6E3
+  client.focused          $active-color      $bg-color          $text-color          #FDF6E3
   client.unfocused        $inactive-bg-color $inactive-bg-color $inactive-text-color #454948
   client.focused_inactive $inactive-bg-color $inactive-bg-color $inactive-text-color #454948
   client.urgent           $urgent-bg-color   $urgent-bg-color   $text-color          #268BD2
