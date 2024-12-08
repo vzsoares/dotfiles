@@ -5,3 +5,6 @@ set -e
 rm -f ~/.i3/config
 mkdir -p ~/.i3
 ln -s "$(pwd)/config" ~/.i3/config
+
+rm -f ~/.i3status.conf
+ln -s "$(pwd)/.i3status.conf" ~/.i3status.conf
