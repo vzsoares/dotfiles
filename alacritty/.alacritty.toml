@@ -8,7 +8,7 @@
 [window]
   dimensions = { columns = 80, lines = 30 }
 
-[shell]
+[terminal.shell]
     program = "/bin/zsh"
 
 [[keyboard.bindings]]
