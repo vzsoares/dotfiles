@@ -328,7 +328,7 @@ exec --no-startup-id alacritty
 exec --no-startup-id "sleep 3; google-chrome-stable"
 exec --no-startup-id "sleep 6; spotify"
 
-exec_always feh --bg-scale ~/code/personal/dotfiles/pics/arch-mocha-base.jpg 
+exec_always --no-startup-id feh --bg-scale ~/code/personal/dotfiles/pics/arch-mocha-base.jpg 
 
 # Color palette used for the terminal ( ~/.Xresources file )
 # Colors are gathered based on the documentation:
