@@ -17,3 +17,5 @@
 	ff = no
 [pull]
 	rebase = true
+[push]
+	autoSetupRemote = true
