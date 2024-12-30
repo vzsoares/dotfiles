@@ -219,6 +219,8 @@ assign [class="Google-chrome"] $ws2
 assign [class="Spotify"] $ws8
 assign [class="eovpn"] $ws8
 assign [class="discord"] $ws3
+assign [class="Thunar"] $ws4
+assign [class="Studio 3T"] $ws5
 
 # Open specific applications in floating mode
 for_window [title="alsamixer"] floating enable border pixel 1
