@@ -99,6 +99,6 @@ return require('packer').startup(function(use)
     use("petertriho/nvim-scrollbar")
     use("lewis6991/gitsigns.nvim")
 
-    use("github/copilot.vim")
+    -- use("github/copilot.vim")
 
 end)
