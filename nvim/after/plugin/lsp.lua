@@ -67,7 +67,17 @@ end)
 
 require('mason').setup({})
 require('mason-lspconfig').setup({
-    ensure_installed = {},
+    ensure_installed = {
+        "biome",
+        "prettier",
+        "ts_ls",
+        "eslint",
+        "jsonls",
+        "emmet_ls",
+        "goimports",
+        "gopls",
+        "lua_ls",
+    },
     handlers = {
         -- this first function is the "default handler"
         -- it applies to every language server without a "custom handler"
