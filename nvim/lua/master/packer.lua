@@ -98,6 +98,7 @@ return require('packer').startup(function(use)
     use 'mfussenegger/nvim-lint'
     use("petertriho/nvim-scrollbar")
     use("lewis6991/gitsigns.nvim")
+    use("windwp/nvim-ts-autotag")
 
     -- use("github/copilot.vim")
 
