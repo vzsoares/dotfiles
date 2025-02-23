@@ -100,6 +100,20 @@ return require('packer').startup(function(use)
     use("lewis6991/gitsigns.nvim")
     use("windwp/nvim-ts-autotag")
 
-    -- use("github/copilot.vim")
+    -- AI
+    use 'stevearc/dressing.nvim'
+    use 'MunifTanjim/nui.nvim'
+    use 'MeanderingProgrammer/render-markdown.nvim'
+    use 'HakonHarnes/img-clip.nvim'
 
+    use 'zbirenbaum/copilot.lua'
+    use {
+        'yetone/avante.nvim',
+        branch = 'main',
+        run = 'make',
+        config = function()
+            require('avante_lib').load()
+            require('avante').setup()
+        end
+    }
 end)
