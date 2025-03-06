@@ -21,8 +21,11 @@ require('render-markdown').setup({
 require('avante_lib').load()
 require('avante').setup({
     -- Your config here!
-    -- TODO providers
     provider = "copilot",
+    copilot = {
+        model = "claude-3.7-sonnet",
+        max_tokens = 90000,
+    },
     behaviour = {
         enable_cursor_planning_mode = true, -- enable cursor planning mode!
     },
