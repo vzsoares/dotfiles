@@ -1,7 +1,7 @@
 # dotfiles
 
-- minimalistic
-- [mocha theme](https://github.com/catppuccin/catppuccin)
+-   minimalistic
+-   [mocha theme](https://github.com/catppuccin/catppuccin)
 
 ### showcase:
 
@@ -14,14 +14,20 @@
 
 ### Requirements
 
-- nvim  aur:neovim
-    - packer
-    - fzf
-    - ripgrep
-- gpg
-- nerdfonts (Hack Nerd Font) aur:ttf-hack-nerd
-- ohmyzsh
-- alacritty
+-   nvim aur:neovim
+    -   packer
+    -   fzf
+    -   ripgrep
+-   gpg
+-   nerdfonts (Hack Nerd Font) aur:ttf-hack-nerd
+-   ohmyzsh
+-   alacritty
 
-- i3
-    - playerctl
+-   i3
+    -   playerctl
+
+### Other
+
+##### Pull git submodules
+
+`git submodule update --init --recursive`
