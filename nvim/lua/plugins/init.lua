@@ -1,0 +1,17 @@
+return {
+    { import = "plugins.ai" },
+    { import = "plugins.cloak" },
+    { import = "plugins.colors" },
+    { import = "plugins.conform" },
+    { import = "plugins.diff" },
+    { import = "plugins.fugitive" },
+    { import = "plugins.harpoon" },
+    { import = "plugins.lsp" },
+    { import = "plugins.minimap" },
+    { import = "plugins.nvimlint" },
+    { import = "plugins.nvimtree" },
+    { import = "plugins.telescope" },
+    { import = "plugins.treesitter" },
+    { import = "plugins.trouble" },
+    { import = "plugins.undotree" },
+} 
