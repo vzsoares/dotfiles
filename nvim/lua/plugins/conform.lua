@@ -1,7 +1,7 @@
 return {
   {
     "stevearc/conform.nvim",
-    event = "VeryLazy",
+    layz = false,
     opts = {
       formatters_by_ft = {
         lua = { "stylua" },

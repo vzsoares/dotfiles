@@ -1,5 +1,23 @@
 return {
     {
+        'VonHeikemen/lsp-zero.nvim',
+        branch = 'v1.x',
+        dependencies = {
+            'neovim/nvim-lspconfig',
+            'williamboman/mason.nvim',
+            'williamboman/mason-lspconfig.nvim',
+            'hrsh7th/nvim-cmp',
+            'hrsh7th/cmp-buffer',
+            'hrsh7th/cmp-path',
+            'saadparwaiz1/cmp_luasnip',
+            'hrsh7th/cmp-nvim-lsp',
+            'hrsh7th/cmp-nvim-lua',
+            'L3MON4D3/LuaSnip',
+            'rafamadriz/friendly-snippets',
+        },
+        lazy = false
+    },
+    {
         'neovim/nvim-lspconfig',
         dependencies = {
             'williamboman/mason.nvim',
@@ -13,7 +31,7 @@ return {
             'rafamadriz/friendly-snippets',
             'b0o/schemastore.nvim',
         },
-        event = "VeryLazy",
+        lazy = false,
         config = function()
             -- Setup Mason
             require('mason').setup({
@@ -173,5 +191,12 @@ return {
                 severity_sort = true,
             })
         end
-    }
+    },
+    {
+        "folke/ts-comments.nvim",
+        event = "VeryLazy",
+        config = function()
+            require('ts-comments').setup()
+        end
+    },
 }

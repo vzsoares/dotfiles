@@ -2,7 +2,8 @@ return {
     -- Copilot
     {
         'zbirenbaum/copilot.lua',
-        event = "VeryLazy",
+        lazy = false,
+        -- event = "VeryLazy",
         build = ":Copilot auth",
         opts = {
             suggestion = {
@@ -23,17 +24,14 @@ return {
     },
 
     -- Render Markdown
-    {
-        'render-markdown.nvim',
-        event = "VeryLazy",
-        opts = {},
-    },
+    { 'MeanderingProgrammer/render-markdown.nvim', lazy = false },
 
     -- Avante
     {
-        'avante.nvim',
-        event = "VeryLazy",
-        version = false,
+        'yetone/avante.nvim',
+        lazy = false,
+        -- event = "VeryLazy",
+        -- version = false,
         build = "make",
         dependencies = {
             'nvim-treesitter/nvim-treesitter',

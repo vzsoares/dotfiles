@@ -2,7 +2,7 @@ return {
   {
     'nvim-tree/nvim-tree.lua',
     dependencies = { 'nvim-tree/nvim-web-devicons' },
-    event = "VeryLazy",
+    lazy = false,
     keys = {
       { "<C-h>", ":NvimTreeToggle<cr>", { silent = true, noremap = true, desc = "Toggle NvimTree" } },
       { "<leader>pv", ":NvimTreeToggle<cr>", { silent = true, noremap = true, desc = "Toggle NvimTree" } },
