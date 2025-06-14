@@ -24,6 +24,8 @@ return {
                 end,
             })
 
+            vim.g.loaded_netrw = 1
+            vim.g.loaded_netrwPlugin = 1
             vim.filetype.add({ pattern = { [".*%.ansible%..*"] = "yaml.ansible" } })
             vim.filetype.add({
                 extension = {

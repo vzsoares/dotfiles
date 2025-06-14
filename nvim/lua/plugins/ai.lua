@@ -1,9 +1,10 @@
 return {
-    'zbirenbaum/copilot.lua',
-    lazy = true,
-    config = function()
-        require('copilot').setup({
-            -- use recommended settings from above
+    -- Copilot
+    {
+        'zbirenbaum/copilot.lua',
+        event = "VeryLazy",
+        build = ":Copilot auth",
+        opts = {
             suggestion = {
                 enabled = true,
                 auto_trigger = true,
@@ -18,29 +19,46 @@ return {
                     dismiss = "<C-]>",
                 },
             },
-        })
-        require('render-markdown').setup({
-            -- use recommended settings from above
-        })
-        require('avante_lib').load()
-        require('avante').setup({
-            -- Your config here!
-            provider = "copilot",
-            copilot = {
-                model = "claude-3.7-sonnet",
-                max_tokens = 90000,
+        },
+    },
+
+    -- Render Markdown
+    {
+        'render-markdown.nvim',
+        event = "VeryLazy",
+        opts = {},
+    },
+
+    -- Avante
+    {
+        'avante.nvim',
+        event = "VeryLazy",
+        version = false,
+        build = "make",
+        dependencies = {
+            'nvim-treesitter/nvim-treesitter',
+            'nvim-lua/plenary.nvim',
+            'MunifTanjim/nui.nvim',
+        },
+        opts = {
+            providers = {
+                copilot = {
+                    model = "claude-3.7-sonnet",
+                    extra_request_body = {
+                        max_tokens = 90000,
+                    },
+                },
             },
             behaviour = {
-                enable_cursor_planning_mode = true, -- enable cursor planning mode!
+                enable_cursor_planning_mode = true,
             },
             windows = {
-                width = 40,               -- default % based on available width
+                width = 40,
                 ask = {
-                    start_insert = false, -- Start insert mode when opening the ask window
+                    start_insert = false,
                 },
             },
             mappings = {
-                --- @class AvanteConflictMappings
                 diff = {
                     ours = "to",
                     theirs = "tt",
@@ -71,6 +89,6 @@ return {
                     reverse_switch_windows = "<S-Tab>",
                 },
             },
-        })
-    end
+        },
+    },
 }
