@@ -41,6 +41,7 @@ return {
             'MunifTanjim/nui.nvim',
         },
         opts = {
+            provider = "copilot",
             providers = {
                 copilot = {
                     model = "claude-3.7-sonnet",
