@@ -1,5 +1,4 @@
 require("config.options")
-require("config.keymaps")
 require("config.init")
 
 -- Bootstrap lazy.nvim
@@ -24,6 +23,8 @@ vim.opt.rtp:prepend(lazypath)
 -- This is also a good place to setup other settings (vim.opt)
 vim.g.mapleader = " "
 vim.g.maplocalleader = "\\"
+
+require("config.keymaps")
 
 -- Setup lazy.nvim
 require("lazy").setup({

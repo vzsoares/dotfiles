@@ -1,7 +1,15 @@
 return {
+  {
     'lewis6991/gitsigns.nvim',
-    lazy = true,
-    config = function()
-        require('gitsigns').setup()
-    end
+    event = "VeryLazy",
+    opts = {
+      signs = {
+        add = { text = '+' },
+        change = { text = '~' },
+        delete = { text = '_' },
+        topdelete = { text = '‾' },
+        changedelete = { text = '~' },
+      },
+    },
+  }
 }
