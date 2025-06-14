@@ -19,6 +19,8 @@ return {
     },
     {
         'neovim/nvim-lspconfig',
+        -- event = { "BufReadPre", "BufNewFile" },
+        lazy = false,
         dependencies = {
             'williamboman/mason.nvim',
             'williamboman/mason-lspconfig.nvim',
@@ -31,7 +33,6 @@ return {
             'rafamadriz/friendly-snippets',
             'b0o/schemastore.nvim',
         },
-        lazy = false,
         config = function()
             -- Setup nvim-cmp
             local cmp = require('cmp')
@@ -105,6 +106,9 @@ return {
                     Lua = {
                         workspace = { checkThirdParty = false },
                         telemetry = { enable = false },
+                        diagnostics = {
+                            globals = { "vim" }
+                        }
                     },
                 },
             }))
@@ -170,6 +174,7 @@ return {
     },
     {
         "mason-org/mason.nvim",
+        event = "VeryLazy",
         opts = {
             ui = {
                 border = "rounded",
@@ -183,6 +188,7 @@ return {
     },
     {
         "mason-org/mason-lspconfig.nvim",
+        event = { "BufReadPre", "BufNewFile" },
         opts = {
             ensure_installed = {
                 "lua_ls",
