@@ -1,26 +1,30 @@
 return {
+  {
     'nvim-telescope/telescope.nvim',
     version = '0.1.5',
     dependencies = { 'nvim-lua/plenary.nvim' },
-    lazy = true,
-    config = function()
-        local telescope = require('telescope')
-        telescope.setup({
-            defaults = {
-                layout_strategy = 'vertical',
-                layout_config = {
-                    width = 90, height = 90
-                },
-            },
-        })
-
-        local builtin = require('telescope.builtin')
-
-        vim.keymap.set('n', '<leader>pf', builtin.find_files, {})
-        vim.keymap.set('n', '<C-p>', builtin.git_files, {})
-        vim.keymap.set('n', '<leader>ps', function()
-            builtin.grep_string({ search = vim.fn.input("Grep > ") })
-        end)
-        vim.keymap.set('n', '<leader>vh', builtin.help_tags, {})
+    event = "VeryLazy",
+    keys = {
+      { '<leader>pf', function() require('telescope.builtin').find_files() end, { desc = 'Find Files' } },
+      { '<C-p>', function() require('telescope.builtin').git_files() end, { desc = 'Find Git Files' } },
+      { '<leader>ps', function() 
+          require('telescope.builtin').grep_string({ search = vim.fn.input("Grep > ") })
+        end, 
+        { desc = 'Grep String' }
+      },
+      { '<leader>vh', function() require('telescope.builtin').help_tags() end, { desc = 'Help Tags' } },
+    },
+    opts = {
+      defaults = {
+        layout_strategy = 'vertical',
+        layout_config = {
+          width = 90,
+          height = 90
+        },
+      },
+    },
+    config = function(_, opts)
+      require('telescope').setup(opts)
     end
+  }
 }

@@ -1,185 +1,177 @@
 return {
-    'VonHeikemen/lsp-zero.nvim',
-    branch = 'v1.x',
-    dependencies = {
+    {
         'neovim/nvim-lspconfig',
-        'williamboman/mason.nvim',
-        'williamboman/mason-lspconfig.nvim',
-        'hrsh7th/nvim-cmp',
-        'hrsh7th/cmp-buffer',
-        'hrsh7th/cmp-path',
-        'saadparwaiz1/cmp_luasnip',
-        'hrsh7th/cmp-nvim-lsp',
-        'hrsh7th/cmp-nvim-lua',
-        'L3MON4D3/LuaSnip',
-        'rafamadriz/friendly-snippets',
-    },
-    lazy = true,
-    config = function()
-        local lsp = require("lsp-zero")
-
-        lsp.preset("recommended")
-
-        -- Fix Undefined global 'vim'
-        lsp.nvim_workspace()
-
-        local cmp = require('cmp')
-        local cmp_select = { behavior = cmp.SelectBehavior.Select }
-        local cmp_mappings = lsp.defaults.cmp_mappings({
-            ['<C-p>'] = cmp.mapping.select_prev_item(cmp_select),
-            ['<C-n>'] = cmp.mapping.select_next_item(cmp_select),
-            ['<C-y>'] = cmp.mapping.confirm({ select = true }),
-            ["<C-Space>"] = cmp.mapping.complete(),
-        })
-
-        cmp_mappings['<Tab>'] = nil
-        cmp_mappings['<S-Tab>'] = nil
-
-        lsp.setup_nvim_cmp({
-            mapping = cmp_mappings,
-            view = {
-                entries = {
-                    name = 'custom', selection_order = 'near_cursor'
+        dependencies = {
+            'williamboman/mason.nvim',
+            'williamboman/mason-lspconfig.nvim',
+            'hrsh7th/nvim-cmp',
+            'hrsh7th/cmp-buffer',
+            'hrsh7th/cmp-path',
+            'hrsh7th/cmp-nvim-lsp',
+            'hrsh7th/cmp-nvim-lua',
+            'L3MON4D3/LuaSnip',
+            'rafamadriz/friendly-snippets',
+            'b0o/schemastore.nvim',
+        },
+        event = "VeryLazy",
+        config = function()
+            -- Setup Mason
+            require('mason').setup({
+                ui = {
+                    border = "rounded",
+                    icons = {
+                        package_installed = "✓",
+                        package_pending = "➜",
+                        package_uninstalled = "✗"
+                    }
                 }
-            },
-            formatting = {
-                format = function(entry, vim_item)
-                    -- Kind icons
-                    vim_item.kind = string.sub(vim_item.kind, 0, 4)
-                    -- Source
-                    vim_item.menu = (string.sub(vim_item.menu or "", 0, 20) or '') .. ' '
-                    vim_item.word = (string.sub(vim_item.word or "", 0, 20) or '') .. ' '
-                    -- Content
-                    vim_item.abbr = (string.sub(vim_item.abbr, 0, 20) or '') .. ' '
-                    return vim_item
-                end
-            },
-            sources = cmp.config.sources({
-                { name = "nvim_lua" },
-                { name = "nvim_lsp" },
-                { name = "luasnip" },
-                { name = "copilot" },
-                { name = "eruby" },
-            }, {
-                { name = "path" },
-                { name = "buffer", keyword_length = 5 },
-            }, {
-                { name = "gh_issues" },
-            }),
-            comparators = {
-                cmp.config.compare.offset,
-                cmp.config.compare.exact,
-                cmp.config.compare.score,
+            })
 
-                -- copied from cmp-under, but I don't think I need the plugin for this.
-                -- I might add some more of my own.
-                function(entry1, entry2)
-                    local _, entry1_under = entry1.completion_item.label:find "^_+"
-                    local _, entry2_under = entry2.completion_item.label:find "^_+"
-                    entry1_under = entry1_under or 0
-                    entry2_under = entry2_under or 0
-                    if entry1_under > entry2_under then
-                        return false
-                    elseif entry1_under < entry2_under then
-                        return true
+            -- Setup Mason-LSPConfig
+            require('mason-lspconfig').setup({
+                ensure_installed = {
+                    "lua_ls",
+                    "jsonls",
+                    "yamlls",
+                    "gopls",
+                    "ansiblels",
+                },
+                automatic_installation = true,
+            })
+
+            -- Setup nvim-cmp
+            local cmp = require('cmp')
+            local luasnip = require('luasnip')
+            require('luasnip.loaders.from_vscode').lazy_load()
+
+            cmp.setup({
+                snippet = {
+                    expand = function(args)
+                        luasnip.lsp_expand(args.body)
+                    end,
+                },
+                mapping = cmp.mapping.preset.insert({
+                    ['<C-b>'] = cmp.mapping.scroll_docs(-4),
+                    ['<C-f>'] = cmp.mapping.scroll_docs(4),
+                    ['<C-Space>'] = cmp.mapping.complete(),
+                    ['<C-e>'] = cmp.mapping.abort(),
+                    ['<CR>'] = cmp.mapping.confirm({ select = true }),
+                    ['<Tab>'] = cmp.mapping(function(fallback)
+                        if cmp.visible() then
+                            cmp.select_next_item()
+                        elseif luasnip.expand_or_jumpable() then
+                            luasnip.expand_or_jump()
+                        else
+                            fallback()
+                        end
+                    end, { 'i', 's' }),
+                    ['<S-Tab>'] = cmp.mapping(function(fallback)
+                        if cmp.visible() then
+                            cmp.select_prev_item()
+                        elseif luasnip.jumpable(-1) then
+                            luasnip.jump(-1)
+                        else
+                            fallback()
+                        end
+                    end, { 'i', 's' }),
+                }),
+                sources = cmp.config.sources({
+                    { name = 'nvim_lsp' },
+                    { name = 'luasnip' },
+                    { name = 'buffer' },
+                    { name = 'path' },
+                    { name = 'nvim_lua' },
+                }),
+                formatting = {
+                    format = function(entry, vim_item)
+                        vim_item.kind = string.sub(vim_item.kind, 0, 4)
+                        vim_item.menu = (string.sub(vim_item.menu or "", 0, 20) or '') .. ' '
+                        vim_item.word = (string.sub(vim_item.word or "", 0, 20) or '') .. ' '
+                        vim_item.abbr = (string.sub(vim_item.abbr, 0, 20) or '') .. ' '
+                        return vim_item
                     end
-                end,
+                },
+            })
 
-                cmp.config.compare.kind,
-                cmp.config.compare.sort_text,
-                cmp.config.compare.length,
-                cmp.config.compare.order,
-            },
-        })
+            -- Setup LSP servers
+            local lspconfig = require('lspconfig')
+            local capabilities = require('cmp_nvim_lsp').default_capabilities()
 
-        lsp.set_preferences({
-            suggest_lsp_servers = false,
-            sign_icons = {
-                error = 'E',
-                warn = 'W',
-                hint = 'H',
-                info = 'I'
-            },
-            autoformat = false
-        })
-
-        lsp.on_attach(function(client, bufnr)
-            local opts = { buffer = bufnr, remap = false }
-
-            vim.keymap.set("n", "gd", function() vim.lsp.buf.definition() end, opts)
-            vim.keymap.set("n", "K", function() vim.lsp.buf.hover() end, opts)
-            vim.keymap.set("n", "<leader>vws", function() vim.lsp.buf.workspace_symbol() end, opts)
-            vim.keymap.set("n", "<leader>vd", function() vim.diagnostic.open_float({ focusable = true }) end, opts)
-            vim.keymap.set("n", "[d", function() vim.diagnostic.goto_next() end, opts)
-            vim.keymap.set("n", "]d", function() vim.diagnostic.goto_prev() end, opts)
-            vim.keymap.set("n", "<leader>vca", function() vim.lsp.buf.code_action() end, opts)
-            vim.keymap.set("n", "<leader>vrr", function() vim.lsp.buf.references() end, opts)
-            vim.keymap.set("n", "<leader>vrn", function() vim.lsp.buf.rename() end, opts)
-            vim.keymap.set("i", "<C-h>", function() vim.lsp.buf.signature_help() end, opts)
-        end)
-
-
-        require('mason').setup({})
-        require('mason-lspconfig').setup({
-            ensure_installed = {
-                -- "biome",
-                -- "prettier",
-                -- "ts_ls",
-                -- "eslint",
-                -- "jsonls",
-                -- "emmet_ls",
-                -- "goimports",
-                -- "gopls",
-                -- "lua_ls",
-            },
-            handlers = {
-                -- this first function is the "default handler"
-                -- it applies to every language server without a "custom handler"
-                function(server_name)
-                    require('lspconfig')[server_name].setup({})
-                end,
-
-                -- this is the "custom handler" for `tsserver`
-                jsonls = function()
-                    require('lspconfig').jsonls.setup {
-                        settings = {
-                            json = {
-                                schemas = require('schemastore').json.schemas(),
-                                validate = { enable = true },
-                            },
-                        },
-                    }
-                end,
-                ansiblels = function()
-                    require('lspconfig').ansiblels.setup {
-                        filetypes = { "yaml.ansible", ".ansible", "ansible.yaml" }
-                    }
-                end,
-                yamlls = function()
-                    require('lspconfig').yamlls.setup {
-                        settings = {
-                            yaml = {
-                                schemaStore = {
-                                    enable = false,
-                                    url = "",
-                                },
-                                schemas = require('schemastore').yaml.schemas(),
-                            },
-                        },
-                    }
-                end,
-                gopls = function()
-                    require('lspconfig').gopls.setup {
-                        filetypes = { "go", "gomod", "gotmpl" }
-                    }
-                end
+            -- Common LSP settings
+            local common_settings = {
+                capabilities = capabilities,
+                flags = {
+                    debounce_text_changes = 150,
+                },
             }
-        })
 
-        lsp.setup()
+            -- Setup each LSP server
+            lspconfig.lua_ls.setup(vim.tbl_deep_extend('force', common_settings, {
+                settings = {
+                    Lua = {
+                        workspace = { checkThirdParty = false },
+                        telemetry = { enable = false },
+                    },
+                },
+            }))
 
-        vim.diagnostic.config({
-            virtual_text = true
-        })
-    end
+            -- Load schemastore after ensuring it's installed
+            local schemastore = require('schemastore')
+
+            lspconfig.jsonls.setup(vim.tbl_deep_extend('force', common_settings, {
+                settings = {
+                    json = {
+                        schemas = schemastore.json.schemas(),
+                        validate = { enable = true },
+                    },
+                },
+            }))
+
+            lspconfig.yamlls.setup(vim.tbl_deep_extend('force', common_settings, {
+                settings = {
+                    yaml = {
+                        schemaStore = {
+                            enable = false,
+                            url = "",
+                        },
+                        schemas = schemastore.yaml.schemas(),
+                    },
+                },
+            }))
+
+            lspconfig.gopls.setup(vim.tbl_deep_extend('force', common_settings, {
+                filetypes = { "go", "gomod", "gotmpl" }
+            }))
+
+            lspconfig.ansiblels.setup(vim.tbl_deep_extend('force', common_settings, {
+                filetypes = { "yaml.ansible", ".ansible", "ansible.yaml" }
+            }))
+
+            -- Global LSP keymaps
+            vim.keymap.set('n', 'gd', vim.lsp.buf.definition, { desc = 'Go to Definition' })
+            vim.keymap.set('n', 'gr', vim.lsp.buf.references, { desc = 'Go to References' })
+            vim.keymap.set('n', 'K', vim.lsp.buf.hover, { desc = 'Hover Documentation' })
+            vim.keymap.set('n', '<leader>rn', vim.lsp.buf.rename, { desc = 'Rename Symbol' })
+            vim.keymap.set('n', '<leader>ca', vim.lsp.buf.code_action, { desc = 'Code Action' })
+            vim.keymap.set('n', '<leader>d[', vim.diagnostic.goto_prev, { desc = 'Previous Diagnostic' })
+            vim.keymap.set('n', '<leader>d]', vim.diagnostic.goto_next, { desc = 'Next Diagnostic' })
+            vim.keymap.set('n', '<leader>dl', vim.diagnostic.setloclist, { desc = 'Diagnostic List' })
+
+            -- Diagnostic configuration
+            vim.diagnostic.config({
+                virtual_text = true,
+                signs = {
+                    text = {
+                        [vim.diagnostic.severity.ERROR] = 'E',
+                        [vim.diagnostic.severity.WARN] = 'W',
+                        [vim.diagnostic.severity.INFO] = 'I',
+                        [vim.diagnostic.severity.HINT] = 'H',
+                    },
+                },
+                underline = true,
+                update_in_insert = false,
+                severity_sort = true,
+            })
+        end
+    }
 }

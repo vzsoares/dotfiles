@@ -3,6 +3,10 @@ return {
     'nvim-tree/nvim-tree.lua',
     dependencies = { 'nvim-tree/nvim-web-devicons' },
     event = "VeryLazy",
+    keys = {
+      { "<C-h>", ":NvimTreeToggle<cr>", { silent = true, noremap = true, desc = "Toggle NvimTree" } },
+      { "<leader>pv", ":NvimTreeToggle<cr>", { silent = true, noremap = true, desc = "Toggle NvimTree" } },
+    },
     opts = {
       sort = {
         sorter = "case_sensitive",
@@ -42,9 +46,6 @@ return {
 
       opts.on_attach = my_on_attach
       require("nvim-tree").setup(opts)
-
-      vim.keymap.set("n", "<C-h>", ":NvimTreeToggle<cr>", { silent = true, noremap = true })
-      vim.keymap.set("n", "<leader>pv", ":NvimTreeToggle<cr>", { silent = true, noremap = true })
     end
   }
 }
