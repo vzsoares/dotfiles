@@ -33,30 +33,6 @@ return {
         },
         lazy = false,
         config = function()
-            -- Setup Mason
-            require('mason').setup({
-                ui = {
-                    border = "rounded",
-                    icons = {
-                        package_installed = "✓",
-                        package_pending = "➜",
-                        package_uninstalled = "✗"
-                    }
-                }
-            })
-
-            -- Setup Mason-LSPConfig
-            require('mason-lspconfig').setup({
-                ensure_installed = {
-                    "lua_ls",
-                    "jsonls",
-                    "yamlls",
-                    "gopls",
-                    "ansiblels",
-                },
-                automatic_installation = true,
-            })
-
             -- Setup nvim-cmp
             local cmp = require('cmp')
             local luasnip = require('luasnip')
@@ -191,6 +167,36 @@ return {
                 severity_sort = true,
             })
         end
+    },
+    {
+        "mason-org/mason.nvim",
+        opts = {
+            ui = {
+                border = "rounded",
+                icons = {
+                    package_installed = "✓",
+                    package_pending = "➜",
+                    package_uninstalled = "✗"
+                }
+            }
+        }
+    },
+    {
+        "mason-org/mason-lspconfig.nvim",
+        opts = {
+            ensure_installed = {
+                "lua_ls",
+                "jsonls",
+                "yamlls",
+                "gopls",
+                "ansiblels",
+            },
+            automatic_installation = true,
+        },
+        dependencies = {
+            { "mason-org/mason.nvim" },
+            "neovim/nvim-lspconfig",
+        },
     },
     {
         "folke/ts-comments.nvim",
