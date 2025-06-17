@@ -12,7 +12,7 @@ return {
                 hide_during_completion = true,
                 debounce = 75,
                 keymap = {
-                    accept = "<Tab>",
+                    accept = "<M-Tab>",
                     accept_word = false,
                     accept_line = false,
                     next = "<M-]>",
@@ -25,7 +25,7 @@ return {
 
     -- Render Markdown
     { 'MeanderingProgrammer/render-markdown.nvim', lazy = false },
-
+    -- TODO https://codecompanion.olimorris.dev/getting-started.html
     -- Avante
     {
         'yetone/avante.nvim',
@@ -42,10 +42,13 @@ return {
             provider = "copilot",
             providers = {
                 copilot = {
-                    model = "claude-3.7-sonnet",
-                    extra_request_body = {
-                        max_tokens = 90000,
-                    },
+                    endpoint = "https://api.githubcopilot.com",
+                    proxy = nil,
+                    allow_insecure = false,
+                    timeout = 10 * 60 * 1000,
+                    max_completion_tokens = 1000000,
+                    reasoning_effort = "high",
+                    model = "claude-sonnet-4",
                 },
             },
             behaviour = {
