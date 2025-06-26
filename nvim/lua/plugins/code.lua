@@ -1,5 +1,40 @@
 return {
     {
+        "stevearc/conform.nvim",
+        layz = false,
+        opts = {
+            formatters_by_ft = {
+                lua = { "stylua" },
+                python = { "black", "isort", "ruff" },
+                javascript = { "prettier" },
+                javascriptreact = { "prettier" },
+                typescript = { "prettier" },
+                typescriptreact = { "prettier" },
+                markdown = { "prettier" },
+                mdx = { "prettier" },
+                json = { "prettier" },
+                css = { "prettier" },
+                html = { "prettier" },
+                yaml = { "prettier" },
+                sh = { "shfmt" },
+                go = { "goimports" },
+            },
+            formatters = {
+                prettier = {
+                    prepend_args = { "--tab-width", "4" },
+                },
+            },
+        },
+        config = function(_, opts)
+            local builtin = require("conform")
+            builtin.setup(opts)
+
+            vim.keymap.set("n", "<leader>f", function()
+                builtin.format { async = true, lsp_fallback = true, timeout_ms = 2500 }
+            end)
+        end
+    },
+    {
         'VonHeikemen/lsp-zero.nvim',
         branch = 'v1.x',
         dependencies = {
@@ -211,4 +246,33 @@ return {
             require('ts-comments').setup()
         end
     },
+    {
+        'mfussenegger/nvim-lint',
+        lazy = false,
+        event = { "BufWritePost", "BufReadPost", "InsertLeave" },
+        opts = {
+            linters_by_ft = {
+                markdown = { 'markdownlint' },
+                python = { 'ruff', 'flake8' }
+            },
+            linters = {
+                markdownlint = {
+                    args = {
+                        '--disable=MD030',
+                        '-'
+                    }
+                }
+            }
+        },
+        config = function(_, opts)
+            require('lint').linters_by_ft = opts.linters_by_ft
+            require('lint').linters.markdownlint.args = opts.linters.markdownlint.args
+
+            vim.api.nvim_create_autocmd({ "BufWritePost" }, {
+                callback = function()
+                    require("lint").try_lint()
+                end,
+            })
+        end
+    }
 }
