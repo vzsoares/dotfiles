@@ -3,16 +3,17 @@ return {
         -- https://github.com/Davidyz/VectorCode/blob/main/docs/neovim.md#installation
         "Davidyz/VectorCode",
         version = "*",
-        lazy = "VeryLazy",
+        lazy = "Lazy",
         build = "uv tool upgrade vectorcode", -- This helps keeping the CLI up-to-date
         dependencies = { "nvim-lua/plenary.nvim" },
     },
     {
         "olimorris/codecompanion.nvim", -- The KING of AI programming
-        lazy = "VeryLazy",
+        lazy = "Lazy",
         cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions" },
         dependencies = {
             "j-hui/fidget.nvim",                    -- Display status
+            "Davidyz/VectorCode",
             "ravitemer/codecompanion-history.nvim", -- Save and load conversation history
             {
                 "ravitemer/mcphub.nvim",            -- Manage MCP servers
