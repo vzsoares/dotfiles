@@ -145,14 +145,11 @@ return {
 
     -- Render Markdown
     { 'MeanderingProgrammer/render-markdown.nvim', lazy = false },
-    -- TODO https://codecompanion.olimorris.dev/getting-started.html
     -- Avante
     {
         'yetone/avante.nvim',
         enabled = false,
         lazy = false,
-        -- event = "VeryLazy",
-        -- version = false,
         build = "make",
         dependencies = {
             'nvim-treesitter/nvim-treesitter',
