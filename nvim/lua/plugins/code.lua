@@ -184,12 +184,9 @@ return {
             vim.keymap.set('n', 'gd', vim.lsp.buf.definition, { desc = 'Go to Definition' })
             vim.keymap.set('n', 'gr', vim.lsp.buf.references, { desc = 'Go to References' })
             vim.keymap.set('n', 'K', vim.lsp.buf.hover, { desc = 'Hover Documentation' })
-            vim.keymap.set('n', '<leader>rn', vim.lsp.buf.rename, { desc = 'Rename Symbol' })
-            vim.keymap.set("n", "<leader>vd", function() vim.diagnostic.open_float({ focusable = true }) end, opts)
-            vim.keymap.set('n', '<leader>ca', vim.lsp.buf.code_action, { desc = 'Code Action' })
-            vim.keymap.set('n', '<leader>d[', vim.diagnostic.goto_prev, { desc = 'Previous Diagnostic' })
-            vim.keymap.set('n', '<leader>d]', vim.diagnostic.goto_next, { desc = 'Next Diagnostic' })
-            vim.keymap.set('n', '<leader>dl', vim.diagnostic.setloclist, { desc = 'Diagnostic List' })
+            vim.keymap.set("n", "<leader>vd", function() vim.diagnostic.open_float({ focusable = true }) end)
+            vim.keymap.set('n', '<F2>', '<cmd>lua vim.lsp.buf.rename()<cr>')
+            vim.keymap.set('n', '<F4>', '<cmd>lua vim.lsp.buf.code_action()<cr>')
 
             -- Diagnostic configuration
             vim.diagnostic.config({
