@@ -43,10 +43,14 @@ return {
                     opts = {
                         keymap = "gh",
                         save_chat_keymap = "sc",
-                        auto_save = false,
+                        auto_save = true,
                         auto_generate_title = true,
-                        continue_last_chat = false,
+                        continue_last_chat = true,
+                        chat_filter = function(chat_data)
+                            return chat_data.cwd == vim.fn.getcwd()
+                        end,
                         delete_on_clearing_chat = false,
+                        expiration_days = 7,
                         picker = "snacks",
                         enable_logging = false,
                         dir_to_save = vim.fn.stdpath("data") .. "/codecompanion-history",
