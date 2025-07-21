@@ -82,6 +82,13 @@ return {
                     roles = {
                         user = "zenha",
                     },
+                    tools = {
+                        opts = {
+                            default_tools = {
+                                "full_stack_dev",
+                            }
+                        }
+                    },
                 },
             },
             display = {
