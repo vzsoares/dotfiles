@@ -102,6 +102,8 @@ return {
                 },
                 diff = {
                     enabled = true,
+                    layout = "horizontal",
+                    close_chat_at = 80,
                 },
             },
             opts = {
@@ -129,6 +131,7 @@ return {
             },
         },
         init = function()
+            vim.cmd([[cab cc CodeCompanion]])
         end,
     },
     -- Copilot
