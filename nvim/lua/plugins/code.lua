@@ -229,6 +229,8 @@ return {
                 "yamlls",
                 "gopls",
                 "ansiblels",
+                -- "markdownlint",
+                -- "prettier"
             },
             automatic_installation = true,
         },
