@@ -230,7 +230,9 @@ return {
                 "gopls",
                 "ansiblels",
                 -- "markdownlint",
-                -- "prettier"
+                -- "prettier",
+                -- "eslint",
+                -- "emmet_ls"
             },
             automatic_installation = true,
         },
