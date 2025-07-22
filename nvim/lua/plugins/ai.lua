@@ -9,6 +9,7 @@ return {
     },
     {
         "olimorris/codecompanion.nvim", -- The KING of AI programming
+        -- enabled = false,
         lazy = "Lazy",
         cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions" },
         dependencies = {
@@ -86,9 +87,18 @@ return {
                         opts = {
                             default_tools = {
                                 "full_stack_dev",
-                            }
-                        }
+                            },
+                            wait_timeout = 999999,
+                        },
+						tools = {
+							["insert_edit_into_file"] = {
+								opts = {
+									timeout = 999999,
+								},
+							},
+						},
                     },
+
                 },
             },
             display = {
@@ -98,7 +108,7 @@ return {
                 chat = {
                     -- show_references = true,
                     -- show_header_separator = false,
-                    -- show_settings = false,
+                    show_settings = true,
                 },
                 diff = {
                     enabled = true,
@@ -176,11 +186,11 @@ return {
             providers = {
                 copilot = {
                     endpoint = "https://api.githubcopilot.com",
-                    proxy = nil,
-                    allow_insecure = false,
-                    timeout = 10 * 60 * 1000,
-                    max_completion_tokens = 1000000,
-                    reasoning_effort = "high",
+                    -- proxy = nil,
+                    -- allow_insecure = false,
+                    -- timeout = 10 * 60 * 1000,
+                    -- max_completion_tokens = 1000000,
+                    -- reasoning_effort = "high",
                     model = "claude-sonnet-4",
                 },
             },
