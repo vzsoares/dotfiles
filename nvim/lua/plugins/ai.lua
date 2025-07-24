@@ -88,13 +88,11 @@ return {
 							default_tools = {
 								"full_stack_dev",
 							},
-							wait_timeout = 999999,
+							wait_timeout = 3600000,
 						},
-						tools = {
-							["insert_edit_into_file"] = {
-								opts = {
-									timeout = 999999,
-								},
+						["insert_edit_into_file"] = {
+							opts = {
+								timeout = 3600000,
 							},
 						},
 					},
