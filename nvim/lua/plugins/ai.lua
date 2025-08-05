@@ -9,7 +9,7 @@ return {
 	},
 	{
 		"olimorris/codecompanion.nvim", -- The KING of AI programming
-		-- enabled = false,
+		enabled = false,
 		lazy = "Lazy",
 		cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions" },
 		dependencies = {
@@ -170,7 +170,7 @@ return {
 	-- Avante
 	{
 		"yetone/avante.nvim",
-		enabled = false,
+		-- enabled = false,
 		lazy = false,
 		build = "make",
 		dependencies = {

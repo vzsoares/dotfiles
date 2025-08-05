@@ -25,6 +25,7 @@ return {
 				"ansiblels",
 				"eslint",
 				"emmet_ls",
+				"biome",
 			},
 			automatic_installation = true,
 		},
@@ -55,16 +56,16 @@ return {
 			formatters_by_ft = {
 				lua = { "stylua" },
 				python = { "black", "isort", "ruff" },
-				javascript = { "prettier" },
-				javascriptreact = { "prettier" },
-				typescript = { "prettier" },
-				typescriptreact = { "prettier" },
-				markdown = { "prettier" },
-				mdx = { "prettier" },
-				json = { "prettier" },
-				css = { "prettier" },
-				html = { "prettier" },
-				yaml = { "prettier" },
+				javascript = { "prettier", "biome" },
+				javascriptreact = { "prettier", "biome" },
+				typescript = { "prettier", "biome" },
+				typescriptreact = { "prettier", "biome" },
+				markdown = { "prettier", "biome" },
+				mdx = { "prettier", "biome" },
+				json = { "prettier", "biome" },
+				css = { "prettier", "biome" },
+				html = { "prettier", "biome" },
+				yaml = { "prettier", "biome" },
 				sh = { "shfmt" },
 				go = { "goimports" },
 			},
@@ -237,6 +238,8 @@ return {
 				update_in_insert = false,
 				severity_sort = true,
 			})
+
+			vim.lsp.enable("biome")
 		end,
 	},
 	{
