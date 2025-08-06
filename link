@@ -13,3 +13,6 @@ fi
 
 rm -f ~/.gitconfig
 ln -s "$(pwd)/.gitconfig" ~/.gitconfig
+
+rm -f ~/biome.json
+ln -s "$(pwd)/biome.json" ~/biome.json
