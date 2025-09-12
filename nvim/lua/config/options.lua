@@ -28,8 +28,8 @@ vim.opt.isfname:append("@-@")
 
 vim.opt.updatetime = 50
 
-vim.opt.colorcolumn = "80"
-vim.opt.textwidth = 80
+vim.opt.colorcolumn = "100"
+vim.opt.textwidth = 100
 vim.opt.wrapmargin = 2
 vim.opt.wrap = true
 vim.opt.linebreak = true
