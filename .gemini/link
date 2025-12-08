@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set -e
+
+rm -f ~/.gemini/settings.json
+ln -s "$(pwd)/settings.json" ~/.gemini/settings.json

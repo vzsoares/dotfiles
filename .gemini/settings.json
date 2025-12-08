@@ -1,0 +1,33 @@
+{
+    "general": {
+        "preferredEditor": "neovim",
+        "vimMode": true,
+        "sessionRetention": {
+            "enabled": true,
+            "maxAge": "30d",
+            "maxCount": 50
+        },
+        "previewFeatures": true
+    },
+    "security": {
+        "auth": {
+            "selectedType": "oauth-personal"
+        }
+    },
+    "ui": {
+        "theme": "Default",
+        "hideContextSummary": true,
+        "footer": {
+            "hideModelInfo": true
+        }
+    },
+    "mcpServers": {
+        "approvaServer": {
+            "httpUrl": "https://api-dev.approvafacilapp.com.br/core/mcp/"
+        },
+        "approvaServer-local": {
+            "httpUrl": "http://localhost:4000/mcp/"
+        }
+    }
+}
+
