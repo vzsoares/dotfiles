@@ -28,6 +28,10 @@
         "approvaServer-local": {
             "httpUrl": "http://localhost:4000/mcp/"
         }
+    },
+    "tools": {
+        "enableToolOutputTruncation": false,
+        "truncateToolOutputThreshold": -1
     }
 }
 
