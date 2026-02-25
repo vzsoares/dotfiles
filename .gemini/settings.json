@@ -16,7 +16,7 @@
     },
     "ui": {
         "theme": "Default",
-        "hideContextSummary": true,
+        "hideContextSummary": false,
         "footer": {
             "hideModelInfo": true
         }
@@ -27,6 +27,10 @@
         },
         "approvaServer-local": {
             "httpUrl": "http://localhost:4000/mcp/"
+        },
+        "lsmcp": {
+            "command": "sh",
+            "args": ["-c", "lsmcp -p typescript"]
         }
     },
     "tools": {
