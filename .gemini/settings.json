@@ -5,7 +5,8 @@
         "sessionRetention": {
             "enabled": true,
             "maxAge": "30d",
-            "maxCount": 50
+            "maxCount": 50,
+            "warningAcknowledged": true
         },
         "previewFeatures": true
     },
@@ -18,8 +19,12 @@
         "theme": "Default",
         "hideContextSummary": false,
         "footer": {
-            "hideModelInfo": true
-        }
+            "hideModelInfo": false,
+            "hideContextPercentage": false
+        },
+        "showModelInfoInChat": true,
+        "showStatusInTitle": true,
+        "inlineThinkingMode": "full"
     },
     "mcpServers": {
         "approvaServer": {
@@ -31,11 +36,26 @@
         "lsmcp": {
             "command": "sh",
             "args": ["-c", "lsmcp -p typescript"]
+        },
+        "playwright": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@playwright/mcp@latest",
+                "--caps=vision,pdf",
+                "--browser=chrome"
+            ]
+        },
+        "docs-openai": {
+            "httpUrl": "https://developers.openai.com/mcp"
         }
     },
     "tools": {
         "enableToolOutputTruncation": false,
-        "truncateToolOutputThreshold": -1
+        "truncateToolOutputThreshold": -1,
+        "shell": {
+            "showColor": true
+        }
     }
 }
 
