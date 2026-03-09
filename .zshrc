@@ -71,6 +71,7 @@ ZSH_CUSTOM="$HOME/code/personal/dotfiles/zsh"
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-vi-mode)
+fpath=(~/.oh-my-zsh/completions $fpath)
 
 source $ZSH/oh-my-zsh.sh
 

@@ -22,7 +22,7 @@
 - **Loading:** Use `--load` to move the image to the local Docker daemon after the buildx step.
 
 ### 3. Project Structure
-- **Makefile:** Standard targets required: `build`, `push`, `deploy`, `update-ecs`.
+- **justfile:** Standard targets required: `build`, `push`, `deploy`, `update-ecs`.
 - **Terraform:** Modular approach. Specifically, isolate IAM permissions in `iam.tf`.
 
 ### 4. CI/CD (Bitbucket)
