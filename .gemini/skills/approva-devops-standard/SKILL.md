@@ -26,4 +26,4 @@ This skill provides the procedural knowledge and boilerplate for Approva's stand
 - **Architecture**: `linux/arm64` on EC2 (Shared Cluster).
 - **Environment Discovery**: 100% via SSM (`/${stage}/CORE_...`).
 - **State Management**: S3 bucket `approva-${stage}-terraform-iac` with key `${project}/terraform.tfstate`.
-- **Naming**: Use `project_name` consistently across ECR, ECS, and IAM.
+- **Naming**: Use `${project_name}-${stage}` consistently across ECS, Target Groups, and IAM for environment isolation.

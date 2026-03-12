@@ -29,7 +29,7 @@ data "aws_ecr_image" "repo_image" {
 }
 
 resource "aws_ecs_task_definition" "app" {
-  family                   = var.project_name
+  family                   = "${var.project_name}-${var.stage}"
   requires_compatibilities = ["EC2"]
   network_mode             = "bridge"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
@@ -73,7 +73,7 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = "${var.project_name}-tg"
+  name        = "${var.project_name}-${var.stage}-tg"
   port        = 80, protocol = "HTTP", vpc_id = data.aws_ssm_parameter.vpc_id.value, target_type = "instance"
   health_check {
     healthy_threshold = "3", interval = "30", protocol = "HTTP", matcher = "200-404", timeout = "25", path = "/health/", unhealthy_threshold = "2"
@@ -91,7 +91,7 @@ resource "aws_lb_listener_rule" "app" {
 }
 
 resource "aws_ecs_service" "app" {
-  name            = var.project_name
+  name            = "${var.project_name}-${var.stage}"
   cluster         = data.aws_ssm_parameter.cluster_name.value
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = 1
@@ -108,7 +108,7 @@ Standard IAM roles for ECS task execution and resource access.
 
 ```hcl
 resource "aws_iam_role" "ecs_task_execution" {
-  name = "${var.project_name}-ecs-execution"
+  name = "${var.project_name}-ecs-execution-${var.stage}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
@@ -119,6 +119,32 @@ resource "aws_iam_role" "ecs_task_execution" {
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_policy" "create_log_group" {
+  name        = "${var.project_name}-${var.stage}"
+  description = "Allow creating CloudWatch log groups"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup"
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+  tags = {
+    Terraform = "true"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_create_log_group_policy" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = aws_iam_policy.create_log_group.arn
 }
 
 resource "aws_iam_policy" "project_ssm_policy" {
