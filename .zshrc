@@ -163,6 +163,9 @@ command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
 export POETRY_VIRTUALENVS_IN_PROJECT=true
 
+# Scripts
+export PATH="$HOME/code/personal/dotfiles/scripts:$PATH"
+
 # Go
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
