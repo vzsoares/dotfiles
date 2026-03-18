@@ -44,14 +44,13 @@ fi
 CONFIG_FILES=$(find . -maxdepth 4 -name "config.py" -not -path "*/.*" -not -path "*/venv/*" -not -path "*/node_modules/*" -not -path "*/target/*")
 
 for f in $CONFIG_FILES; do
-    if grep -q "VERSION: str =" "$f"; then
+    # Matches VERSION at start of line or after whitespace, ensuring it's not a suffix of another variable
+    if grep -qE "^[[:blank:]]*VERSION: str =" "$f"; then
         echo "Updating $f..."
-        sed -i "s/VERSION: str = \"[^\"]*\"/VERSION: str = \"$VERSION\"/" "$f"
+        sed -i "s/^\([[:blank:]]*\)VERSION: str = \"[^\"]*\"/\1VERSION: str = \"$VERSION\"/" "$f"
         UPDATED_FILES+=("$f")
     fi
 done
-
-exit 1
 
 # 4. Commit version bump
 if [ ${#UPDATED_FILES[@]} -gt 0 ]; then
@@ -76,5 +75,9 @@ git checkout $DEV_BRANCH
 # 8. Rebase with prod
 echo "Rebasing $DEV_BRANCH with $PROD_BRANCH..."
 git rebase $PROD_BRANCH
+
+# 9. Push dev
+echo "Pushing $DEV_BRANCH..."
+git push origin $DEV_BRANCH
 
 echo "✅ Release $VERSION complete!"
