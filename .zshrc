@@ -103,17 +103,7 @@ source $ZSH/oh-my-zsh.sh
 
 bindkey -e
 
-# Aliases
-
-alias aws-approva-dev="export AWS_PROFILE=approva-dev"
-alias aws-approva-prod="export AWS_PROFILE=approva-prod"
-alias aws-myself="export AWS_PROFILE=myself"
-
-alias ts="tsx"
-alias n="nvim"
-alias tf="terraform"
-
-alias sourcepy="source .venv/bin/activate"
+# Aliases are in $ZSH_CUSTOM/aliases.zsh
 
 ###############################
 
