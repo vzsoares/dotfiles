@@ -3,8 +3,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_CLAUDE="$SCRIPT_DIR/../.claude"
+DOTFILES_CLAUDE="$SCRIPT_DIR/.claude"
 TARGET_DIR="$HOME/.claude"
+
+# CLAUDE.md
+rm -f "$TARGET_DIR/CLAUDE.md"
+ln -s "$DOTFILES_CLAUDE/CLAUDE.md" "$TARGET_DIR/CLAUDE.md"
+echo "linked CLAUDE.md"
 
 # Settings
 rm -f "$TARGET_DIR/settings.json"
