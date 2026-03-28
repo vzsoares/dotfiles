@@ -1,0 +1,22 @@
+{
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": false,
+  "mcpServers": {
+    "docs-mcp-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@arabold/docs-mcp-server@latest"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "ollama",
+        "OPENAI_API_BASE": "http://localhost:11434/v1",
+        "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
+      }
+    }
+  }
+}
