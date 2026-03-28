@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_CLAUDE="$SCRIPT_DIR/.claude"
+DOTFILES_CLAUDE="$SCRIPT_DIR/../.claude"
 TARGET_DIR="$HOME/.claude"
 
 # Settings
