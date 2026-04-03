@@ -1,10 +1,19 @@
 {
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true
+    "ralph-loop@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true
   },
   "skipDangerousModePermissionPrompt": false,
   "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic-ai/mcp-server-playwright@latest"
+      ]
+    },
     "docs-mcp-server": {
       "type": "stdio",
       "command": "npx",
@@ -18,5 +27,18 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
+          }
+        ]
+      }
+    ]
   }
 }
