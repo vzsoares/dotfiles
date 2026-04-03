@@ -279,6 +279,29 @@ return {
 		end,
 	},
 	{
+		"jmbuhr/otter.nvim",
+		dependencies = {
+			"nvim-treesitter/nvim-treesitter",
+		},
+		opts = {
+			lsp = {
+				diagnostic_update_events = { "BufWritePost", "InsertLeave", "TextChanged" },
+				root_dir = function(_, bufnr)
+					return vim.fs.root(bufnr or 0, {
+						".git",
+						"package.json",
+						"tsconfig.json",
+					}) or vim.fn.getcwd(0)
+				end,
+			},
+			buffers = {
+				set_filetype = true,
+				write_to_disk = false,
+			},
+			handle_leading_whitespace = true,
+		},
+	},
+	{
 		"antosha417/nvim-lsp-file-operations",
 		dependencies = {
 			"nvim-lua/plenary.nvim",
