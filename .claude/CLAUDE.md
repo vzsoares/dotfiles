@@ -9,6 +9,7 @@
 
 - Always run lint, format, type check, and tests before delivering a change
 - Fix any issues found before presenting the result
+- Use the Playwright MCP to visually test frontend changes in the browser before delivering
 - Avoid type coercions (`as`) and the `any` type — use proper typing instead
 
 # Automated memory rules
