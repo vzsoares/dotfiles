@@ -11,7 +11,9 @@
       "command": "npx",
       "args": [
         "-y",
-        "@anthropic-ai/mcp-server-playwright@latest"
+        "@playwright/mcp@latest",
+        "--output-dir",
+        "/tmp/playwright-mcp"
       ]
     },
     "docs-mcp-server": {
