@@ -17,13 +17,8 @@ ln -s "$DOTFILES_CLAUDE/settings.json" "$TARGET_DIR/settings.json"
 echo "linked settings.json"
 
 # Skills
-mkdir -p "$TARGET_DIR/skills"
-
-for skill in "$DOTFILES_CLAUDE/skills"/*/; do
-  skill_name="$(basename "$skill")"
-  rm -rf "$TARGET_DIR/skills/$skill_name"
-  ln -s "$DOTFILES_CLAUDE/skills/$skill_name" "$TARGET_DIR/skills/$skill_name"
-  echo "linked skills/$skill_name"
-done
+rm -rf "$TARGET_DIR/skills"
+ln -s "$DOTFILES_CLAUDE/skills" "$TARGET_DIR/skills"
+echo "linked skills/"
 
 echo "done"
