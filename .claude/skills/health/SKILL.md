@@ -1,0 +1,1 @@
+/home/zizmackrok/code/personal/dotfiles/.claude/skills/gstack/health/SKILL.md

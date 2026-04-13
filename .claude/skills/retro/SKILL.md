@@ -1,0 +1,1 @@
+/home/zizmackrok/code/personal/dotfiles/.claude/skills/gstack/retro/SKILL.md
