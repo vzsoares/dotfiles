@@ -11,6 +11,9 @@ alias tf="terraform"
 # Python
 alias sourcepy="source .venv/bin/activate"
 
+# Scripts
+alias run="$HOME/code/personal/dotfiles/scripts/run.sh"
+
 # Claude
 alias claude-yolo='ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions --allowedTools "*"'
 alias claude-commit='git diff --cached | claude -p "Write a concise Conventional Commit message for these changes. Return only the message."'
