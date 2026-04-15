@@ -19,21 +19,44 @@ The user curates sources and asks questions. You do all the writing, cross-refer
 
 ## Vault Structure
 
+The user works across multiple companies/orgs simultaneously. Projects, work topics, and people are scoped by company to prevent clustering. Personal life stuff stays in `personal/` (goals, health, habits) — separate from any company.
+
 ```
 <vault>/
 ├── SCHEMA.md             # Wiki conventions (co-evolved with user)
 ├── index.md              # Master index — every wiki page listed
 ├── log.md                # Chronological operations log
+├── companies.json        # Registry of companies/orgs the user works with
 ├── raw/                  # Source documents (immutable)
 │   └── assets/           # Downloaded images, attachments
 ├── wiki/                 # LLM-maintained pages
-│   ├── personal/         # Goals, health, habits, self-improvement
-│   ├── projects/         # Cross-project knowledge, project overviews
-│   ├── work/             # Work topics, processes, people, decisions
+│   ├── personal/         # Goals, health, habits, self-improvement (NOT projects)
+│   ├── projects/         # Company-scoped project pages
+│   │   ├── <company>/    # e.g. approva/, zenha-lab/
+│   │   └── cross-cutting/# Patterns and knowledge spanning companies
+│   ├── work/             # Company-scoped work topics
+│   │   ├── <company>/    # Processes, decisions, domain knowledge per company
+│   │   └── cross-cutting/# Work patterns that apply everywhere
+│   ├── people/           # Company-scoped people and teams
+│   │   ├── <company>/    # Colleagues, stakeholders per company
+│   │   └── general/      # People not tied to a specific company
 │   ├── research/         # Deep dives, reading notes, syntheses
 │   ├── concepts/         # Domain concepts, mental models, patterns
-│   ├── people/           # People, teams, organizations
 │   └── meta/             # About the brain itself, workflow notes
+```
+
+### `companies.json`
+
+Registry of active companies/orgs. Created during setup, updated with `/second-brain setup --add-company`.
+
+```json
+{
+  "companies": [
+    { "slug": "approva", "name": "Approva Fácil", "active": true },
+    { "slug": "zenha-lab", "name": "ZenhaLab", "active": true, "note": "Personal company — OSS and closed-source projects" },
+    { "slug": "personal", "name": "Personal", "active": true, "note": "Non-company personal stuff — side experiments, learning, etc." }
+  ]
+}
 ```
 
 ## Configuration
@@ -55,14 +78,21 @@ Read this file at the start of every operation to locate the vault. If it doesn'
 Initialize or configure the second brain.
 
 1. Ask the user for the vault path if not provided (suggest `~/second-brain` as default)
-2. Create the vault directory structure if it doesn't exist:
+2. Ask for companies/orgs to set up (or use existing `companies.json` if re-running)
+3. Create the vault directory structure if it doesn't exist:
    - `raw/`, `raw/assets/`, `wiki/` and all subdirectories
+   - Company-scoped subdirs under `wiki/projects/`, `wiki/work/`, `wiki/people/` for each company
+   - `wiki/projects/cross-cutting/`, `wiki/work/cross-cutting/`, `wiki/people/general/`
+   - `companies.json` with the company registry
    - `SCHEMA.md` with initial conventions
-   - `index.md` with empty category headers
+   - `index.md` with empty category headers (grouped by company)
    - `log.md` (empty)
-3. Write `~/.claude/second-brain.json` with the vault path
-4. If `raw/` already has files, suggest running `/second-brain ingest` on them
-5. Tell the user they can run `/second-brain connect` in any project to wire it up
+4. Write `~/.claude/second-brain.json` with the vault path
+5. If `raw/` already has files, suggest running `/second-brain ingest` on them
+6. Tell the user they can run `/second-brain connect` in any project to wire it up
+
+To add a company later: `/second-brain setup --add-company <slug> <name>`
+This creates the subdirectories and updates `companies.json` and `index.md`.
 
 ### `/second-brain connect`
 
@@ -92,10 +122,12 @@ Process a source into the wiki. The source can be:
 
 **Flow:**
 1. Read `~/.claude/second-brain.json` for vault path
-2. Locate and read the source material
-3. Discuss key takeaways with the user — what matters, what to emphasize
-4. Write a summary page in `wiki/` under the appropriate category
-5. Update existing wiki pages that relate to the new source:
+2. Read `companies.json` to know available companies
+3. Locate and read the source material
+4. Determine which company this belongs to (infer from context, or ask if ambiguous)
+5. Discuss key takeaways with the user — what matters, what to emphasize
+6. Write a summary page in `wiki/` under the appropriate category and company subdir
+7. Update existing wiki pages that relate to the new source:
    - Add cross-references
    - Note where new information confirms, extends, or contradicts existing pages
    - Update synthesis pages if they exist
@@ -133,11 +165,12 @@ Health-check the wiki.
 Show brain stats.
 
 1. Read `~/.claude/second-brain.json` for vault path
-2. Count pages by category
-3. Count raw sources
-4. Show last 5 log entries
-5. Show total page count and last updated date
-6. Identify coverage gaps (categories with few or no pages)
+2. Read `companies.json` for company list
+3. Count pages by category, broken down by company
+4. Count raw sources
+5. Show last 5 log entries
+6. Show total page count and last updated date
+7. Identify coverage gaps (categories/companies with few or no pages)
 
 ## Page Format
 
@@ -147,6 +180,7 @@ Every wiki page uses this template:
 ---
 title: Page Title
 category: personal|project|work|research|concept|person|meta
+company: approva|zenha-lab|personal|null  # null for non-company pages (concepts, research, meta)
 tags: [relevant, tags]
 sources: [source-file-if-applicable]
 updated: YYYY-MM-DD
@@ -199,10 +233,25 @@ Pages created/updated: page1.md, page2.md
 ## Personal
 - [[goals-2026]] — Current year goals and progress
 
-## Projects
+## Projects — Approva
 - [[project-name]] — Brief description
 
-## Work
+## Projects — ZenhaLab
+- [[project-name]] — Brief description
+
+## Projects — Personal
+- [[project-name]] — Brief description
+
+## Projects — Cross-cutting
+- [[pattern]] — Brief description
+
+## Work — Approva
+- [[topic]] — Brief description
+
+## Work — ZenhaLab
+- [[topic]] — Brief description
+
+## Work — Cross-cutting
 - [[topic]] — Brief description
 
 ## Research
@@ -211,7 +260,13 @@ Pages created/updated: page1.md, page2.md
 ## Concepts
 - [[concept]] — Brief description
 
-## People
+## People — Approva
+- [[person]] — Brief description
+
+## People — ZenhaLab
+- [[person]] — Brief description
+
+## People — General
 - [[person]] — Brief description
 
 ## Meta
@@ -230,20 +285,30 @@ Personal knowledge base spanning life, work, and projects.
 Maintained by LLM, curated by human.
 
 ## Categories
-- **personal**: Goals, health, habits, journal synthesis, self-improvement
-- **projects**: Technical projects, side projects, cross-project patterns
-- **work**: Work processes, decisions, team knowledge, domain expertise
-- **research**: Deep dives into topics, reading notes, paper summaries
-- **concepts**: Mental models, patterns, frameworks, ideas
-- **people**: People, teams, organizations relevant to work or life
+- **personal**: Goals, health, habits, journal synthesis, self-improvement (NOT projects)
+- **projects**: Technical projects, scoped by company (approva/, zenha-lab/, personal/)
+- **work**: Work processes, decisions, team knowledge, domain expertise, scoped by company
+- **research**: Deep dives into topics, reading notes, paper summaries (cross-company)
+- **concepts**: Mental models, patterns, frameworks, ideas (cross-company)
+- **people**: People, teams, organizations, scoped by company
 - **meta**: About the brain itself, workflow improvements
+
+## Companies
+Projects, work, and people are organized by company/org:
+- **approva**: Approva Fácil — employer
+- **zenha-lab**: ZenhaLab — personal company (OSS and closed-source)
+- **personal**: Non-company personal projects (side experiments, learning)
+- **cross-cutting** / **general**: Patterns and knowledge that span companies
+
+New companies can be added via `companies.json`.
 
 ## Conventions
 - One topic per page
 - Cross-reference liberally using [[wiki-links]]
 - Update existing pages rather than creating duplicates
-- Tag consistently using frontmatter
+- Tag consistently using frontmatter (include `company` field)
 - File valuable query answers as new pages
+- When a page applies to multiple companies, put it in cross-cutting and link from both
 
 ## Evolving
 This schema evolves over time. When you notice a pattern that should be
