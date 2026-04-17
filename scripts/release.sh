@@ -66,27 +66,42 @@ detect_version() {
 
 CURRENT_VERSION=$(detect_version)
 
-# Parse semver
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-MAJOR=${MAJOR:-0}
-MINOR=${MINOR:-0}
-PATCH=${PATCH:-0}
+# Parse semver, optionally with -dev.N suffix
+if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-dev\.([0-9]+))?$ ]]; then
+    MAJOR="${BASH_REMATCH[1]}"
+    MINOR="${BASH_REMATCH[2]}"
+    PATCH="${BASH_REMATCH[3]}"
+    DEV_NUM="${BASH_REMATCH[5]}"
+else
+    gum style --foreground 196 "Could not parse version '$CURRENT_VERSION'. Expected X.Y.Z or X.Y.Z-dev.N."
+    exit 1
+fi
 
+gum style --faint "Current version: $CURRENT_VERSION"
+
+FINALIZE_VER="$MAJOR.$MINOR.$PATCH"
 PATCH_VER="$MAJOR.$MINOR.$((PATCH + 1))"
 MINOR_VER="$MAJOR.$((MINOR + 1)).0"
 MAJOR_VER="$((MAJOR + 1)).0.0"
 
-gum style --faint "Current version: $CURRENT_VERSION"
-
-BUMP=$(gum choose --header "Version bump?" \
-    "patch  ($PATCH_VER)" \
-    "minor  ($MINOR_VER)" \
-    "major  ($MAJOR_VER)")
+if [ -n "$DEV_NUM" ]; then
+    BUMP=$(gum choose --header "Version bump?" \
+        "finalize  ($FINALIZE_VER)" \
+        "patch     ($PATCH_VER)" \
+        "minor     ($MINOR_VER)" \
+        "major     ($MAJOR_VER)")
+else
+    BUMP=$(gum choose --header "Version bump?" \
+        "patch  ($PATCH_VER)" \
+        "minor  ($MINOR_VER)" \
+        "major  ($MAJOR_VER)")
+fi
 
 case "$BUMP" in
-    patch*) VERSION="$PATCH_VER" ;;
-    minor*) VERSION="$MINOR_VER" ;;
-    major*) VERSION="$MAJOR_VER" ;;
+    finalize*) VERSION="$FINALIZE_VER" ;;
+    patch*)    VERSION="$PATCH_VER" ;;
+    minor*)    VERSION="$MINOR_VER" ;;
+    major*)    VERSION="$MAJOR_VER" ;;
 esac
 
 gum style --bold --foreground 212 "Releasing v$VERSION"
