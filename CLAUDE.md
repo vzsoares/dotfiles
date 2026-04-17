@@ -32,3 +32,9 @@ Run from the repo root.
 - Oh-my-zsh is required for zsh setup (theme: zenha)
 - Git: no fast-forward merges, pull with rebase, auto setup remote
 - Editor: neovim
+
+# Second Brain
+
+This project is connected to the personal second brain at `/home/zizmackrok/code/personal/valt`.
+Use the `/second-brain` skill to file project knowledge, query cross-project context, or ingest sources.
+When completing significant features or making architectural decisions, suggest filing them in the second brain if they have cross-project value.
