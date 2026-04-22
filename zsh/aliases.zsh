@@ -16,4 +16,4 @@ alias run="$HOME/code/personal/dotfiles/scripts/run.sh"
 
 # Claude
 alias claude-yolo='ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions --allowedTools "*"'
-alias claude-commit='git diff --cached | claude -p "Write a concise Conventional Commit message for these changes. Return only the message."'
+alias claude-commit="$HOME/code/personal/dotfiles/scripts/commit.sh"

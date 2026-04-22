@@ -118,7 +118,7 @@ if [ -f "pyproject.toml" ]; then
     UPDATED_FILES+=("pyproject.toml")
 fi
 
-CONFIG_FILES=$(find . -maxdepth 4 -name "config.py" \
+CONFIG_FILES=$(find . -maxdepth 4 \( -name "config.py" -o -name "settings.py" \) \
     -not -path "*/.*" -not -path "*/venv/*" \
     -not -path "*/node_modules/*" -not -path "*/target/*" 2>/dev/null || true)
 
