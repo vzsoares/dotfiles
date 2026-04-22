@@ -44,15 +44,35 @@ fi
 
 # --- Generate commit message ---
 
-generate_message() {
-    git diff --cached | claude -p --model haiku "Write a concise Conventional Commit message for these changes. Return only the message — no co-author, no attribution, no trailers, no code fences."
-}
+DIFF_FILE=$(mktemp)
+trap 'rm -f "$DIFF_FILE"' EXIT
+
+CONTEXT=""
+PROMPT_BASE="Write a concise Conventional Commit message for these changes. Return only the message — no co-author, no attribution, no trailers, no code fences."
 
 while true; do
-    MESSAGE=$(gum spin --show-output --title "Generating commit message..." -- bash -c "$(declare -f generate_message); generate_message")
+    git diff --cached >"$DIFF_FILE"
+
+    if [ -n "$CONTEXT" ]; then
+        FULL_PROMPT="$PROMPT_BASE
+
+Additional guidance from the user: $CONTEXT"
+    else
+        FULL_PROMPT="$PROMPT_BASE"
+    fi
+
+    MESSAGE=$(gum spin --show-output --title "Generating commit message..." -- \
+        bash -c 'claude -p --tools "" --strict-mcp-config --no-session-persistence --disable-slash-commands --model haiku "$2" <"$1"' _ "$DIFF_FILE" "$FULL_PROMPT") || true
 
     if [ -z "$MESSAGE" ]; then
         gum style --foreground 196 "Claude returned an empty message."
+        exit 1
+    fi
+
+    # Catch CLI errors that slip through as output (login prompts, box-drawing UI, etc.)
+    if echo "$MESSAGE" | grep -qE '^[[:space:]]*[┌└│├]|Please run /login|Not logged in'; then
+        gum style --foreground 196 "Claude CLI returned an error instead of a message:"
+        echo "$MESSAGE"
         exit 1
     fi
 
@@ -73,6 +93,7 @@ while true; do
             break
             ;;
         regenerate)
+            CONTEXT=$(gum write --placeholder "e.g. 'this is a fix, not a feat' or 'mention the bug id' — empty to just retry" --header "Extra guidance (ctrl+d to submit)")
             continue
             ;;
         cancel)
