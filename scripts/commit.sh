@@ -45,7 +45,7 @@ fi
 # --- Generate commit message ---
 
 generate_message() {
-    git diff --cached | claude -p "Write a concise Conventional Commit message for these changes. Return only the message — no co-author, no attribution, no trailers, no code fences."
+    git diff --cached | claude -p --model haiku "Write a concise Conventional Commit message for these changes. Return only the message — no co-author, no attribution, no trailers, no code fences."
 }
 
 while true; do
