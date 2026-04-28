@@ -1,0 +1,34 @@
+{
+  "name": "jscpd-monorepo",
+  "private": true,
+  "npmClient": "yarn",
+  "useWorkspaces": true,
+  "version": "4.0.0-rc.0",
+  "scripts": {
+    "build": "turbo run build",
+    "commit": "cz",
+    "generate": "turbo run generate",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "test": "turbo run test",
+    "cleanup": "turbo run cleanup",
+    "typecheck": "turbo run typecheck",
+    "publish-packages": "changeset version && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "turbo": "^1.13.4"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "@vitest/coverage-v8": "^4.0.18"
+  }
+}

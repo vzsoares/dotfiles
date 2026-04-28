@@ -1,0 +1,1 @@
+/home/zizmackrok/code/personal/dotfiles/.claude/skills/gstack/setup-gbrain/SKILL.md

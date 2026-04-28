@@ -188,7 +188,7 @@ return {
 					-- timeout = 10 * 60 * 1000,
 					-- max_completion_tokens = 1000000,
 					-- reasoning_effort = "high",
-					model = "claude-sonnet-4",
+					model = "claude-haiku-4.5",
 				},
 			},
 			behaviour = {
