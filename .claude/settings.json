@@ -1,46 +1,48 @@
 {
-  "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true
-  },
-  "skipDangerousModePermissionPrompt": false,
-  "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--output-dir",
-        "/tmp/playwright-mcp"
-      ]
+    "enabledPlugins": {
+        "typescript-lsp@claude-plugins-official": true,
+        "ralph-loop@claude-plugins-official": true,
+        "pyright-lsp@claude-plugins-official": true
     },
-    "docs-mcp-server": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@arabold/docs-mcp-server@latest"
-      ],
-      "env": {
-        "OPENAI_API_KEY": "ollama",
-        "OPENAI_API_BASE": "http://localhost:11434/v1",
-        "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
-      }
-    }
-  },
-  "hooks": {
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
-          }
-        ]
-      }
-    ]
-  }
+    "skipDangerousModePermissionPrompt": false,
+    "permissions": {
+        "additionalDirectories": ["/home/zizmackrok/code"]
+    },
+    "mcpServers": {
+        "playwright": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "@playwright/mcp@latest",
+                "--output-dir",
+                "/tmp/playwright-mcp"
+            ]
+        },
+        "docs-mcp-server": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@arabold/docs-mcp-server@latest"],
+            "env": {
+                "OPENAI_API_KEY": "ollama",
+                "OPENAI_API_BASE": "http://localhost:11434/v1",
+                "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
+            }
+        }
+    },
+    "hooks": {
+        "Notification": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
+                    }
+                ]
+            }
+        ],
+        "SessionStart": []
+    },
+    "editorMode": "vim"
 }
