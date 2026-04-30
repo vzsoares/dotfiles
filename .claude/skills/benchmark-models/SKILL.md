@@ -1,1 +1,0 @@
-/home/zizmackrok/code/personal/dotfiles/.claude/skills/gstack/benchmark-models/SKILL.md

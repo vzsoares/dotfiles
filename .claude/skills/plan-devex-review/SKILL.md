@@ -1,1 +1,0 @@
-/home/zizmackrok/code/personal/dotfiles/.claude/skills/gstack/plan-devex-review/SKILL.md

@@ -1,1 +1,0 @@
-/home/zizmackrok/code/personal/dotfiles/.claude/skills/gstack/ship/SKILL.md
