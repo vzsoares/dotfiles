@@ -261,12 +261,43 @@ def cmd_ls(args: argparse.Namespace) -> None:
         print(f"{kind}  {i['name']:<{name_w}}  {size_h:>12}  {mtime}")
 
 
+def _download_url(remote_path: str) -> str:
+    """Resolve a pre-authenticated downloadUrl for a file at remote_path.
+
+    Required for nested files in SPO-backed OneDrive AppFolder, where direct
+    `:/{path}:/content` returns 400. We list the parent and pull the
+    `@microsoft.graph.downloadUrl` (pre-signed, short-lived).
+    """
+    parent, _, name = remote_path.rpartition("/")
+    children_url = f"{item_url(parent)}/children" if parent else f"{DRIVE_ROOT}/children"
+    r = graph_get(children_url, params={"$top": 1000})
+    die_on_error(r, f"lookup failed for parent of {remote_path}")
+    for item in r.json().get("value", []):
+        if item.get("name") == name:
+            url = item.get("@microsoft.graph.downloadUrl")
+            if not url:
+                sys.exit(f"{remote_path}: no downloadUrl (folder, not file?)")
+            return url
+    sys.exit(f"not found: {remote_path}")
+
+
+def _fetch_content(remote_path: str, stream: bool = False) -> requests.Response:
+    """Get file bytes. Tries direct content URL first, falls back to downloadUrl
+    on 400 (the SPO-backed AppFolder quirk for nested paths)."""
+    r = graph_get(f"{item_url(remote_path)}/content", allow_redirects=True, stream=stream)
+    if r.status_code == 400:
+        # SPO quirk: nested paths bug out. Use pre-signed downloadUrl.
+        url = _download_url(remote_path)
+        r = requests.get(url, stream=stream)  # no auth header — URL is pre-signed
+    return r
+
+
 def cmd_cat(args: argparse.Namespace) -> None:
     root = _root_for(args)
     full = resolve_path(args.path, root)
     if not full:
         sys.exit("cat: need a file path")
-    r = graph_get(f"{item_url(full)}/content", allow_redirects=True)
+    r = _fetch_content(full)
     die_on_error(r, "cat failed")
     sys.stdout.buffer.write(r.content)
 
@@ -275,13 +306,86 @@ def cmd_get(args: argparse.Namespace) -> None:
     root = _root_for(args)
     full = resolve_path(args.remote, root)
     local = Path(args.local) if args.local else Path(Path(args.remote).name)
-    r = graph_get(f"{item_url(full)}/content", allow_redirects=True, stream=True)
+    r = _fetch_content(full, stream=True)
     die_on_error(r, "get failed")
     with local.open("wb") as fh:
         for chunk in r.iter_content(chunk_size=64 * 1024):
             if chunk:
                 fh.write(chunk)
     print(f"Downloaded {full} -> {local} ({human_size(local.stat().st_size)})")
+
+
+def cmd_mkdir(args: argparse.Namespace) -> None:
+    root = _root_for(args)
+    full = resolve_path(args.path, root)
+    if not full:
+        sys.exit("mkdir: need a path")
+    parts = full.split("/")
+    if args.parents:
+        for i in range(1, len(parts) + 1):
+            _mkdir_one("/".join(parts[:i]), ignore_exists=True)
+    else:
+        _mkdir_one(full, ignore_exists=False)
+    print(f"mkdir: {full}")
+
+
+def _mkdir_one(path: str, ignore_exists: bool) -> None:
+    parent, _, name = path.rpartition("/")
+    children_url = (
+        f"{GRAPH}{item_url(parent)}/children"
+        if parent
+        else f"{GRAPH}{DRIVE_ROOT}/children"
+    )
+    body = {
+        "name": name,
+        "folder": {},
+        "@microsoft.graph.conflictBehavior": "fail",
+    }
+    r = requests.post(
+        children_url,
+        headers=graph_headers({"Content-Type": "application/json"}),
+        json=body,
+    )
+    if r.status_code == 409 and ignore_exists:
+        return
+    die_on_error(r, f"mkdir failed: {path}")
+
+
+def cmd_mv(args: argparse.Namespace) -> None:
+    """Move/rename a TOP-LEVEL item.
+
+    SPO-backed OneDrive AppFolder scope blocks PATCH on nested items even
+    when they belong to the AppFolder. For nested moves/renames, use the
+    OneDrive web UI.
+    """
+    root = _root_for(args)
+    src = resolve_path(args.src, root)
+    dst = resolve_path(args.dst, root)
+    if not src or not dst:
+        sys.exit("mv: need src and dst")
+
+    # Refuse nested sources — Graph returns 403/404 in this scope.
+    if "/" in src:
+        sys.exit(
+            f"mv: nested source '{src}' not supported under Files.ReadWrite.AppFolder. "
+            "Move/rename via OneDrive web UI, or move the top-level ancestor."
+        )
+
+    dst_parent, _, dst_name = dst.rpartition("/")
+    body: dict[str, Any] = {"name": dst_name}
+    if dst_parent:
+        # Resolve destination parent's item id
+        r = graph_get(f"{item_url(dst_parent)}", params={"$select": "id"})
+        die_on_error(r, f"mv: cannot resolve dst parent '{dst_parent}'")
+        body["parentReference"] = {"id": r.json()["id"]}
+
+    r = requests.patch(
+        f"{GRAPH}{item_url(src)}",
+        headers=graph_headers({"Content-Type": "application/json"}),
+        json=body,
+    )
+    die_on_error(r, f"mv failed ({src} -> {dst})")
+    print(f"Moved {src} -> {dst}")
 
 
 def cmd_put(args: argparse.Namespace) -> None:
@@ -424,6 +528,19 @@ def main() -> None:
     sp.add_argument("--root")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_search)
+
+    sp = sub.add_parser("mkdir", help="Create a folder (parents created via -p).")
+    sp.add_argument("path")
+    sp.add_argument("--root")
+    sp.add_argument("-p", "--parents", action="store_true",
+                    help="Create parent folders as needed; succeed if they exist.")
+    sp.set_defaults(func=cmd_mkdir)
+
+    sp = sub.add_parser("mv", help="Move/rename a TOP-LEVEL item (nested moves blocked by AppFolder scope).")
+    sp.add_argument("src")
+    sp.add_argument("dst")
+    sp.add_argument("--root")
+    sp.set_defaults(func=cmd_mv)
 
     args = p.parse_args()
     args.func(args)
