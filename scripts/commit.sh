@@ -42,6 +42,78 @@ if git diff --cached --quiet; then
     gum style --faint "Staged: $(echo "$SELECTED" | tr '\n' ' ')"
 fi
 
+# --- Guardrail: scan staged content for secrets / sensitive files ---
+
+VIOLATIONS=""
+
+STAGED_FILES=$(git diff --cached --name-only)
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+        *.pem|*.key|*.pfx|*.p12|*.keystore|*.jks)
+            case "$f" in *.pub|*.pub.*) ;; *) VIOLATIONS+="  • $f — sensitive crypto extension"$'\n' ;; esac
+            ;;
+        *id_rsa*|*id_ed25519*|*id_ecdsa*|*id_dsa*)
+            case "$f" in *.pub) ;; *) VIOLATIONS+="  • $f — private SSH key"$'\n' ;; esac
+            ;;
+        *.env|*.env.*|.env|.env.*)
+            case "$f" in *.example|*.sample|*.template) ;; *) VIOLATIONS+="  • $f — env file"$'\n' ;; esac
+            ;;
+        token.json|*/token.json|credentials.json|*/credentials.json|auth.json|*/auth.json|service-account*.json|*/service-account*.json)
+            VIOLATIONS+="  • $f — looks like a credentials file"$'\n'
+            ;;
+        .npmrc|*/.npmrc)
+            if git show ":$f" 2>/dev/null | grep -q '_authToken'; then
+                VIOLATIONS+="  • $f — contains _authToken"$'\n'
+            fi
+            ;;
+    esac
+done <<<"$STAGED_FILES"
+
+# Content scan — only ADDED lines (^+ not ^+++) of the staged diff
+ADDED=$(git diff --cached -U0 | grep -E '^\+[^+]' || true)
+
+# Pattern format: "regex|label" — split at the LAST '|'.
+PATTERNS=(
+    'AKIA[0-9A-Z]{16}|AWS Access Key ID'
+    'ASIA[0-9A-Z]{16}|AWS temporary credentials'
+    'gh[pousr]_[A-Za-z0-9]{36}|GitHub PAT'
+    'github_pat_[A-Za-z0-9_]{80,}|GitHub fine-grained PAT'
+    'glpat-[A-Za-z0-9_-]{20}|GitLab PAT'
+    'sk-ant-(api03|admin01)-[A-Za-z0-9_-]{80,}|Anthropic API key'
+    'sk-(proj-)?[A-Za-z0-9]{40,}|OpenAI API key'
+    'xox[baprs]-[A-Za-z0-9-]{10,}|Slack token'
+    'BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY|Private key block'
+)
+
+for p in "${PATTERNS[@]}"; do
+    regex="${p%|*}"
+    label="${p##*|}"
+    if printf '%s' "$ADDED" | grep -qE "$regex"; then
+        VIOLATIONS+="  • content matched: $label"$'\n'
+    fi
+done
+
+if [ -n "$VIOLATIONS" ]; then
+    gum style --bold --border thick --padding "0 2" --border-foreground 196 --foreground 196 \
+        "Guardrail: possible secret / sensitive content"
+    printf "%b" "$VIOLATIONS"
+    echo
+
+    DECISION=$(gum choose --header "How to proceed?" "abort" "override (commit anyway)")
+    case "$DECISION" in
+        abort)
+            gum style --faint "Aborted. Unstage with: git reset HEAD <file>"
+            exit 1
+            ;;
+        "override (commit anyway)")
+            gum confirm --default=false "Really commit flagged content?" \
+                || { gum style --faint "Aborted."; exit 1; }
+            gum style --foreground 214 "Override accepted — proceeding."
+            ;;
+    esac
+fi
+
 # --- Generate commit message ---
 
 DIFF_FILE=$(mktemp)
