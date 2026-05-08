@@ -1,7 +1,7 @@
 ---
 name: wiki
 description: Build and maintain a project knowledge base (docs/wiki/). Use when documenting architecture, features, modules, conventions, decisions, or answering questions about the project. Automatically triggered when the user asks to document something, explain how something works for future reference, or when significant features are completed.
-argument-hint: <ingest|query|lint|status> [topic or question]
+argument-hint: <ingest|query|lint|connect|status> [topic or question]
 allowed-tools: Read Edit Write Grep Glob Bash Agent
 ---
 
@@ -52,6 +52,48 @@ Health-check the wiki for quality issues.
 4. Suggest missing pages for undocumented features
 5. Check for broken `[[wiki-links]]`
 6. Report findings and offer to fix
+
+### `/wiki connect`
+Wire the project's `CLAUDE.md` to the wiki so future sessions use it proactively.
+
+1. Check whether `docs/wiki/` exists at the project root:
+   - If not, run the **Bootstrap** flow (see below) to create `index.md`, `log.md`, and `overview.md`
+2. Read the project root `CLAUDE.md` (create it if missing)
+3. If a `# Project Wiki` section is already present, report and exit (idempotent)
+4. Otherwise append the section below verbatim to `CLAUDE.md`
+5. Append a `[YYYY-MM-DD] connect | CLAUDE.md` entry to `docs/wiki/log.md`
+
+Section to append (substitute nothing — paths are relative on purpose):
+
+```markdown
+
+# Project Wiki
+
+This project has an LLM-maintained wiki at `docs/wiki/`. It is the long-term memory for the codebase — architecture, modules, features, conventions, and decisions, written for future sessions.
+
+## Usage
+
+- `/wiki ingest <topic>` — read source, write/update wiki pages with cross-references
+- `/wiki query <question>` — search wiki, synthesize an answer with `[[wiki-links]]`
+- `/wiki lint` — health-check (orphans, broken links, stale pages, missing coverage)
+- `/wiki status` — page count, recent log entries, coverage gaps
+- `/wiki connect` — wire this `CLAUDE.md` to the wiki (already done if you're reading this)
+
+## How to use the wiki
+
+- **Before answering questions about the project**, check `docs/wiki/index.md` and read relevant pages — the wiki is more reliable than re-deriving from source
+- **Before making non-trivial changes**, read the wiki page(s) for the affected module/feature so the change matches existing conventions and decisions
+- **Cite the wiki** in answers using `[[page-name]]` so the user can navigate
+- **When the wiki is wrong or stale**, update it in place — don't just answer correctly and move on
+- **Don't duplicate** what the wiki already documents in chat — link to the page instead
+
+## When to use proactively
+
+- After completing a significant feature, module, or refactor → suggest `/wiki ingest <topic>`
+- After making an architectural decision → suggest filing it under `decisions/` (ADR)
+- When the user asks "how does X work?" or "why did we do Y?" → run `/wiki query` first
+- When you notice undocumented conventions while working → suggest ingesting them
+```
 
 ### `/wiki status`
 Show wiki stats: page count, last updated, recent log entries, coverage gaps.
