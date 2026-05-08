@@ -1,48 +1,54 @@
 {
-    "enabledPlugins": {
-        "typescript-lsp@claude-plugins-official": true,
-        "ralph-loop@claude-plugins-official": true,
-        "pyright-lsp@claude-plugins-official": true
+  "permissions": {
+    "additionalDirectories": [
+      "/home/zizmackrok/code"
+    ]
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": []
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": false,
+  "editorMode": "vim",
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--output-dir",
+        "/tmp/playwright-mcp"
+      ]
     },
-    "skipDangerousModePermissionPrompt": false,
-    "permissions": {
-        "additionalDirectories": ["/home/zizmackrok/code"]
-    },
-    "mcpServers": {
-        "playwright": {
-            "type": "stdio",
-            "command": "npx",
-            "args": [
-                "-y",
-                "@playwright/mcp@latest",
-                "--output-dir",
-                "/tmp/playwright-mcp"
-            ]
-        },
-        "docs-mcp-server": {
-            "type": "stdio",
-            "command": "npx",
-            "args": ["-y", "@arabold/docs-mcp-server@latest"],
-            "env": {
-                "OPENAI_API_KEY": "ollama",
-                "OPENAI_API_BASE": "http://localhost:11434/v1",
-                "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
-            }
-        }
-    },
-    "hooks": {
-        "Notification": [
-            {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
-                    }
-                ]
-            }
-        ],
-        "SessionStart": []
-    },
-    "editorMode": "vim"
+    "docs-mcp-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@arabold/docs-mcp-server@latest"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "ollama",
+        "OPENAI_API_BASE": "http://localhost:11434/v1",
+        "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
+      }
+    }
+  },
+  "skipAutoPermissionPrompt": true
 }

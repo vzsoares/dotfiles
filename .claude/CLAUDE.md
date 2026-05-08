@@ -16,21 +16,16 @@
 
 - After making an error, log a reference memory documenting what went wrong and the correct behavior, so it's not repeated in future conversations
 
-# Second Brain
+# Knowledge bases
 
-This project is connected to the personal second brain. Config at `~/.claude/second-brain.json`.
+Two LLM-maintained knowledge bases are available — invoke their skills (`/wiki`, `/second-brain`) for full operations.
 
-## Usage
+- **`/wiki`** — per-project wiki at `docs/wiki/`. Run `/wiki connect` to wire a project's `CLAUDE.md`. Use it for project architecture, modules, features, conventions, and ADRs.
+- **`/second-brain`** — global personal knowledge base (Obsidian vault). Config at `~/.claude/second-brain.json`. Run `/second-brain connect` in a project to wire it. Use it for cross-project knowledge, work topics, people, research, and personal life.
 
-- `/second-brain setup [path]` — initialize vault
-- `/second-brain ingest <source>` — process source into wiki pages with cross-references
-- `/second-brain query <question>` — search wiki, synthesize answer with [[wiki-links]]
-- `/second-brain lint` — health-check (orphans, broken links, stale content, contradictions)
-- `/second-brain connect` — wire a project's CLAUDE.md to the brain
-- `/second-brain status` — stats, recent log, coverage gaps
-
-## When to use proactively
-
-- After completing significant features or architectural decisions
+Proactive triggers (suggest the relevant `ingest`):
+- After completing a significant feature or architectural decision
 - When the user mentions interesting sources, articles, or learnings
-- When knowledge has cross-project value worth persisting
+- When knowledge has cross-session or cross-project value worth persisting
+
+Before answering project questions, check the project wiki first; before answering cross-project questions, query the second brain.
