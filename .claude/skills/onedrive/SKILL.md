@@ -1,7 +1,7 @@
 ---
 name: onedrive
 description: Access the user's app-scoped OneDrive folder (Microsoft Graph AppFolder) on the company tenant. List, search, read inline, download, and upload files inside the app's auto-created /Apps/<app-name>/ folder. Auth is device-code flow. Use when the user mentions OneDrive, the company KB, the app folder, or wants to fetch/sync KB files from their company drive.
-argument-hint: <setup|auth|whoami|ls|cat|get|put|search> [args...]
+argument-hint: <setup|auth|whoami|ls|cat|get|put|mkdir|mv|rm|search> [args...]
 allowed-tools: Bash, Read, Write
 ---
 
@@ -70,6 +70,9 @@ All paths are relative to the configured root **inside** the AppFolder. With no 
 | `cat <path>` | Print a file's bytes to stdout | Best for small text files (.md, .txt, .json). Output is raw — pipe through tools as needed. |
 | `get <remote> [local]` | Download to disk | Streams in 64 KiB chunks. Default local = basename in cwd. |
 | `put <local> <remote>` | Upload, overwriting | Auto-uses upload session for files >4 MiB (chunked, 5 MiB chunks). Creates parent dirs as needed. |
+| `mkdir [-p] <path>` | Create a folder | `-p` creates intermediate parents and succeeds if the leaf already exists. |
+| `mv <src> <dst>` | Move or rename | Works at any depth — renames *and* cross-parent moves. Microsoft used to reject nested PATCH in AppFolder scope (the old "TOP-LEVEL only" rule); that no longer applies on current SPO. If you ever see 403 on a nested move, use the OneDrive web UI. |
+| `rm [-r] <path>` | Delete a file (or `-r` folder) | Works at any depth. `-r` is **required** for folders (empty or not), because Graph deletes folder contents recursively without prompting. |
 | `search <query>` | Fuzzy-search by name | Scoped to the AppFolder (server-side). `--json` available. |
 | `whoami` | Print authenticated user | Sanity check after `auth`. |
 
@@ -93,6 +96,20 @@ uv run ~/.claude/skills/onedrive/onedrive.py get "reports/2026-Q1.pdf" /tmp/q1.p
 
 # Search KB
 uv run ~/.claude/skills/onedrive/onedrive.py search "policy"
+
+# Create folders (intermediates included)
+uv run ~/.claude/skills/onedrive/onedrive.py mkdir -p "vendors/morada"
+
+# Rename in place (works at any depth)
+uv run ~/.claude/skills/onedrive/onedrive.py mv "policies/OLD_NAME.txt" "policies/new-name.txt"
+
+# Move + rename across folders (any depth)
+uv run ~/.claude/skills/onedrive/onedrive.py mv "Loose File.pdf" "archive/loose-file.pdf"
+uv run ~/.claude/skills/onedrive/onedrive.py mv "partners/foo/setup.pdf" "vendors/foo/setup.pdf"
+
+# Delete (folders need -r)
+uv run ~/.claude/skills/onedrive/onedrive.py rm "drafts/stale.md"
+uv run ~/.claude/skills/onedrive/onedrive.py rm -r "drafts/old-project"
 ```
 
 ## Common errors (quick triage)
@@ -101,7 +118,8 @@ uv run ~/.claude/skills/onedrive/onedrive.py search "policy"
 - `AADSTS50020 / 53003` → tenant conditional access. IT must whitelist or sign in from a compliant device.
 - `401 Unauthorized` mid-session → token cache stale; re-run `auth --force`.
 - `404 itemNotFound` → path wrong. Remember the AppFolder is the root; don't prefix `/Apps/<name>/`. Just say `policies/file.md`.
-- `403 accessDenied` → trying to read/write a path that doesn't resolve inside the AppFolder. Check your `--root`/`default_root` config.
+- `403 accessDenied` → trying to read/write a path that doesn't resolve inside the AppFolder. Check your `--root`/`default_root` config. May also appear on `mv`/`rm` of a nested item if your tenant still enforces the legacy AppFolder rule that blocked nested PATCH/DELETE — current SPO has lifted this for most tenants, but fall back to the OneDrive web UI if you hit it.
+- `423 notAllowed (locked)` → the file is open in Office (desktop or web) or held by the OneDrive desktop sync client. Office acquires a co-authoring lock for the whole editing session, not just during saves; **retries don't help**. Ask the user to close the file everywhere, wait ~30s, then re-run. Read-only ops (`cat`, `get`) keep working — only mutating ops (`put` overwrite, `mv`) hit 423.
 - `429 Too Many Requests` → throttling. Wait the `Retry-After` and re-run; the CLI does not auto-retry.
 
 For deeper diagnosis (Graph endpoints, error envelope, large-file upload internals, scope expansion), read `reference.md`.

@@ -18,6 +18,9 @@ Daily:
     uv run onedrive.py cat <path>
     uv run onedrive.py get <remote> [local]
     uv run onedrive.py put <local> <remote>
+    uv run onedrive.py mkdir [-p] <path>
+    uv run onedrive.py mv <src> <dst>
+    uv run onedrive.py rm [-r] <path>
     uv run onedrive.py search <query>
     uv run onedrive.py whoami
 
@@ -352,11 +355,15 @@ def _mkdir_one(path: str, ignore_exists: bool) -> None:
 
 
 def cmd_mv(args: argparse.Namespace) -> None:
-    """Move/rename a TOP-LEVEL item.
+    """Move or rename an item anywhere inside the AppFolder.
 
-    SPO-backed OneDrive AppFolder scope blocks PATCH on nested items even
-    when they belong to the AppFolder. For nested moves/renames, use the
-    OneDrive web UI.
+    Both same-parent renames and cross-parent moves work at any depth on
+    SPO-backed OneDrive (verified 2026-05-11 on the Approva tenant). An
+    earlier version of this CLI refused nested sources because Graph used
+    to reject nested PATCH in AppFolder scope; that restriction appears to
+    have been lifted server-side. If you ever see `403 accessDenied` on a
+    nested cross-parent move, fall back to the OneDrive web UI — it likely
+    means your tenant still has the old behavior.
     """
     root = _root_for(args)
     src = resolve_path(args.src, root)
@@ -364,17 +371,13 @@ def cmd_mv(args: argparse.Namespace) -> None:
     if not src or not dst:
         sys.exit("mv: need src and dst")
 
-    # Refuse nested sources — Graph returns 403/404 in this scope.
-    if "/" in src:
-        sys.exit(
-            f"mv: nested source '{src}' not supported under Files.ReadWrite.AppFolder. "
-            "Move/rename via OneDrive web UI, or move the top-level ancestor."
-        )
-
+    src_parent, _, _ = src.rpartition("/")
     dst_parent, _, dst_name = dst.rpartition("/")
+    is_rename = src_parent == dst_parent
+
     body: dict[str, Any] = {"name": dst_name}
-    if dst_parent:
-        # Resolve destination parent's item id
+    if not is_rename and dst_parent:
+        # Cross-parent move with a non-root destination — resolve dst parent id.
         r = graph_get(f"{item_url(dst_parent)}", params={"$select": "id"})
         die_on_error(r, f"mv: cannot resolve dst parent '{dst_parent}'")
         body["parentReference"] = {"id": r.json()["id"]}
@@ -386,6 +389,34 @@ def cmd_mv(args: argparse.Namespace) -> None:
     )
     die_on_error(r, f"mv failed ({src} -> {dst})")
     print(f"Moved {src} -> {dst}")
+
+
+def cmd_rm(args: argparse.Namespace) -> None:
+    """Delete a file or (with -r) a folder under the AppFolder.
+
+    Graph DELETE on a folder removes its contents recursively, so we require
+    an explicit `-r` for any folder to avoid foot-guns.
+    """
+    root = _root_for(args)
+    full = resolve_path(args.path, root)
+    if not full:
+        sys.exit("rm: refusing to delete the AppFolder root")
+
+    # Look up the item to know if it's a folder (and to surface 404 cleanly).
+    r = graph_get(item_url(full), params={"$select": "id,folder,file,name"})
+    die_on_error(r, f"rm: cannot find {full}")
+    item = r.json()
+    is_folder = "folder" in item
+    if is_folder and not args.recursive:
+        child_count = item.get("folder", {}).get("childCount", 0)
+        sys.exit(
+            f"rm: '{full}' is a folder ({child_count} item(s)); pass -r to "
+            "delete it and its contents recursively."
+        )
+
+    r = requests.delete(f"{GRAPH}{item_url(full)}", headers=graph_headers())
+    die_on_error(r, f"rm failed: {full}")
+    print(f"Removed {'folder' if is_folder else 'file'} {full}")
 
 
 def cmd_put(args: argparse.Namespace) -> None:
@@ -536,11 +567,20 @@ def main() -> None:
                     help="Create parent folders as needed; succeed if they exist.")
     sp.set_defaults(func=cmd_mkdir)
 
-    sp = sub.add_parser("mv", help="Move/rename a TOP-LEVEL item (nested moves blocked by AppFolder scope).")
+    sp = sub.add_parser("mv", help="Move or rename an item at any depth.")
     sp.add_argument("src")
     sp.add_argument("dst")
     sp.add_argument("--root")
     sp.set_defaults(func=cmd_mv)
+
+    sp = sub.add_parser("rm", help="Delete a file (or a folder with -r) at any depth.")
+    sp.add_argument("path")
+    sp.add_argument("--root")
+    sp.add_argument(
+        "-r", "--recursive", action="store_true",
+        help="Required for folders. Deletes the folder and all its contents.",
+    )
+    sp.set_defaults(func=cmd_rm)
 
     args = p.parse_args()
     args.func(args)
