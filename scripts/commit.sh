@@ -122,8 +122,54 @@ trap 'rm -f "$DIFF_FILE"' EXIT
 CONTEXT=""
 PROMPT_BASE="Write a concise Conventional Commit message for these changes. Return only the message — no co-author, no attribution, no trailers, no code fences."
 
+# Files whose diffs are noisy and unhelpful for message generation —
+# we list their names but omit the diff body.
+is_noisy_file() {
+    case "$1" in
+        package-lock.json|*/package-lock.json) ;;
+        yarn.lock|*/yarn.lock) ;;
+        pnpm-lock.yaml|*/pnpm-lock.yaml) ;;
+        bun.lock|*/bun.lock|bun.lockb|*/bun.lockb) ;;
+        Cargo.lock|*/Cargo.lock) ;;
+        Gemfile.lock|*/Gemfile.lock) ;;
+        poetry.lock|*/poetry.lock) ;;
+        composer.lock|*/composer.lock) ;;
+        Pipfile.lock|*/Pipfile.lock) ;;
+        go.sum|*/go.sum) ;;
+        mix.lock|*/mix.lock) ;;
+        flake.lock|*/flake.lock) ;;
+        Podfile.lock|*/Podfile.lock) ;;
+        uv.lock|*/uv.lock) ;;
+        *.min.js|*.min.css|*.map) ;;
+        *.snap) ;;
+        *) return 1 ;;
+    esac
+    return 0
+}
+
 while true; do
-    git diff --cached >"$DIFF_FILE"
+    NOISY_FILES=()
+    NORMAL_FILES=()
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        if is_noisy_file "$f"; then
+            NOISY_FILES+=("$f")
+        else
+            NORMAL_FILES+=("$f")
+        fi
+    done < <(git diff --cached --name-only)
+
+    {
+        if [ ${#NORMAL_FILES[@]} -gt 0 ]; then
+            git diff --cached -- "${NORMAL_FILES[@]}"
+        fi
+        if [ ${#NOISY_FILES[@]} -gt 0 ]; then
+            printf '\n# Lock/generated files changed (diff omitted):\n'
+            for f in "${NOISY_FILES[@]}"; do
+                printf '#   %s\n' "$f"
+            done
+        fi
+    } >"$DIFF_FILE"
 
     if [ -n "$CONTEXT" ]; then
         FULL_PROMPT="$PROMPT_BASE
