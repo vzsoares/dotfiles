@@ -15,6 +15,13 @@ fi
 
 gum style --bold --border double --padding "0 2" --border-foreground 212 "Release"
 
+# Portable in-place sed (BSD on macOS requires an explicit backup extension)
+if sed --version >/dev/null 2>&1; then
+    sed_inplace() { sed -i "$@"; }
+else
+    sed_inplace() { sed -i '' "$@"; }
+fi
+
 # --- Branch selection ---
 
 BRANCHES=$(git branch --format='%(refname:short)')
@@ -38,7 +45,7 @@ gum style --faint "$SOURCE_BRANCH -> $TARGET_BRANCH"
 detect_version() {
     # 1. pyproject.toml
     if [ -f "pyproject.toml" ]; then
-        ver=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml 2>/dev/null || true)
+        ver=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' pyproject.toml 2>/dev/null | head -1 || true)
         if [ -n "$ver" ]; then
             echo "$ver"
             return
@@ -47,7 +54,7 @@ detect_version() {
 
     # 2. package.json
     if [ -f "package.json" ]; then
-        ver=$(grep -Po '(?<="version": ")[^"]+' package.json 2>/dev/null | head -1 || true)
+        ver=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json 2>/dev/null | head -1 || true)
         if [ -n "$ver" ]; then
             echo "$ver"
             return
@@ -108,9 +115,9 @@ gum style --bold --foreground 212 "Releasing v$VERSION"
 
 # --- Merge ---
 
-gum spin --title "Switching to $TARGET_BRANCH..." -- git checkout "$TARGET_BRANCH"
-gum spin --title "Pulling $TARGET_BRANCH..." -- git pull origin "$TARGET_BRANCH"
-gum spin --title "Merging $SOURCE_BRANCH into $TARGET_BRANCH..." -- \
+gum spin --show-error --title "Switching to $TARGET_BRANCH..." -- git checkout "$TARGET_BRANCH"
+gum spin --show-error --title "Pulling $TARGET_BRANCH..." -- git pull origin "$TARGET_BRANCH"
+gum spin --show-error --title "Merging $SOURCE_BRANCH into $TARGET_BRANCH..." -- \
     git merge "$SOURCE_BRANCH" --no-ff -m "Release version $VERSION"
 
 # --- Update version in files ---
@@ -118,12 +125,12 @@ gum spin --title "Merging $SOURCE_BRANCH into $TARGET_BRANCH..." -- \
 UPDATED_FILES=()
 
 if [ -f "package.json" ]; then
-    sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
+    sed_inplace "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
     UPDATED_FILES+=("package.json")
 fi
 
 if [ -f "pyproject.toml" ]; then
-    sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" pyproject.toml
+    sed_inplace "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" pyproject.toml
     UPDATED_FILES+=("pyproject.toml")
 fi
 
@@ -133,7 +140,7 @@ CONFIG_FILES=$(find . -maxdepth 4 \( -name "config.py" -o -name "settings.py" \)
 
 for f in $CONFIG_FILES; do
     if grep -qE "^[[:blank:]]*VERSION: str =" "$f"; then
-        sed -i "s/^\([[:blank:]]*\)VERSION: str = \"[^\"]*\"/\1VERSION: str = \"$VERSION\"/" "$f"
+        sed_inplace "s/^\([[:blank:]]*\)VERSION: str = \"[^\"]*\"/\1VERSION: str = \"$VERSION\"/" "$f"
         UPDATED_FILES+=("$f")
     fi
 done
@@ -155,8 +162,13 @@ gum style --bold --foreground 82 "Merged and tagged v$VERSION on $TARGET_BRANCH"
 # --- Push ---
 
 if gum confirm "Push $TARGET_BRANCH and tags to origin?"; then
-    gum spin --title "Pushing $TARGET_BRANCH..." -- git push origin "$TARGET_BRANCH" --follow-tags
-    gum style --foreground 82 "Pushed $TARGET_BRANCH"
+    if gum spin --show-error --title "Pushing $TARGET_BRANCH..." -- git push origin "$TARGET_BRANCH" --follow-tags; then
+        gum style --foreground 82 "Pushed $TARGET_BRANCH"
+    else
+        gum style --foreground 196 "Push failed. Resolve the issue and push manually:"
+        gum style --faint "  git push origin $TARGET_BRANCH --follow-tags"
+        exit 1
+    fi
 else
     gum style --faint "Skipped push. Don't forget to push later."
 fi
@@ -164,12 +176,17 @@ fi
 # --- Rebase source branch ---
 
 if gum confirm "Switch back to $SOURCE_BRANCH and rebase with $TARGET_BRANCH?"; then
-    gum spin --title "Switching to $SOURCE_BRANCH..." -- git checkout "$SOURCE_BRANCH"
-    gum spin --title "Rebasing $SOURCE_BRANCH with $TARGET_BRANCH..." -- git rebase "$TARGET_BRANCH"
+    gum spin --show-error --title "Switching to $SOURCE_BRANCH..." -- git checkout "$SOURCE_BRANCH"
+    gum spin --show-error --title "Rebasing $SOURCE_BRANCH with $TARGET_BRANCH..." -- git rebase "$TARGET_BRANCH"
 
     if gum confirm "Push $SOURCE_BRANCH to origin?"; then
-        gum spin --title "Pushing $SOURCE_BRANCH..." -- git push origin "$SOURCE_BRANCH"
-        gum style --foreground 82 "Pushed $SOURCE_BRANCH"
+        if gum spin --show-error --title "Pushing $SOURCE_BRANCH..." -- git push origin "$SOURCE_BRANCH"; then
+            gum style --foreground 82 "Pushed $SOURCE_BRANCH"
+        else
+            gum style --foreground 196 "Push failed. Resolve the issue and push manually:"
+            gum style --faint "  git push origin $SOURCE_BRANCH"
+            exit 1
+        fi
     else
         gum style --faint "Skipped push of $SOURCE_BRANCH."
     fi
