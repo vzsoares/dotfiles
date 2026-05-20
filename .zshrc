@@ -129,23 +129,24 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 #deno
-DENO_INSTALL="/home/zizmackrok/.deno"
-PATH="$DENO_INSTALL/bin:$PATH"
+export DENO_INSTALL="$HOME/.deno"
+export PATH="$DENO_INSTALL/bin:$PATH"
 
 #pnpm
-export PNPM_HOME="/home/zizmackrok/.local/share/pnpm"
+case "$OSTYPE" in
+    darwin*) export PNPM_HOME="$HOME/Library/pnpm" ;;
+    *)       export PNPM_HOME="$HOME/.local/share/pnpm" ;;
+esac
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 #pnpm end
 
-#bun completions
-[ -s "/home/zizmackrok/.bun/_bun" ] && source "/home/zizmackrok/.bun/_bun"
-
 #bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
+[ -s "$BUN_INSTALL/_bun" ] && source "$BUN_INSTALL/_bun"
 
 # Python
 export PYENV_ROOT="$HOME/.pyenv"
@@ -160,20 +161,25 @@ export PATH="$HOME/code/personal/dotfiles/scripts:$PATH"
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 
-# Java
-export ANDROID_SDK_ROOT=$HOME/Android/Sdk
-export PATH=$PATH:$ANDROID_SDK_ROOT/emulator
-export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk
-export ANDROID_HOME=~/Android/Sdk
-export PATH=$PATH:$ANDROID_HOME/emulator
-export PATH=$PATH:$ANDROID_HOME/tools
-export PATH=$PATH:$ANDROID_HOME/tools/bin
-export PATH=$PATH:$ANDROID_HOME/platform-tools
-export PATH=$PATH:~/android-studio/bin
-export PATH=$PATH:/usr/local/go/bin
+# Linux-only: Java + Android SDK
+if [[ "$OSTYPE" == linux* ]]; then
+    export JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+    export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+    export ANDROID_HOME="$HOME/Android/Sdk"
+    export PATH="$PATH:$ANDROID_SDK_ROOT/emulator"
+    export PATH="$PATH:$ANDROID_SDK_ROOT/platform-tools"
+    export PATH="$PATH:$ANDROID_HOME/tools"
+    export PATH="$PATH:$ANDROID_HOME/tools/bin"
+    export PATH="$PATH:$HOME/android-studio/bin"
+fi
+export PATH="$PATH:/usr/local/go/bin"
 
 
 #THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
+
+# Machine-specific overrides (not tracked in dotfiles)
+[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+
+[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
