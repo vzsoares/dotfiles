@@ -15,6 +15,13 @@ fi
 
 gum style --bold --border double --padding "0 2" --border-foreground 212 "Dev Release"
 
+# Portable in-place sed (BSD on macOS requires an explicit backup extension)
+if sed --version >/dev/null 2>&1; then
+    sed_inplace() { sed -i "$@"; }
+else
+    sed_inplace() { sed -i '' "$@"; }
+fi
+
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 gum style --faint "Branch: $CURRENT_BRANCH"
 
@@ -23,7 +30,7 @@ gum style --faint "Branch: $CURRENT_BRANCH"
 detect_version() {
     # 1. pyproject.toml
     if [ -f "pyproject.toml" ]; then
-        ver=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml 2>/dev/null || true)
+        ver=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' pyproject.toml 2>/dev/null | head -1 || true)
         if [ -n "$ver" ]; then
             echo "$ver"
             return
@@ -32,7 +39,7 @@ detect_version() {
 
     # 2. package.json
     if [ -f "package.json" ]; then
-        ver=$(grep -Po '(?<="version": ")[^"]+' package.json 2>/dev/null | head -1 || true)
+        ver=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json 2>/dev/null | head -1 || true)
         if [ -n "$ver" ]; then
             echo "$ver"
             return
@@ -109,12 +116,12 @@ gum style --bold --foreground 212 "Releasing v$VERSION"
 UPDATED_FILES=()
 
 if [ -f "package.json" ]; then
-    sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
+    sed_inplace "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
     UPDATED_FILES+=("package.json")
 fi
 
 if [ -f "pyproject.toml" ]; then
-    sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" pyproject.toml
+    sed_inplace "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" pyproject.toml
     UPDATED_FILES+=("pyproject.toml")
 fi
 
@@ -124,7 +131,7 @@ CONFIG_FILES=$(find . -maxdepth 4 \( -name "config.py" -o -name "settings.py" \)
 
 for f in $CONFIG_FILES; do
     if grep -qE "^[[:blank:]]*VERSION: str =" "$f"; then
-        sed -i "s/^\([[:blank:]]*\)VERSION: str = \"[^\"]*\"/\1VERSION: str = \"$VERSION\"/" "$f"
+        sed_inplace "s/^\([[:blank:]]*\)VERSION: str = \"[^\"]*\"/\1VERSION: str = \"$VERSION\"/" "$f"
         UPDATED_FILES+=("$f")
     fi
 done
@@ -146,8 +153,13 @@ gum style --bold --foreground 82 "Tagged v$VERSION on $CURRENT_BRANCH"
 # --- Push ---
 
 if gum confirm "Push $CURRENT_BRANCH and tags to origin?"; then
-    gum spin --title "Pushing $CURRENT_BRANCH..." -- git push origin "$CURRENT_BRANCH" --follow-tags
-    gum style --foreground 82 "Pushed $CURRENT_BRANCH"
+    if gum spin --show-error --title "Pushing $CURRENT_BRANCH..." -- git push origin "$CURRENT_BRANCH" --follow-tags; then
+        gum style --foreground 82 "Pushed $CURRENT_BRANCH"
+    else
+        gum style --foreground 196 "Push failed. Resolve the issue and push manually:"
+        gum style --faint "  git push origin $CURRENT_BRANCH --follow-tags"
+        exit 1
+    fi
 else
     gum style --faint "Skipped push. Don't forget to push later."
 fi
