@@ -120,7 +120,13 @@ DIFF_FILE=$(mktemp)
 trap 'rm -f "$DIFF_FILE"' EXIT
 
 CONTEXT=""
-PROMPT_BASE="Write a concise Conventional Commit message for these changes. Return only the message — no co-author, no attribution, no trailers, no code fences."
+PROMPT_BASE="Write a concise Conventional Commit message for the staged diff below.
+
+The diff IS the complete change. You have no tools and cannot read files — do not attempt to investigate further or simulate tool calls.
+
+Respond with ONLY the commit message text. No code fences, no preamble, no reasoning, no XML tags, no co-author, no attribution, no trailers."
+
+SYSTEM_PROMPT="You are a commit-message generator. Your entire response must be the commit message text and nothing else. Never include reasoning, planning, tool calls, XML tags, code fences, or any other wrapping. Never claim to read or investigate files. Treat the diff in the user message as the complete and only context."
 
 # Files whose diffs are noisy and unhelpful for message generation —
 # we list their names but omit the diff body.
@@ -180,7 +186,39 @@ Additional guidance from the user: $CONTEXT"
     fi
 
     MESSAGE=$(gum spin --show-output --title "Generating commit message..." -- \
-        bash -c 'claude -p --tools "" --strict-mcp-config --no-session-persistence --disable-slash-commands --model haiku "$2" <"$1"' _ "$DIFF_FILE" "$FULL_PROMPT") || true
+        bash -c 'claude -p --tools "" --strict-mcp-config --no-session-persistence --disable-slash-commands --model haiku --append-system-prompt "$3" "$2" <"$1"' _ "$DIFF_FILE" "$FULL_PROMPT" "$SYSTEM_PROMPT") || true
+
+    # Defensive post-processing — safety net in case the model leaks reasoning,
+    # fake tool tags, or wraps the message in a code fence despite instructions.
+
+    # If output contains fenced code blocks, extract the LAST one's contents.
+    if printf '%s\n' "$MESSAGE" | grep -q '^```'; then
+        EXTRACTED=$(printf '%s\n' "$MESSAGE" | awk '
+            /^```/ {
+                if (!in_block) { in_block = 1; buf = "" }
+                else { in_block = 0; last = buf }
+                next
+            }
+            in_block { buf = buf $0 "\n" }
+            END { if (last != "") printf "%s", last }
+        ')
+        if [ -n "$EXTRACTED" ]; then
+            MESSAGE="$EXTRACTED"
+        fi
+    fi
+
+    # Strip lines that are only fake XML/tool tags (e.g. <read>, </path>).
+    MESSAGE=$(printf '%s\n' "$MESSAGE" | grep -vE '^[[:space:]]*</?[A-Za-z][^>]*/?>[[:space:]]*$' || true)
+
+    # Trim leading and trailing blank lines.
+    MESSAGE=$(printf '%s\n' "$MESSAGE" | awk '
+        /[^[:space:]]/ { found = 1 }
+        found { lines[n++] = $0 }
+        END {
+            while (n > 0 && lines[n-1] ~ /^[[:space:]]*$/) n--
+            for (i = 0; i < n; i++) print lines[i]
+        }
+    ')
 
     if [ -z "$MESSAGE" ]; then
         gum style --foreground 196 "Claude returned an empty message."
