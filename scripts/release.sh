@@ -25,20 +25,29 @@ fi
 # --- Branch selection ---
 
 BRANCHES=$(git branch --format='%(refname:short)')
+CURRENT_BRANCH=$(git branch --show-current)
 
-SOURCE_BRANCH=$(gum input --placeholder "Source branch" --value "dev" --header "Merge FROM which branch?")
-if ! echo "$BRANCHES" | grep -qx "$SOURCE_BRANCH"; then
-    gum style --foreground 196 "Branch '$SOURCE_BRANCH' does not exist."
-    exit 1
+SOURCE_BRANCH=$(gum input --placeholder "Source branch (empty = release current)" --value "dev" --header "Merge FROM which branch? (empty to release current branch)")
+
+if [ -z "$SOURCE_BRANCH" ]; then
+    NO_MERGE=1
+    TARGET_BRANCH="$CURRENT_BRANCH"
+    gum style --faint "Releasing current branch: $TARGET_BRANCH (no merge)"
+else
+    NO_MERGE=0
+    if ! echo "$BRANCHES" | grep -qx "$SOURCE_BRANCH"; then
+        gum style --foreground 196 "Branch '$SOURCE_BRANCH' does not exist."
+        exit 1
+    fi
+
+    TARGET_BRANCH=$(gum input --placeholder "Target branch" --value "prod" --header "Merge INTO which branch?")
+    if ! echo "$BRANCHES" | grep -qx "$TARGET_BRANCH"; then
+        gum style --foreground 196 "Branch '$TARGET_BRANCH' does not exist."
+        exit 1
+    fi
+
+    gum style --faint "$SOURCE_BRANCH -> $TARGET_BRANCH"
 fi
-
-TARGET_BRANCH=$(gum input --placeholder "Target branch" --value "prod" --header "Merge INTO which branch?")
-if ! echo "$BRANCHES" | grep -qx "$TARGET_BRANCH"; then
-    gum style --foreground 196 "Branch '$TARGET_BRANCH' does not exist."
-    exit 1
-fi
-
-gum style --faint "$SOURCE_BRANCH -> $TARGET_BRANCH"
 
 # --- Detect current version ---
 
@@ -115,10 +124,12 @@ gum style --bold --foreground 212 "Releasing v$VERSION"
 
 # --- Merge ---
 
-gum spin --show-error --title "Switching to $TARGET_BRANCH..." -- git checkout "$TARGET_BRANCH"
-gum spin --show-error --title "Pulling $TARGET_BRANCH..." -- git pull origin "$TARGET_BRANCH"
-gum spin --show-error --title "Merging $SOURCE_BRANCH into $TARGET_BRANCH..." -- \
-    git merge "$SOURCE_BRANCH" --no-ff -m "Release version $VERSION"
+if [ "$NO_MERGE" -eq 0 ]; then
+    gum spin --show-error --title "Switching to $TARGET_BRANCH..." -- git checkout "$TARGET_BRANCH"
+    gum spin --show-error --title "Pulling $TARGET_BRANCH..." -- git pull origin "$TARGET_BRANCH"
+    gum spin --show-error --title "Merging $SOURCE_BRANCH into $TARGET_BRANCH..." -- \
+        git merge "$SOURCE_BRANCH" --no-ff -m "Release version $VERSION"
+fi
 
 # --- Update version in files ---
 
@@ -175,23 +186,25 @@ fi
 
 # --- Rebase source branch ---
 
-if gum confirm "Switch back to $SOURCE_BRANCH and rebase with $TARGET_BRANCH?"; then
-    gum spin --show-error --title "Switching to $SOURCE_BRANCH..." -- git checkout "$SOURCE_BRANCH"
-    gum spin --show-error --title "Rebasing $SOURCE_BRANCH with $TARGET_BRANCH..." -- git rebase "$TARGET_BRANCH"
+if [ "$NO_MERGE" -eq 0 ]; then
+    if gum confirm "Switch back to $SOURCE_BRANCH and rebase with $TARGET_BRANCH?"; then
+        gum spin --show-error --title "Switching to $SOURCE_BRANCH..." -- git checkout "$SOURCE_BRANCH"
+        gum spin --show-error --title "Rebasing $SOURCE_BRANCH with $TARGET_BRANCH..." -- git rebase "$TARGET_BRANCH"
 
-    if gum confirm "Push $SOURCE_BRANCH to origin?"; then
-        if gum spin --show-error --title "Pushing $SOURCE_BRANCH..." -- git push origin "$SOURCE_BRANCH"; then
-            gum style --foreground 82 "Pushed $SOURCE_BRANCH"
+        if gum confirm "Push $SOURCE_BRANCH to origin?"; then
+            if gum spin --show-error --title "Pushing $SOURCE_BRANCH..." -- git push origin "$SOURCE_BRANCH"; then
+                gum style --foreground 82 "Pushed $SOURCE_BRANCH"
+            else
+                gum style --foreground 196 "Push failed. Resolve the issue and push manually:"
+                gum style --faint "  git push origin $SOURCE_BRANCH"
+                exit 1
+            fi
         else
-            gum style --foreground 196 "Push failed. Resolve the issue and push manually:"
-            gum style --faint "  git push origin $SOURCE_BRANCH"
-            exit 1
+            gum style --faint "Skipped push of $SOURCE_BRANCH."
         fi
     else
-        gum style --faint "Skipped push of $SOURCE_BRANCH."
+        gum style --faint "Stayed on $TARGET_BRANCH. Rebase manually when ready."
     fi
-else
-    gum style --faint "Stayed on $TARGET_BRANCH. Rebase manually when ready."
 fi
 
 gum style --bold --border double --padding "0 2" --border-foreground 82 "Release v$VERSION complete"
