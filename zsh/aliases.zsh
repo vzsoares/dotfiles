@@ -3,6 +3,9 @@ alias aws-approva-dev="export AWS_PROFILE=approva-dev"
 alias aws-approva-prod="export AWS_PROFILE=approva-prod"
 alias aws-myself="export AWS_PROFILE=myself"
 
+alias aws-approva-dev-auth="aws login -- profile approva-dev"
+alias aws-approva-prod-auth="aws login -- profile approva-prod"
+
 # Tools
 alias ts="tsx"
 alias n="nvim"
