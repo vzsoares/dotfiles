@@ -1,0 +1,23 @@
+[tasks]
+hello = "echo 'Hello from mise'"
+
+[env]
+_.file = ".env"
+SHELL = "/bin/zsh"
+
+[tools]
+go = "latest"
+bun = "latest"
+deno = "latest"
+node = "latest"
+python = "latest"
+erlang = "latest"
+elixir = "latest"
+gleam = "latest"
+rust = "latest"
+zig = "latest"
+fly = "latest"
+usage = "latest"
+watchexec = "latest"
+opencode = "latest"
+pi = "latest"
