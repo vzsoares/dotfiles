@@ -6,3 +6,4 @@
 ## Manjaro i3
 - [[fresh-install]] — Step-by-step bring-up on a new Manjaro i3 machine
 - [[audio-pipewire-spotify]] — PipeWire/WirePlumber audio backend fix (Spotify "can't play this right now")
+- [[chrome-portal-file-picker-hidpi]] — Oversized/blank Chrome file picker fix (portal HiDPI scaling via environment.d)

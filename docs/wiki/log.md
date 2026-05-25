@@ -7,3 +7,7 @@ Pages created: overview.md, guides/fresh-install.md, guides/audio-pipewire-spoti
 ## [2026-05-25] reorg | Nest install guides under manjaroi3/
 Moved fresh-install.md and audio-pipewire-spotify.md from guides/ into manjaroi3/. overview.md kept at wiki root. Wiki-links unchanged (filename-based); index "Guides" section relabeled "Manjaro i3".
 Pages moved: manjaroi3/fresh-install.md, manjaroi3/audio-pipewire-spotify.md
+
+## [2026-05-25] ingest | Chrome portal file-picker HiDPI fix
+Documented the oversized/"blank" Chrome file picker bug: the dialog is drawn by the dbus/systemd-activated xdg-desktop-portal-gtk, which doesn't inherit GDK_SCALE/GDK_DPI_SCALE from ~/.profile. Fix is ~/.config/environment.d/hidpi.conf. Recorded the debugging dead-ends (not DISPLAY, not Chrome flags, not GTK4 GL/NVIDIA — portal is GTK3) so they aren't repeated.
+Pages created: manjaroi3/chrome-portal-file-picker-hidpi.md
