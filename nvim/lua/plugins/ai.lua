@@ -5,6 +5,7 @@ return {
 		"ThePrimeagen/99",
 		dependencies = { "nvim-telescope/telescope.nvim" }, -- model/provider picker (<leader>9m)
 		keys = {
+			{ "<leader>aa", function() require("99").vibe() end, desc = "99: edit current file" },
 			{ "<leader>as", function() require("99").search() end, desc = "99: search project" },
 			{ "<leader>ae", function() require("99").visual() end, mode = "v", desc = "99: process selection" },
 			{ "<leader>ax", function() require("99").stop_all_requests() end, desc = "99: stop all requests" },
