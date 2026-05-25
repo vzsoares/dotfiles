@@ -115,9 +115,11 @@ if command -v tmux &> /dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] &&
     exec tmux
 fi
 
+export PATH=~/.npm-global/bin:$PATH
+
 ###############################
 
-##### Generated OR Paths ######
+##### DEFAULT: Generated OR Paths ######
 
 # Generated for envman. Do not edit.
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
