@@ -156,20 +156,19 @@ return {
 				},
 			})
 
-			-- Setup LSP servers
-			local lspconfig = require("lspconfig")
+			-- Setup LSP servers via the native vim.lsp.config API.
+			-- Base configs (cmd, root markers, ...) are supplied by nvim-lspconfig on the rtp.
 			local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
-			-- Common LSP settings
-			local common_settings = {
+			-- Defaults merged into every server config
+			vim.lsp.config("*", {
 				capabilities = capabilities,
 				flags = {
 					debounce_text_changes = 150,
 				},
-			}
+			})
 
-			-- Setup each LSP server
-			lspconfig.lua_ls.setup(vim.tbl_deep_extend("force", common_settings, {
+			vim.lsp.config("lua_ls", {
 				settings = {
 					Lua = {
 						workspace = { checkThirdParty = false },
@@ -179,21 +178,21 @@ return {
 						},
 					},
 				},
-			}))
+			})
 
 			-- Load schemastore after ensuring it's installed
 			local schemastore = require("schemastore")
 
-			lspconfig.jsonls.setup(vim.tbl_deep_extend("force", common_settings, {
+			vim.lsp.config("jsonls", {
 				settings = {
 					json = {
 						schemas = schemastore.json.schemas(),
 						validate = { enable = true },
 					},
 				},
-			}))
+			})
 
-			lspconfig.yamlls.setup(vim.tbl_deep_extend("force", common_settings, {
+			vim.lsp.config("yamlls", {
 				settings = {
 					yaml = {
 						schemaStore = {
@@ -203,15 +202,15 @@ return {
 						schemas = schemastore.yaml.schemas(),
 					},
 				},
-			}))
+			})
 
-			lspconfig.gopls.setup(vim.tbl_deep_extend("force", common_settings, {
+			vim.lsp.config("gopls", {
 				filetypes = { "go", "gomod", "gotmpl" },
-			}))
+			})
 
-			lspconfig.ansiblels.setup(vim.tbl_deep_extend("force", common_settings, {
+			vim.lsp.config("ansiblels", {
 				filetypes = { "yaml.ansible", ".ansible", "ansible.yaml" },
-			}))
+			})
 
 			-- Global LSP keymaps
 			vim.keymap.set("n", "gd", vim.lsp.buf.definition, { desc = "Go to Definition" })
@@ -239,7 +238,7 @@ return {
 				severity_sort = true,
 			})
 
-			vim.lsp.enable("biome")
+			vim.lsp.enable({ "lua_ls", "jsonls", "yamlls", "gopls", "ansiblels", "biome" })
 		end,
 	},
 	{

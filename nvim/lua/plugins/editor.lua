@@ -120,7 +120,7 @@ return {
 	},
 	{
 		"nvim-telescope/telescope.nvim",
-		version = "0.1.5",
+		version = "0.2.1",
 		dependencies = { "nvim-lua/plenary.nvim" },
 		event = "VeryLazy",
 		keys = {
