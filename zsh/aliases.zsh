@@ -13,6 +13,7 @@ alias aws-approva-prod-go="export AWS_PROFILE=approva-prod && aws login -- profi
 alias ts="tsx"
 alias n="nvim"
 alias tf="terraform"
+alias yayu="yay --sudoloop --save --noconfirm -Syu"
 
 # Python
 alias sourcepy="source .venv/bin/activate"
