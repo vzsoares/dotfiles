@@ -5,9 +5,9 @@ return {
 		"ThePrimeagen/99",
 		dependencies = { "nvim-telescope/telescope.nvim" }, -- model/provider picker (<leader>9m)
 		keys = {
-			{ "<leader>9s", function() require("99").search() end, desc = "99: search project" },
-			{ "<leader>9v", function() require("99").visual() end, mode = "v", desc = "99: process selection" },
-			{ "<leader>9x", function() require("99").stop_all_requests() end, desc = "99: stop all requests" },
+			{ "<leader>as", function() require("99").search() end, desc = "99: search project" },
+			{ "<leader>ae", function() require("99").visual() end, mode = "v", desc = "99: process selection" },
+			{ "<leader>ax", function() require("99").stop_all_requests() end, desc = "99: stop all requests" },
 			{ "<leader>9m", function() require("99.extensions.telescope").select_model() end, desc = "99: select model" },
 		},
 		config = function()
