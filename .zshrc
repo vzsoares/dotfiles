@@ -185,3 +185,4 @@ export SDKMAN_DIR="$HOME/.sdkman"
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 
 [ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
+eval "$(mise activate zsh)"
