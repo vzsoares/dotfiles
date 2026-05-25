@@ -2,6 +2,7 @@ return {
 	{
 		-- https://github.com/Davidyz/VectorCode/blob/main/docs/neovim.md#installation
 		"Davidyz/VectorCode",
+		enabled = false,
 		version = "*",
 		lazy = "Lazy",
 		build = "uv tool upgrade vectorcode", -- This helps keeping the CLI up-to-date
@@ -170,7 +171,7 @@ return {
 	-- Avante
 	{
 		"yetone/avante.nvim",
-		-- enabled = false,
+		enabled = false,
 		lazy = false,
 		build = "make",
 		dependencies = {
