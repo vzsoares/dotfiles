@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:github.com)",
       "WebSearch",
-      "Skill(second-brain)"
+      "Skill(second-brain)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

@@ -1,5 +1,26 @@
 return {
 	{
+		-- https://github.com/ThePrimeagen/99
+		-- "The AI client that Neovim deserves". Uses the `claude` CLI (only provider installed).
+		"ThePrimeagen/99",
+		dependencies = { "nvim-telescope/telescope.nvim" }, -- model/provider picker (<leader>9m)
+		keys = {
+			{ "<leader>9s", function() require("99").search() end, desc = "99: search project" },
+			{ "<leader>9v", function() require("99").visual() end, mode = "v", desc = "99: process selection" },
+			{ "<leader>9x", function() require("99").stop_all_requests() end, desc = "99: stop all requests" },
+			{ "<leader>9m", function() require("99.extensions.telescope").select_model() end, desc = "99: select model" },
+		},
+		config = function()
+			local _99 = require("99")
+			_99.setup({
+				provider = _99.Providers.ClaudeCodeProvider,
+				completion = {
+					source = "cmp", -- this config uses nvim-cmp
+				},
+			})
+		end,
+	},
+	{
 		-- https://github.com/Davidyz/VectorCode/blob/main/docs/neovim.md#installation
 		"Davidyz/VectorCode",
 		enabled = false,

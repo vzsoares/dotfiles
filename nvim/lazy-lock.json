@@ -1,4 +1,5 @@
 {
+  "99": { "branch": "master", "commit": "4d229141546290746c82ac90f5afc2786865b5f3" },
   "LuaSnip": { "branch": "master", "commit": "0abc8f390b278c3b4aabc4c004ac8a088b65cf24" },
   "VectorCode": { "branch": "main", "commit": "e4c17b5536482a3303392b7ecc0eb05f6255dd75" },
   "avante.nvim": { "branch": "main", "commit": "4390828e88c8526649d1af7000df5c512fa49bbb" },
