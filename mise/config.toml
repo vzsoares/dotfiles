@@ -18,3 +18,5 @@ rust = "latest"
 usage = "latest"
 watchexec = "latest"
 awscli = { version = "latest", symlink_bins = "true" }
+ripgrep = "latest"
+fzf = "latest"
