@@ -26,6 +26,12 @@ return {
 				"eslint",
 				"emmet_ls",
 				"biome",
+				"ts_ls",
+				"ty",
+				"ruff",
+				"html",
+				"cssls",
+				"marksman",
 			},
 			automatic_installation = true,
 		},
@@ -238,7 +244,20 @@ return {
 				severity_sort = true,
 			})
 
-			vim.lsp.enable({ "lua_ls", "jsonls", "yamlls", "gopls", "ansiblels", "biome" })
+			vim.lsp.enable({
+				"lua_ls",
+				"jsonls",
+				"yamlls",
+				"gopls",
+				"ansiblels",
+				"biome",
+				"ts_ls",
+				"ty",
+				"ruff",
+				"html",
+				"cssls",
+				"marksman",
+			})
 		end,
 	},
 	{
