@@ -186,3 +186,6 @@ export SDKMAN_DIR="$HOME/.sdkman"
 
 [ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 eval "$(mise activate zsh)"
+
+# bun completions
+[ -s "$BUN_INSTALL/_bun" ] && source "$BUN_INSTALL/_bun"
