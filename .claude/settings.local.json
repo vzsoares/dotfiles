@@ -4,7 +4,8 @@
       "WebFetch(domain:github.com)",
       "WebSearch",
       "Skill(second-brain)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Skill(wiki)"
     ]
   }
 }

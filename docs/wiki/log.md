@@ -11,3 +11,7 @@ Pages moved: manjaroi3/fresh-install.md, manjaroi3/audio-pipewire-spotify.md
 ## [2026-05-25] ingest | Chrome portal file-picker HiDPI fix
 Documented the oversized/"blank" Chrome file picker bug: the dialog is drawn by the dbus/systemd-activated xdg-desktop-portal-gtk, which doesn't inherit GDK_SCALE/GDK_DPI_SCALE from ~/.profile. Fix is ~/.config/environment.d/hidpi.conf. Recorded the debugging dead-ends (not DISPLAY, not Chrome flags, not GTK4 GL/NVIDIA — portal is GTK3) so they aren't repeated.
 Pages created: manjaroi3/chrome-portal-file-picker-hidpi.md
+
+## [2026-05-26] ingest | Dark mode for GTK/GNOME apps on i3
+Saved the `gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'` command. On i3 there's no settings daemon, so GTK4/libadwaita apps default to light; this dconf key flips them dark. Noted the legacy `gtk-theme` key for GTK3 apps and that the portal exposes the setting to Flatpaks.
+Pages created: manjaroi3/dark-mode-gtk-apps.md
