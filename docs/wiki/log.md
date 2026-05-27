@@ -15,3 +15,7 @@ Pages created: manjaroi3/chrome-portal-file-picker-hidpi.md
 ## [2026-05-26] ingest | Dark mode for GTK/GNOME apps on i3
 Saved the `gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'` command. On i3 there's no settings daemon, so GTK4/libadwaita apps default to light; this dconf key flips them dark. Noted the legacy `gtk-theme` key for GTK3 apps and that the portal exposes the setting to Flatpaks.
 Pages created: manjaroi3/dark-mode-gtk-apps.md
+
+## [2026-05-26] ingest | Color emoji fonts (Notion/browsers)
+Documented enabling color emoji: install `noto-fonts-emoji` (extra repo, not yay) + a `75-noto-color-emoji.conf` aliasing Apple/Segoe/Twemoji names to Noto. Verified live on this machine (`fc-match emoji` was falling back to Noto Znamenny Musical Notation). Recorded that fontconfig 2.17 makes the old `70-no-bitmaps.conf` panic unnecessary — color emoji are flagged scalable and survive the reject; only swap to the except-emoji variant if `fc-match emoji` still fails after install.
+Pages created: manjaroi3/color-emoji-fonts.md

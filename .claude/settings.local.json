@@ -1,11 +1,12 @@
 {
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:github.com)",
-      "WebSearch",
-      "Skill(second-brain)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "Skill(wiki)"
-    ]
-  }
+    "permissions": {
+        "allow": [
+            "WebFetch(domain:github.com)",
+            "WebSearch",
+            "Skill(second-brain)",
+            "WebFetch(domain:raw.githubusercontent.com)",
+            "Skill(wiki)",
+            "Read(//tmp/**)"
+        ]
+    }
 }
