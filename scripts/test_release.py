@@ -358,6 +358,53 @@ def test_already_published_python(
     assert release.already_published("python", "1.0.0") is False
 
 
+def test_publish_records_target(
+    git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / "package.json").write_text('{"name": "pkg", "version": "1.0.0"}')
+    monkeypatch.setattr(release, "already_published", lambda *a: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt: True)
+    monkeypatch.setattr(
+        release,
+        "run",
+        lambda cmd, *, title="": subprocess.CompletedProcess(cmd, 0, "", ""),
+    )
+    state = release.State(version="1.0.0", publishable=True, project_type="node")
+    release.phase_publish(state)
+    assert state.published == "npm: pkg@1.0.0"
+
+
+def test_publish_skips_when_already_published(
+    git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / "package.json").write_text('{"name": "pkg", "version": "1.0.0"}')
+    monkeypatch.setattr(release, "already_published", lambda *a: True)
+    state = release.State(version="1.0.0", publishable=True, project_type="node")
+    release.phase_publish(state)
+    assert state.published == ""  # nothing published
+
+
+def test_github_release_captures_url(
+    git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = "https://github.com/o/r/releases/tag/v1.0.0"
+    # `gh release view` → not found (rc 1); `gh release create` (run) → prints URL.
+    monkeypatch.setattr(
+        release.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 1, "", ""),
+    )
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt: True)
+    monkeypatch.setattr(
+        release,
+        "run",
+        lambda cmd, *, title="": subprocess.CompletedProcess(cmd, 0, url + "\n", ""),
+    )
+    state = release.State(version="1.0.0", is_github=True, changelog="notes")
+    release.phase_github_release(state)
+    assert state.github_release_url == url
+
+
 def test_detect_hook_manager(git_repo: Path) -> None:
     assert release.detect_hook_manager() == "none"
     (git_repo / ".pre-commit-config.yaml").write_text("repos: []\n")
@@ -435,6 +482,42 @@ def test_render_changelog_groups() -> None:
     assert "- crash" in out
     assert "### Other" in out
     assert "- random commit" in out
+
+
+def _empty_config():  # noqa: ANN202 — release.Config, dynamically imported
+    return release.Config(schema=release.CONFIG_SCHEMA, created_at=0.0, tools={})
+
+
+def test_changelog_amend_folds_into_bump_commit(
+    git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--amend-changelog puts CHANGELOG.md in the bump commit, no separate commit."""
+    (git_repo / "package.json").write_text('{"name": "x", "version": "1.0.0"}\n')
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)  # don't edit
+    state = release.State(version="1.1.0", no_merge=True, target_branch="main")
+    release.phase_write_version(state)  # makes the "chore: bump version to 1.1.0"
+    bump_commit = _git("rev-parse", "HEAD").strip()
+
+    release.phase_changelog(state, _empty_config(), no_changelog=False, amend=True)
+
+    head_subject = _git("log", "-1", "--pretty=%s").strip()
+    assert head_subject == "chore: bump version to 1.1.0"  # still the bump commit
+    assert _git("rev-parse", "HEAD").strip() != bump_commit  # amended (new hash)
+    files = _git("show", "--name-only", "--pretty=", "HEAD").split()
+    assert "CHANGELOG.md" in files and "package.json" in files
+    # No separate "docs: changelog" commit was made.
+    assert "docs: changelog" not in _git("log", "--pretty=%s")
+
+
+def test_changelog_separate_commit_default(
+    git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / "package.json").write_text('{"name": "x", "version": "1.0.0"}\n')
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    state = release.State(version="1.1.0", no_merge=True, target_branch="main")
+    release.phase_write_version(state)
+    release.phase_changelog(state, _empty_config(), no_changelog=False, amend=False)
+    assert "docs: changelog for v1.1.0" in _git("log", "--pretty=%s")
 
 
 # --------------------------------------------------------------------------- #

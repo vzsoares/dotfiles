@@ -32,6 +32,7 @@
 #      --dev           Dev release: bump to -dev.N, tag + push current branch.
 #      --no-scan       Skip the gitleaks secret scan.
 #      --no-changelog  Skip changelog generation.
+#      --amend-changelog  Fold the changelog into the version-bump commit.
 #      --reconfigure   Re-run this repo's first-run config (branches/phases).
 #
 #  DESCRIPTION
@@ -401,6 +402,9 @@ class State:
     # phase tracking
     phases: dict[str, str] = field(default_factory=dict)
     changelog: str = ""
+    # outcomes (shown in the finalize summary)
+    published: str = ""
+    github_release_url: str = ""
 
     def status(self, phase: str) -> str:
         return self.phases.get(phase, "pending")
@@ -917,7 +921,9 @@ def phase_write_version(state: State) -> None:
     git("commit", "-m", f"chore: bump version to {version}")
 
 
-def phase_changelog(state: State, config: Config, no_changelog: bool) -> None:
+def phase_changelog(
+    state: State, config: Config, no_changelog: bool, amend: bool = False
+) -> None:
     """P7 — generate/prepend a CHANGELOG.md section."""
     if no_changelog:
         info("Changelog skipped (--no-changelog).")
@@ -959,7 +965,14 @@ def phase_changelog(state: State, config: Config, no_changelog: bool) -> None:
         state.changelog = changelog.read_text().split("\n\n")[0]
 
     git("add", "CHANGELOG.md")
-    git("commit", "-m", f"docs: changelog for v{state.version}")
+    bump_subject = f"chore: bump version to {state.version}"
+    head_subject = git("log", "-1", "--pretty=%s").stdout.strip()
+    if amend and head_subject == bump_subject:
+        # Fold the changelog into the version-bump commit instead of a new one.
+        git("commit", "--amend", "--no-edit")
+        info("Amended changelog into the version-bump commit.")
+    else:
+        git("commit", "-m", f"docs: changelog for v{state.version}")
 
 
 def render_changelog(version: str, subjects: list[str]) -> str:
@@ -1080,26 +1093,35 @@ def phase_publish(state: State) -> None:
     if already_published(state.project_type, state.version):
         info(f"v{state.version} already on the registry — skipping publish.")
         return
+    name = project_name()
     if state.project_type == "node":
         if gum_confirm("npm publish?"):
-            run(["npm", "publish"], title="npm publish...")
+            result = run(["npm", "publish"], title="npm publish...")
+            if result.returncode == 0:
+                state.published = f"npm: {name}@{state.version}"
     elif state.project_type == "python":
         if gum_confirm("uv build && uv publish?"):
             run(["uv", "build"], title="uv build...")
-            run(["uv", "publish"], title="uv publish...")
+            result = run(["uv", "publish"], title="uv publish...")
+            if result.returncode == 0:
+                state.published = f"pypi: {name} {state.version}"
 
 
-def phase_github_release(state: State, config: Config) -> None:
+def phase_github_release(state: State) -> None:
     """P11 — optional GitHub release."""
     if not state.is_github:
         info("Not a GitHub repo (or gh not authenticated) — skipping GitHub release.")
         return
     tag = f"v{state.version}"
     existing = subprocess.run(
-        ["gh", "release", "view", tag], capture_output=True, check=False
+        ["gh", "release", "view", tag], capture_output=True, text=True, check=False
     )
     if existing.returncode == 0:
         info(f"GitHub release {tag} already exists — skipping.")
+        url = existing.stdout.strip().splitlines()
+        state.github_release_url = next(
+            (line.split("\t", 1)[1] for line in url if line.startswith("url\t")), ""
+        )
         return
     if not gum_confirm(f"Create GitHub release {tag}?"):
         return
@@ -1108,9 +1130,15 @@ def phase_github_release(state: State, config: Config) -> None:
         args += ["--notes", state.changelog]
     else:
         args += ["--notes-from-tag"]
-    result = run(args, title=f"Creating GitHub release {tag}...")
+    # No spinner here: `gh release create` prints the release URL to stdout and we
+    # want to capture it for the summary.
+    info(f"Creating GitHub release {tag}...")
+    result = run(args)
     if result.returncode != 0:
         fail("GitHub release failed — create it manually if needed.")
+        return
+    state.github_release_url = result.stdout.strip()
+    good(f"Created GitHub release {tag}")
 
 
 def phase_rebase_source(state: State) -> None:
@@ -1279,6 +1307,7 @@ def do_release(
     no_scan: bool,
     no_changelog: bool,
     reconfigure: bool = False,
+    amend_changelog: bool = False,
 ) -> None:
     """Run an interactive, resumable release."""
     global DRY_RUN
@@ -1318,18 +1347,20 @@ def do_release(
         "changelog",
         repo_cfg,
         state,
-        lambda: phase_changelog(state, config, no_changelog),
+        lambda: phase_changelog(state, config, no_changelog, amend_changelog),
     )
     run_phase("tag", state, lambda: phase_tag(state))
     run_phase("push", state, lambda: phase_push(state))
     run_optional("publish", repo_cfg, state, lambda: phase_publish(state))
-    run_optional(
-        "github_release", repo_cfg, state, lambda: phase_github_release(state, config)
-    )
+    run_optional("github_release", repo_cfg, state, lambda: phase_github_release(state))
     run_phase("rebase_source", state, lambda: phase_rebase_source(state))
 
     # Finalize
     summary = [f"Release v{state.version} complete"]
+    if state.published:
+        summary.append(f"published: {state.published}")
+    if state.github_release_url:
+        summary.append(f"release: {state.github_release_url}")
     skipped = [name for name, status in state.phases.items() if status != "done"]
     if skipped:
         summary.append(f"(skipped/incomplete: {', '.join(skipped)})")
@@ -1389,6 +1420,11 @@ def main(
         "--dev",
         help="Dev release: tag a -dev.N version on the current branch (no merge).",
     ),
+    amend_changelog: bool = typer.Option(
+        False,
+        "--amend-changelog",
+        help="Fold the changelog into the version-bump commit instead of a new one.",
+    ),
 ) -> None:
     """Run a release by default; `setup` detects tools (run once)."""
     if ctx.invoked_subcommand is not None:
@@ -1396,7 +1432,9 @@ def main(
     if dev:
         do_dev_release(dry_run)
         return
-    do_release(resume, restart, dry_run, no_scan, no_changelog, reconfigure)
+    do_release(
+        resume, restart, dry_run, no_scan, no_changelog, reconfigure, amend_changelog
+    )
 
 
 if __name__ == "__main__":

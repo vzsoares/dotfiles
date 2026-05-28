@@ -202,8 +202,8 @@ Notes:
 - [x] Generate/prepend `CHANGELOG.md` via `git-cliff` when enabled, else built-in
       grouped `git log`. Persists the section in state for tag/GH bodies.
 - [x] Offer to edit (`gum confirm` → `$EDITOR`).
-- [ ] **TODO:** commit is always *separate*; the "amend into the bump commit,
-      configurable" flag isn't implemented.
+- [x] `--amend-changelog` folds the changelog into the bump commit (else a separate
+      `docs: changelog` commit). (`test_changelog_amend_folds_into_bump_commit`.)
 
 ### P8 — Tag ✅
 - [x] Annotated `vX.Y.Z` (changelog section as message; `Dev release` for `--dev`).
@@ -228,17 +228,20 @@ Notes:
 - [x] When not `no_merge`: checkout source, `rebase <target>`, optional push, with
       recovery messaging.
 
-### P13 — Finalize ⚠️
+### P13 — Finalize ✅
 - [x] Summary panel (ran / skipped) + delete state file on success.
-- [ ] **TODO:** panel doesn't yet list *published targets / release URL*.
+- [x] Panel lists *published target* (`npm:`/`pypi:`) and the *GitHub release URL*
+      when those phases ran. (`test_publish_records_target`,
+      `test_github_release_captures_url`.)
 
 ### P14 — Quality, tests, migration, docs ⚠️
 - [x] `ruff`, `ruff format`, `mypy` clean (no `as`/`Any`).
 - [x] Test suite (59) incl. e2e: tag-only, Node, Python, no-merge, merge,
       not-GitHub, not-publishable, missing config, mid-phase crash → `--resume`,
       `--dev`, disabled phases, first-run config, publish-idempotency.
-- [ ] **TODO:** live smoke test of an actual `npm`/`uv` publish and a real GitHub
-      release (only mocked so far).
+- [x] GitHub release validated live on a real repo.
+- [ ] **TODO:** live smoke test of an actual `npm` / `uv` publish (only mocked so
+      far) — pair with the next real package release.
 - [x] `release.sh` and `release-dev.sh` removed; `--dev` folded in
       (`run release-dev` alias + zsh `release` / `release-dev` aliases).
 - [x] `CLAUDE.md` + `README.md` updated with a Release-tool section; zsh aliases
