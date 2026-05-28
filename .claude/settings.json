@@ -25,6 +25,7 @@
   },
   "skipDangerousModePermissionPrompt": false,
   "editorMode": "vim",
+  "skipAutoPermissionPrompt": true,
   "mcpServers": {
     "playwright": {
       "type": "stdio",
@@ -50,5 +51,5 @@
       }
     }
   },
-  "skipAutoPermissionPrompt": true
+  "tui": "default"
 }
