@@ -24,8 +24,8 @@ if [ -z "$SCRIPTS" ]; then
     exit 1
 fi
 
-# Combined, selectable list: alias names first, then the script files.
-CHOICES=$(printf '%s\n' "${!ALIASES[@]}" "$SCRIPTS")
+# Combined, selectable list: alias names + script files, sorted together.
+CHOICES=$(printf '%s\n' "${!ALIASES[@]}" "$SCRIPTS" | sort)
 
 # If the first arg isn't a flag, use it to fuzzy-match a choice; rest forwarded.
 CANDIDATES="$CHOICES"

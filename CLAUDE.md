@@ -5,46 +5,27 @@ Personal dotfiles for vzsoares. Manjaro Linux (i3).
 ## Structure
 
 ```
-alacritty/    # Terminal emulator config (has own link script)
-i3/           # i3 window manager config (has own link script)
-nvim/         # Neovim config with Lua (has own link script)
-tmux/         # tmux config (has own link script)
-zsh/          # Zsh aliases, plugins, themes, custom scripts
-.claude/      # Claude Code settings, MCP servers, and skills
-scripts/      # Utility scripts (release.py, commit.py, run.sh, etc.)
+alacritty/    # terminal emulator config
+i3/           # i3 window manager config
+nvim/         # neovim config (lua)
+tmux/         # tmux config
+zsh/          # zsh aliases, plugins, themes
+.claude/      # Claude Code settings & skills
+scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
+
+Config dirs (alacritty, i3, nvim, tmux) each have their own `link` script.
 
 ## CLI tools (`scripts/`)
 
-Two personal tools are exposed as global commands via `./link-bin` (symlinked into
-`~/.local/bin`, which is on PATH), so they work from any repo:
+Global commands via `./link-bin` (symlinked into `~/.local/bin`):
 
-- **`zen-commit`** (`scripts/commit.py`) — interactive Conventional-Commit helper:
-  stage → secret/sensitive-file guardrail → Claude-generated message →
-  commit/edit/regenerate. Requires `gum` + `claude`. Runs **headless** (no prompts)
-  with `--all --yes` or `-m`, so it works inside non-interactive tools.
-  Tests: `uv run scripts/test_commit.py`.
-- **`zen-release`** (`scripts/release.py`) — resumable, interactive release
-  orchestrator. Single-file `uv` script (PEP 723 deps; shells out to `gum`). See
-  `BACKLOG.md` for the full design.
-  - **Setup once per machine:** `zen-release setup` detects external tools and
-    saves a global config to `~/.config/zen-release/config.json`. `git` + `gum`
-    are required; everything else (gitleaks, gh, git-cliff, semantic-release,
-    pre-commit, lefthook) is optional — a missing optional tool skips its phase
-    (no fallback chain).
-  - **Per-repo config:** the first release in a repo asks (once) for source/target
-    branches and which optional phases to run, saved to `.git/zen-release.json`
-    (uncommitted). Change it later with `zen-release --reconfigure`.
-  - **Run:** `zen-release` (full) or `zen-release --dev` (lightweight: bump to
-    `-dev.N`, tag + push the current branch; stateless). Resume with
-    `zen-release --resume` / `--restart`.
-  - **Headless:** `zen-release --yes --bump <patch|minor|major>` (and `--dev`)
-    runs with no gum prompts — confirms auto-accept, secret findings abort, no
-    changelog editor. Use `--source`/`--target` if the repo has no saved config.
-  - **Tests:** `uv run scripts/test_release.py` / `uv run scripts/test_commit.py`.
+- **`zen-commit`** (`commit.py`) — Conventional-Commit helper: stage → secret
+  guardrail → AI message → commit. Headless with `--all --yes`.
+- **`zen-release`** (`release.py`) — resumable release orchestrator; `BACKLOG.md`
+  has the design. `zen-release setup` once, then `zen-release` / `--dev`.
 
-Interactive zsh aliases also exist (`release`, `release-dev`); `run.sh` discovers
-all scripts (`run release-dev` works too).
+Tests: `uv run scripts/test_release.py`, `uv run scripts/test_commit.py`.
 
 ## Linking
 
