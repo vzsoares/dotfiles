@@ -20,6 +20,8 @@ alias sourcepy="source .venv/bin/activate"
 
 # Scripts
 alias run="$HOME/code/personal/dotfiles/scripts/run.sh"
+alias release="$HOME/code/personal/dotfiles/scripts/release.py"
+alias release-dev="$HOME/code/personal/dotfiles/scripts/release.py --dev"
 
 # Claude
 alias claude-yolo='ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions --allowedTools "*"'

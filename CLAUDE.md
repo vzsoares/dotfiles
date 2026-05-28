@@ -11,8 +11,26 @@ nvim/         # Neovim config with Lua (has own link script)
 tmux/         # tmux config (has own link script)
 zsh/          # Zsh aliases, plugins, themes, custom scripts
 .claude/      # Claude Code settings, MCP servers, and skills
-scripts/      # Utility scripts (release, etc.)
+scripts/      # Utility scripts (release.py, run.sh, commit.sh, etc.)
 ```
+
+## Release tool (`scripts/release.py`)
+
+`release.py` is a single-file `uv` script (PEP 723 deps; shells out to `gum`) — a
+resumable, interactive release orchestrator. See `BACKLOG.md` for the full design.
+
+- **Setup once per machine:** `release setup` detects external tools and saves a
+  global config to `~/.config/zen-release/config.json`. `git` + `gum` are required;
+  everything else (gitleaks, gh, git-cliff, semantic-release, pre-commit, lefthook)
+  is optional — a missing optional tool just skips its phase (no fallback chain).
+- **Per-repo config:** the first release in a repo asks (once) for source/target
+  branches and which optional phases to run, saved to `.git/zen-release.json`
+  (uncommitted). Change it later with `release --reconfigure`.
+- **Run a release:** `release` (full) or `release --dev` (lightweight: bump to
+  `-dev.N`, tag + push the current branch; stateless). Resumable full releases use
+  `release --resume` / `--restart`.
+- **Aliases:** `release`, `release-dev` (zsh), and `run release-dev` via `run.sh`.
+- **Tests:** `uv run scripts/test_release.py`.
 
 ## Linking
 

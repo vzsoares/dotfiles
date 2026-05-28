@@ -1,12 +1,16 @@
 {
-    "permissions": {
-        "allow": [
-            "WebFetch(domain:github.com)",
-            "WebSearch",
-            "Skill(second-brain)",
-            "WebFetch(domain:raw.githubusercontent.com)",
-            "Skill(wiki)",
-            "Read(//tmp/**)"
-        ]
-    }
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Skill(second-brain)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Skill(wiki)",
+      "Read(//tmp/**)",
+      "Bash(git rm *)",
+      "Bash(uvx ruff *)",
+      "Bash(uvx --with tomlkit --with typer --with pytest mypy --ignore-missing-imports scripts/release.py scripts/test_release.py)",
+      "Bash(uv run *)"
+    ]
+  }
 }
