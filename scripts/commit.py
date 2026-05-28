@@ -144,10 +144,12 @@ def scan_secrets() -> list[str]:
             content = git("show", f":{f}").stdout
             if "_authToken" in content:
                 violations.append(f"{f} — contains _authToken")
+    # Added lines, minus any carrying a `gitleaks:allow` marker (honored by
+    # gitleaks too) so intentional fixtures/examples don't trip the guardrail.
     added = "\n".join(
         line
         for line in git("diff", "--cached", "-U0").stdout.splitlines()
-        if re.match(r"^\+[^+]", line)
+        if re.match(r"^\+[^+]", line) and "gitleaks:allow" not in line
     )
     violations += scan_content(added)
     return violations

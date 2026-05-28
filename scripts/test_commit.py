@@ -147,9 +147,9 @@ def test_scan_filenames_allows_safe() -> None:
 def test_scan_content_flags_secrets() -> None:
     added = "\n".join(
         [
-            "+AKIAIOSFODNN7EXAMPLE",
+            "+AKIAIOSFODNN7EXAMPLE",  # gitleaks:allow
             "+ghp_" + "a" * 36,
-            "+-----BEGIN OPENSSH PRIVATE KEY-----",
+            "+-----BEGIN OPENSSH PRIVATE KEY-----",  # gitleaks:allow
         ]
     )
     labels = commit.scan_content(added)
@@ -195,9 +195,18 @@ def test_scan_secrets_staged_env(git_repo: Path) -> None:
 
 
 def test_scan_secrets_content(git_repo: Path) -> None:
-    (git_repo / "app.py").write_text("KEY = 'AKIAIOSFODNN7EXAMPLE'\n")
+    (git_repo / "app.py").write_text("KEY = 'AKIAIOSFODNN7EXAMPLE'\n")  # gitleaks:allow
     _git("add", "app.py")
     assert any("AWS" in v for v in commit.scan_secrets())
+
+
+def test_scan_secrets_honors_gitleaks_allow(git_repo: Path) -> None:
+    # A real secret on a line marked gitleaks:allow is not flagged.
+    (git_repo / "app.py").write_text(
+        "KEY = 'AKIAIOSFODNN7EXAMPLE'  # gitleaks:allow\n"  # gitleaks:allow
+    )
+    _git("add", "app.py")
+    assert commit.scan_secrets() == []
 
 
 # --------------------------------------------------------------------------- #
