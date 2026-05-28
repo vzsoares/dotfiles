@@ -16,19 +16,6 @@ scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 
 Config dirs (alacritty, i3, nvim, tmux) each have their own `link` script.
 
-## CLI tools (`scripts/`)
-
-Global commands via `./link-bin` (symlinked into `~/.local/bin`):
-
-- **`zen-commit`** (`commit.py`) — Conventional-Commit helper: stage → secret
-  guardrail → AI message → commit. Headless with `--all --yes`.
-- **`zen-release`** (`release.py`) — resumable release orchestrator; `BACKLOG.md`
-  has the design. `zen-release setup` once, then `zen-release` / `--dev`.
-- **`zen-pgp`** (`pgp.py`) — gum-driven PGP encrypt/decrypt over `gpg`
-  (symmetric passphrase or recipient key). `zen-pgp encrypt|decrypt [FILE]`.
-
-Tests: `uv run scripts/test_release.py`, `uv run scripts/test_commit.py`.
-
 ## Linking
 
 Each config directory that needs symlinking has its own `link` script.
