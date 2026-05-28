@@ -537,29 +537,20 @@ def detected_phase_defaults(state: State, config: Config) -> dict[str, bool]:
     }
 
 
-def _branch_default(branches: list[str], *candidates: str) -> str:
-    for name in candidates:
-        if name in branches:
-            return name
-    return ""
-
-
 def create_repo_config(state: State, config: Config) -> RepoConfig:
     """First-run interactive setup for this repo (branches + phase toggles)."""
     banner("First run — configure this repo")
-    branches = git("branch", "--format=%(refname:short)").stdout.split()
 
+    # Empty defaults — you type the branches (empty source = release current branch).
     source = gum_input(
         "Source branch to merge FROM (empty = release current branch)",
         placeholder="e.g. develop",
-        value=_branch_default(branches, "develop", "dev"),
     )
     target = ""
     if source:
         target = gum_input(
             "Target branch to merge INTO",
             placeholder="e.g. production",
-            value=_branch_default(branches, "production", "prod", "main", "master"),
         )
 
     defaults = detected_phase_defaults(state, config)
