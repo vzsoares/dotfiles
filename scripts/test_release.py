@@ -64,6 +64,13 @@ def git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return repo
 
 
+@pytest.fixture(autouse=True)
+def _reset_globals(monkeypatch: pytest.MonkeyPatch) -> None:
+    # do_release/do_dev_release set these module globals; reset for test isolation.
+    monkeypatch.setattr(release, "HEADLESS", False)
+    monkeypatch.setattr(release, "DRY_RUN", False)
+
+
 @pytest.fixture
 def xdg_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
@@ -668,6 +675,85 @@ def test_e2e_first_run_creates_repo_config(
     assert cfg.enabled("changelog") is False
     assert "v0.0.1" in _git("tag").split()
     assert not (git_repo / "CHANGELOG.md").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Headless mode (--yes / --bump)                                                #
+# --------------------------------------------------------------------------- #
+
+
+def _add_bare_remote(repo: Path) -> None:
+    """Give the repo a pushable origin so headless push succeeds."""
+    bare = repo.parent / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    _git("remote", "add", "origin", str(bare))
+
+
+def test_headless_release_no_prompts(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    """--yes --bump runs a full release start-to-finish with zero gum prompts.
+
+    No gum_* prompt functions are monkeypatched here: if any prompt were reached,
+    the headless guard would raise — so passing proves the path is prompt-free.
+    """
+    write_config()  # no repo config → headless uses ephemeral defaults
+    _add_bare_remote(git_repo)
+    release.do_release(
+        resume=False,
+        restart=False,
+        dry_run=False,
+        no_scan=False,
+        no_changelog=False,
+        yes=True,
+        bump="patch",
+        source="",  # release current branch
+    )
+    assert "v0.0.1" in _git("tag").split()
+    # Pushed to the bare remote (--yes auto-confirmed the push).
+    assert (
+        "v0.0.1"
+        in subprocess.run(
+            ["git", "ls-remote", "--tags", "origin"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+
+
+def test_headless_requires_bump(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    write_config()
+    with pytest.raises(typer.Exit):
+        release.do_release(
+            resume=False,
+            restart=False,
+            dry_run=False,
+            no_scan=False,
+            no_changelog=False,
+            yes=True,
+            bump="",  # missing → abort, no prompt
+        )
+
+
+def test_headless_dev_release(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    write_config()
+    _add_bare_remote(git_repo)
+    release.do_dev_release(dry_run=False, yes=True, bump="patch")
+    assert "v0.0.1-dev.1" in _git("tag").split()
+
+
+def test_decide_version_headless_bump(
+    git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(release, "HEADLESS", True)
+    state = release.State()
+    release.decide_version(state, _empty_config(), bump="minor")
+    assert state.version == "0.1.0"  # from 0.0.0
 
 
 # --------------------------------------------------------------------------- #

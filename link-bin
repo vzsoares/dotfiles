@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_DIR="$HOME/.local/bin"
+
+mkdir -p "$BIN_DIR"
+
+# Clean, extension-less CLI commands for the personal tools. ~/.local/bin is on
+# PATH (interactive and non-interactive), so these resolve in any repo.
+ln -sf "$SCRIPT_DIR/scripts/release.py" "$BIN_DIR/zen-release"
+echo "linked zen-release -> scripts/release.py"
+
+ln -sf "$SCRIPT_DIR/scripts/commit.py" "$BIN_DIR/zen-commit"
+echo "linked zen-commit -> scripts/commit.py"
+
+echo "done — ensure $BIN_DIR is on your PATH"

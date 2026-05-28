@@ -25,4 +25,4 @@ alias release-dev="$HOME/code/personal/dotfiles/scripts/release.py --dev"
 
 # Claude
 alias claude-yolo='ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions --allowedTools "*"'
-alias claude-commit="$HOME/code/personal/dotfiles/scripts/commit.sh"
+alias claude-commit="$HOME/code/personal/dotfiles/scripts/commit.py"

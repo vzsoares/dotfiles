@@ -21,9 +21,9 @@
 #      release.py  --  resumable, interactive release orchestrator
 #
 #  SYNOPSIS
-#      uv run scripts/release.py setup          # run once: detect tools
-#      uv run scripts/release.py [options]      # run a release
-#      uv run scripts/release.py --dev          # quick dev (-dev.N) release
+#      zen-release setup                        # run once: detect tools
+#      zen-release [options]                    # run a release
+#      zen-release --dev                        # quick dev (-dev.N) release
 #
 #  OPTIONS
 #      --resume        Continue a release interrupted mid-run.
@@ -34,6 +34,13 @@
 #      --no-changelog  Skip changelog generation.
 #      --amend-changelog  Fold the changelog into the version-bump commit.
 #      --reconfigure   Re-run this repo's first-run config (branches/phases).
+#      --yes / -y      Headless: no prompts, auto-confirm (needs --bump).
+#      --bump VALUE    Headless version choice: patch|minor|major|finalize|auto.
+#      --source/--target  Headless branches when no repo config exists.
+#
+#  HEADLESS
+#      zen-release --yes --bump patch          # full release, no prompts
+#      zen-release --dev --yes --bump patch    # dev release, no prompts
 #
 #  DESCRIPTION
 #      A thin orchestrator: it shells out to best-in-class external tools, one
@@ -288,6 +295,15 @@ def missing_required(tools: dict[str, ToolStatus]) -> list[ToolSpec]:
 # --------------------------------------------------------------------------- #
 
 DRY_RUN = False
+# Headless: set by --yes. No gum prompts — choices come from flags, confirms are
+# auto-accepted. (Styling/spinners still print fine without a TTY.)
+HEADLESS = False
+
+
+def _no_prompt(what: str) -> None:
+    """Abort: a prompt was reached in headless mode (a flag should cover it)."""
+    fail(f"Headless run can't prompt for {what} — pass the matching flag.")
+    raise typer.Exit(1)
 
 
 def _gum(*args: str) -> str:
@@ -337,11 +353,15 @@ def banner(text: str, color: str = "212") -> None:
 
 
 def gum_choose(header: str, options: list[str]) -> str:
+    if HEADLESS:
+        _no_prompt(header)
     return _gum("choose", "--header", header, *options)
 
 
 def gum_choose_multi(header: str, options: list[str], selected: list[str]) -> list[str]:
     """Checklist multi-select; `selected` are pre-checked. Returns chosen items."""
+    if HEADLESS:
+        _no_prompt(header)
     args = ["choose", "--no-limit", "--header", header]
     if selected:
         args += ["--selected", ",".join(selected)]
@@ -350,6 +370,8 @@ def gum_choose_multi(header: str, options: list[str], selected: list[str]) -> li
 
 
 def gum_input(header: str, placeholder: str = "", value: str = "") -> str:
+    if HEADLESS:
+        _no_prompt(header)
     args = ["input", "--header", header]
     if placeholder:
         args += ["--placeholder", placeholder]
@@ -359,6 +381,10 @@ def gum_input(header: str, placeholder: str = "", value: str = "") -> str:
 
 
 def gum_confirm(prompt: str) -> bool:
+    if HEADLESS:
+        # --yes implies "yes" to every confirmation.
+        info(f"[--yes] {prompt}")
+        return True
     result = subprocess.run(["gum", "confirm", prompt], check=False)
     return result.returncode == 0
 
@@ -550,6 +576,24 @@ def create_repo_config(state: State, config: Config) -> RepoConfig:
     save_repo_config(cfg)
     good(f"Saved repo config to {repo_config_path()}")
     return cfg
+
+
+def headless_repo_config(
+    state: State, config: Config, source: str, target: str
+) -> RepoConfig:
+    """Ephemeral repo config for a headless run with no saved one (not persisted).
+
+    Branches from --source/--target (empty source = release the current branch);
+    phases default to detection. Run interactively once to persist real choices.
+    """
+    defaults = detected_phase_defaults(state, config)
+    info("No repo config — using detection defaults (run interactively once to save).")
+    return RepoConfig(
+        schema=REPO_SCHEMA,
+        source_branch=source,
+        target_branch=target,
+        phases=dict(defaults),
+    )
 
 
 def apply_branches_from_repo(state: State, repo_cfg: RepoConfig) -> None:
@@ -745,86 +789,102 @@ def phase_secret_scan(state: State, config: Config, no_scan: bool) -> None:
             print(result.stdout)
         if result.stderr:
             print(result.stderr)
+        # Headless never auto-overrides a secret finding — it aborts.
+        if HEADLESS:
+            fail("Secrets detected — aborting (headless).")
+            raise typer.Exit(1)
         if not gum_confirm("Secrets detected. Continue anyway?"):
             raise typer.Exit(1)
     else:
         good("Secret scan clean")
 
 
-def decide_version(state: State, config: Config) -> None:
-    """P4b — version detection + bump menu (parity + auto)."""
+def _semantic_release_version() -> str:
+    result = run(["semantic-release", "--dry", "--no-ci"])
+    match = re.search(r"(\d+\.\d+\.\d+)", result.stdout)
+    if match is None:
+        fail("semantic-release did not produce a version — pick manually and re-run.")
+        raise typer.Exit(1)
+    return match.group(1)
+
+
+def decide_version(state: State, config: Config, bump: str = "") -> None:
+    """P4b — version detection + bump menu (parity + auto). `bump` skips the menu."""
     current = detect_version()
     sv = parse_semver(current)
     info(f"Current version: {current}")
 
-    finalize = f"{sv.major}.{sv.minor}.{sv.patch}"
-    patch = f"{sv.major}.{sv.minor}.{sv.patch + 1}"
-    minor = f"{sv.major}.{sv.minor + 1}.0"
-    major = f"{sv.major + 1}.0.0"
+    candidates = {
+        "finalize": f"{sv.major}.{sv.minor}.{sv.patch}",
+        "patch": f"{sv.major}.{sv.minor}.{sv.patch + 1}",
+        "minor": f"{sv.major}.{sv.minor + 1}.0",
+        "major": f"{sv.major + 1}.0.0",
+    }
 
-    options: list[str] = []
-    if sv.dev is not None:
-        options.append(f"finalize  ({finalize})")
-    options += [f"patch     ({patch})", f"minor     ({minor})", f"major     ({major})"]
-    if config.enabled("semantic-release"):
-        options.append("auto      (semantic-release)")
-
-    choice = gum_choose("Version bump?", options)
-    if choice.startswith("finalize"):
-        state.version = finalize
-    elif choice.startswith("patch"):
-        state.version = patch
-    elif choice.startswith("minor"):
-        state.version = minor
-    elif choice.startswith("major"):
-        state.version = major
-    elif choice.startswith("auto"):
-        result = run(["semantic-release", "--dry", "--no-ci"])
-        match = re.search(r"(\d+\.\d+\.\d+)", result.stdout)
-        if match is None:
-            fail(
-                "semantic-release did not produce a version — pick manually and re-run."
-            )
+    if bump or HEADLESS:
+        if not bump:
+            _no_prompt("the version bump (use --bump)")
+        if bump == "auto":
+            state.version = _semantic_release_version()
+        elif bump in candidates:
+            state.version = candidates[bump]
+        else:
+            fail(f"--bump must be one of: {', '.join(candidates)}, auto")
             raise typer.Exit(1)
-        state.version = match.group(1)
+    else:
+        options: list[str] = []
+        if sv.dev is not None:
+            options.append(f"finalize  ({candidates['finalize']})")
+        options += [
+            f"patch     ({candidates['patch']})",
+            f"minor     ({candidates['minor']})",
+            f"major     ({candidates['major']})",
+        ]
+        if config.enabled("semantic-release"):
+            options.append("auto      (semantic-release)")
+        choice = gum_choose("Version bump?", options).split()[0]
+        state.version = (
+            _semantic_release_version() if choice == "auto" else candidates[choice]
+        )
     gum_style(f"Releasing v{state.version}", "--bold", "--foreground", "212")
 
 
-def decide_version_dev(state: State) -> None:
-    """Dev bump menu (ported from release-dev.sh): always -dev.N, plus custom."""
+def decide_version_dev(state: State, bump: str = "") -> None:
+    """Dev bump menu (-dev.N, plus continue/custom). `bump` skips the menu."""
     current = detect_version()
     sv = parse_semver(current)
     info(f"Current version: {current}")
 
-    patch = f"{sv.major}.{sv.minor}.{sv.patch + 1}-dev.1"
-    minor = f"{sv.major}.{sv.minor + 1}.0-dev.1"
-    major = f"{sv.major + 1}.0.0-dev.1"
-
-    options: list[str] = []
-    cont = ""
+    candidates = {
+        "patch": f"{sv.major}.{sv.minor}.{sv.patch + 1}-dev.1",
+        "minor": f"{sv.major}.{sv.minor + 1}.0-dev.1",
+        "major": f"{sv.major + 1}.0.0-dev.1",
+    }
     if sv.dev is not None:
-        cont = f"{sv.major}.{sv.minor}.{sv.patch}-dev.{sv.dev + 1}"
-        options.append(f"continue  ({cont})")
-    options += [
-        f"patch     ({patch})",
-        f"minor     ({minor})",
-        f"major     ({major})",
-        "custom",
-    ]
+        candidates["continue"] = f"{sv.major}.{sv.minor}.{sv.patch}-dev.{sv.dev + 1}"
 
-    choice = gum_choose("Version bump?", options)
-    if choice.startswith("continue"):
-        state.version = cont
-    elif choice.startswith("patch"):
-        state.version = patch
-    elif choice.startswith("minor"):
-        state.version = minor
-    elif choice.startswith("major"):
-        state.version = major
-    elif choice == "custom":
-        ver = gum_input("Custom version", placeholder="X.Y.Z-dev.N")
-        parse_semver(ver)  # validates format or exits
-        state.version = ver
+    if bump or HEADLESS:
+        if not bump:
+            _no_prompt("the version bump (use --bump)")
+        if bump in candidates:
+            state.version = candidates[bump]
+        else:
+            fail(f"--bump must be one of: {', '.join(candidates)}")
+            raise typer.Exit(1)
+    else:
+        order = (["continue"] if "continue" in candidates else []) + [
+            "patch",
+            "minor",
+            "major",
+        ]
+        options = [f"{k:<9} ({candidates[k]})" for k in order] + ["custom"]
+        choice = gum_choose("Version bump?", options).split()[0]
+        if choice == "custom":
+            ver = gum_input("Custom version", placeholder="X.Y.Z-dev.N")
+            parse_semver(ver)  # validates format or exits
+            state.version = ver
+        else:
+            state.version = candidates[choice]
     gum_style(f"Releasing v{state.version}", "--bold", "--foreground", "212")
 
 
@@ -959,7 +1019,8 @@ def phase_changelog(
     existing = changelog.read_text() if changelog.exists() else ""
     changelog.write_text(section + "\n\n" + existing if existing else section + "\n")
 
-    if gum_confirm("Edit CHANGELOG.md before committing?"):
+    # Never open an editor headless (it would block on a TTY).
+    if not HEADLESS and gum_confirm("Edit CHANGELOG.md before committing?"):
         editor = os.environ.get("EDITOR", "nvim")
         subprocess.run([editor, str(changelog)], check=False)
         state.changelog = changelog.read_text().split("\n\n")[0]
@@ -1182,13 +1243,13 @@ def run_phase(name: str, state: State, fn: Callable[[], None]) -> None:
             state.phases[name] = "failed"
             save_state(state)
             fail(f"Phase '{name}' failed. Fix the issue, then run:")
-            info("  uv run scripts/release.py --resume")
+            info("  zen-release --resume")
         raise
     except Exception:
         state.phases[name] = "failed"
         save_state(state)
         fail(f"Phase '{name}' crashed. Fix the issue, then run:")
-        info("  uv run scripts/release.py --resume")
+        info("  zen-release --resume")
         raise
     state.phases[name] = "done"
     save_state(state)
@@ -1257,7 +1318,7 @@ def setup() -> None:
 def preflight(resume: bool, restart: bool, title: str) -> Config:
     """Hard-require checks (gum, git repo, config, clean tree) + banner. Stateless."""
     if shutil.which("gum") is None:
-        print("Error: gum is required. Run: release.py setup")
+        print("Error: gum is required. Run: zen-release setup")
         raise typer.Exit(1)
     if git("rev-parse", "--git-dir").returncode != 0:
         fail("Not a git repository.")
@@ -1265,7 +1326,7 @@ def preflight(resume: bool, restart: bool, title: str) -> Config:
 
     config = load_config()
     if config is None:
-        fail("No zen-release config found. Run `release.py setup` first.")
+        fail("No zen-release config found. Run `zen-release setup` first.")
         raise typer.Exit(1)
 
     if git("status", "--porcelain").stdout.strip() and not (resume or restart):
@@ -1284,6 +1345,9 @@ def start_session(resume: bool, restart: bool, title: str) -> tuple[Config, Stat
     existing = load_state()
     if existing is not None and not restart:
         if not resume:
+            if HEADLESS:
+                fail("A previous release is in progress. Pass --resume or --restart.")
+                raise typer.Exit(1)
             choice = gum_choose(
                 "A previous release is in progress.", ["Resume", "Restart", "Abort"]
             )
@@ -1308,10 +1372,15 @@ def do_release(
     no_changelog: bool,
     reconfigure: bool = False,
     amend_changelog: bool = False,
+    yes: bool = False,
+    bump: str = "",
+    source: str = "",
+    target: str = "",
 ) -> None:
     """Run an interactive, resumable release."""
-    global DRY_RUN
+    global DRY_RUN, HEADLESS
     DRY_RUN = dry_run
+    HEADLESS = yes
 
     config, state = start_session(resume, restart, "Release")
 
@@ -1324,7 +1393,11 @@ def do_release(
     # Per-repo config: created interactively on first run (or with --reconfigure).
     repo_cfg = None if reconfigure else load_repo_config()
     if repo_cfg is None:
-        repo_cfg = create_repo_config(state, config)
+        repo_cfg = (
+            headless_repo_config(state, config, source, target)
+            if HEADLESS
+            else create_repo_config(state, config)
+        )
 
     # Pre-branch phases (optional, gated by the repo config)
     run_optional("hooks", repo_cfg, state, lambda: phase_hooks(state, config))
@@ -1338,7 +1411,7 @@ def do_release(
     # Branch + version decision (only if not already chosen on a prior run)
     if not state.version:
         apply_branches_from_repo(state, repo_cfg)
-        decide_version(state, config)
+        decide_version(state, config, bump)
         save_state(state)
 
     run_phase("merge", state, lambda: phase_merge(state))
@@ -1369,7 +1442,7 @@ def do_release(
         clear_state()
 
 
-def do_dev_release(dry_run: bool) -> None:
+def do_dev_release(dry_run: bool, yes: bool = False, bump: str = "") -> None:
     """Lightweight dev release: tag a -dev.N version on the current branch.
 
     No merge, changelog, publish, GitHub release, or hook/scan gates — just bump
@@ -1379,8 +1452,9 @@ def do_dev_release(dry_run: bool) -> None:
     at HEAD, push is a no-op), so re-running from scratch is always safe — and we
     avoid colliding with a full release's resume state.
     """
-    global DRY_RUN
+    global DRY_RUN, HEADLESS
     DRY_RUN = dry_run
+    HEADLESS = yes
 
     preflight(resume=False, restart=False, title="Dev Release")
 
@@ -1388,7 +1462,7 @@ def do_dev_release(dry_run: bool) -> None:
     state = State(dev=True, no_merge=True, target_branch=current)
     info(f"Branch: {current}")
 
-    decide_version_dev(state)
+    decide_version_dev(state, bump)
     phase_write_version(state)
     phase_tag(state)
     phase_push(state)
@@ -1425,15 +1499,41 @@ def main(
         "--amend-changelog",
         help="Fold the changelog into the version-bump commit instead of a new one.",
     ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Headless: no prompts, auto-confirm (needs --bump)."
+    ),
+    bump: str = typer.Option(
+        "",
+        "--bump",
+        help="Version bump for headless runs: patch|minor|major|finalize|auto.",
+    ),
+    source: str = typer.Option(
+        "",
+        "--source",
+        help="Headless source branch when no repo config (empty = current).",
+    ),
+    target: str = typer.Option(
+        "", "--target", help="Headless target branch when no repo config."
+    ),
 ) -> None:
     """Run a release by default; `setup` detects tools (run once)."""
     if ctx.invoked_subcommand is not None:
         return
     if dev:
-        do_dev_release(dry_run)
+        do_dev_release(dry_run, yes, bump)
         return
     do_release(
-        resume, restart, dry_run, no_scan, no_changelog, reconfigure, amend_changelog
+        resume,
+        restart,
+        dry_run,
+        no_scan,
+        no_changelog,
+        reconfigure,
+        amend_changelog,
+        yes,
+        bump,
+        source,
+        target,
     )
 
 

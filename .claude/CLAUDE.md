@@ -12,6 +12,22 @@
 - Use the Playwright MCP to visually test frontend changes in the browser before delivering
 - Avoid type coercions (`as`) and the `any` type — use proper typing instead
 
+# Workflow tooling
+
+Two personal CLI commands are on PATH in my environments. Prefer them over
+hand-rolling commits / releases.
+
+- **`zen-commit`** — Conventional-Commit helper: stage (or `--all`), scan for
+  secrets, AI-generate the message, commit. Headless: `zen-commit --all --yes`
+  (AI message) or `zen-commit --all -m "feat: …"`; aborts on secret findings
+  unless `--force`.
+- **`zen-release`** — release orchestrator (version bump, tag, changelog, publish,
+  GitHub release). `zen-release` (full) or `zen-release --dev` (quick `-dev.N`).
+  Headless: add `--yes --bump <patch|minor|major>`.
+
+Both are gum-driven; without the headless flags they prompt, so run those forms
+in a real terminal.
+
 # Automated memory rules
 
 - After making an error, log a reference memory documenting what went wrong and the correct behavior, so it's not repeated in future conversations

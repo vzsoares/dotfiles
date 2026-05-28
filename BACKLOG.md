@@ -246,6 +246,9 @@ Notes:
       (`run release-dev` alias + zsh `release` / `release-dev` aliases).
 - [x] `CLAUDE.md` + `README.md` updated with a Release-tool section; zsh aliases
       added (`release`, `release-dev`).
+- [x] CLI-ready: `./link-bin` installs `zen-release` + `zen-commit` into
+      `~/.local/bin`; global `.claude/CLAUDE.md` documents the commit/release
+      workflow so other repos pick it up. User-facing hints say `zen-release`.
 
 ## Idempotency cheat-sheet (for resume correctness)
 

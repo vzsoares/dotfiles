@@ -29,19 +29,26 @@
 - i3
     - playerctl
 
-### Release tool
+### CLI tools
 
-`scripts/release.py` — a resumable, interactive release orchestrator (single-file
-`uv` script, shells out to `gum`). See `BACKLOG.md` for the design.
+Install the personal commands onto PATH with `./link-bin` (symlinks into
+`~/.local/bin`):
 
 ```sh
-release setup        # once per machine: detect tools, save ~/.config/zen-release
-release               # full release (first run configures branches + phases per repo)
-release --dev         # quick dev release: bump -dev.N, tag + push current branch
-release --resume      # continue an interrupted release
+zen-commit            # interactive Conventional-Commit helper (stage → guardrail → AI msg)
+zen-commit --all --yes        # headless: stage all, AI message, commit
+
+zen-release setup     # once per machine: detect tools, save ~/.config/zen-release
+zen-release            # full release (first run configures branches + phases per repo)
+zen-release --dev      # quick dev release: bump -dev.N, tag + push current branch
+zen-release --resume   # continue an interrupted release
+zen-release --yes --bump patch   # headless: no prompts
 ```
 
-`run release-dev` works too. Tests: `uv run scripts/test_release.py`.
+`zen-release` is a resumable, interactive release orchestrator (single-file `uv`
+script, shells out to `gum`); see `BACKLOG.md` for the design. Both tools run
+headless (no prompts) with the flags above. Tests: `uv run scripts/test_release.py`
+and `uv run scripts/test_commit.py`.
 
 ### Other
 
