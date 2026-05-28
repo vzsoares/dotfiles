@@ -2,6 +2,7 @@
 
 ## Architecture
 - [[overview]] — Project purpose, repo layout, linking model, key components
+- [[release-tooling]] — zen-release design: orchestrator phases, config tiers, resumable state
 
 ## Manjaro i3
 - [[fresh-install]] — Step-by-step bring-up on a new Manjaro i3 machine

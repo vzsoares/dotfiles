@@ -10,7 +10,9 @@
       "Bash(git rm *)",
       "Bash(uvx ruff *)",
       "Bash(uvx --with tomlkit --with typer --with pytest mypy --ignore-missing-imports scripts/release.py scripts/test_release.py)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(sed -n '40,43p' scripts/README.md)",
+      "Bash(sed -n '70,90p' scripts/release.py)"
     ]
   }
 }

@@ -71,7 +71,7 @@
 #      semantic-release, pre-commit, lefthook.
 #
 #  AUTHOR
-#      vzsoares.  See BACKLOG.md for the full design and rationale.
+#      vzsoares.  See docs/wiki/architecture/release-tooling.md for the design.
 #
 # ==============================================================================
 """Resumable release orchestrator.
@@ -80,7 +80,7 @@ A thin orchestrator that shells out to external tools per phase. Tools are
 detected once by `release.py setup` and saved to a global config; release runs
 read that config and skip any phase whose tool isn't enabled. There is no
 fallback tool chain — a missing/disabled tool means the phase is skipped with a
-notice. See BACKLOG.md for the full design.
+notice. See docs/wiki/architecture/release-tooling.md for the design.
 """
 
 from __future__ import annotations
@@ -541,17 +541,16 @@ def create_repo_config(state: State, config: Config) -> RepoConfig:
     """First-run interactive setup for this repo (branches + phase toggles)."""
     banner("First run — configure this repo")
 
-    # Empty defaults — you type the branches (empty source = release current branch).
+    # Empty defaults — you type the branches. Empty source = no merge; the
+    # target branch is always asked so it can be set even without a source.
     source = gum_input(
-        "Source branch to merge FROM (empty = release current branch)",
+        "Source branch to merge FROM (empty = no merge)",
         placeholder="e.g. develop",
     )
-    target = ""
-    if source:
-        target = gum_input(
-            "Target branch to merge INTO",
-            placeholder="e.g. production",
-        )
+    target = gum_input(
+        "Target branch to release ON" + (" / merge INTO" if source else ""),
+        placeholder="e.g. master",
+    )
 
     defaults = detected_phase_defaults(state, config)
     chosen = gum_choose_multi(
@@ -588,23 +587,43 @@ def headless_repo_config(
 
 
 def apply_branches_from_repo(state: State, repo_cfg: RepoConfig) -> None:
-    """Set source/target/no_merge from the repo config; validate branches exist."""
+    """Set source/target/no_merge from the repo config; validate branches exist.
+
+    The target branch is honored even without a source: a sourceless release runs
+    directly on the target (which defaults to the current branch when unset).
+    The source branch is only validated when a merge is actually requested.
+    """
     branches = git("branch", "--format=%(refname:short)").stdout.split()
     current = git("branch", "--show-current").stdout.strip()
     source = repo_cfg.source_branch
+    target = repo_cfg.target_branch or current
+
+    # The target is always used, so it must exist regardless of merge mode.
+    if target not in branches:
+        fail(
+            f"Configured target branch '{target}' does not exist. Re-run with --reconfigure."
+        )
+        raise typer.Exit(1)
+
     if not source:
+        # No merge — release directly on the target branch.
+        if target != current:
+            checkout = git("checkout", target)
+            if checkout.returncode != 0:
+                fail(f"Could not switch to target branch '{target}'.")
+                raise typer.Exit(1)
         state.no_merge = True
-        state.target_branch = current
         state.source_branch = ""
-        info(f"Releasing current branch: {current} (no merge)")
+        state.target_branch = target
+        info(f"Releasing {target} (no merge)")
         return
-    target = repo_cfg.target_branch
-    for label, name in (("source", source), ("target", target)):
-        if name not in branches:
-            fail(
-                f"Configured {label} branch '{name}' does not exist. Re-run with --reconfigure."
-            )
-            raise typer.Exit(1)
+
+    # Merge flow — the source branch must exist too.
+    if source not in branches:
+        fail(
+            f"Configured source branch '{source}' does not exist. Re-run with --reconfigure."
+        )
+        raise typer.Exit(1)
     state.no_merge = False
     state.source_branch = source
     state.target_branch = target

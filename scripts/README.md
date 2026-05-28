@@ -39,7 +39,8 @@ zen-release --yes --bump <patch|minor|major>   # headless
 ```
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them. See
-`BACKLOG.md` (repo root) for the full design.
+`docs/wiki/architecture/release-tooling.md` for the full design, `BACKLOG.md`
+for future work.
 
 ### zen-pgp
 ```
