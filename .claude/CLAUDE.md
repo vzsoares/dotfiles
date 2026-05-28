@@ -19,8 +19,7 @@ hand-rolling commits / releases.
 
 - **`zen-commit`** — Conventional-Commit helper: stage (or `--all`), scan for
   secrets, AI-generate the message, commit. Headless: `zen-commit --all --yes`
-  (AI message) or `zen-commit --all -m "feat: …"`; aborts on secret findings
-  unless `--force`.
+  (AI message) or `zen-commit --all -m "feat: …"`; aborts on secret findings.
 - **`zen-release`** — release orchestrator (version bump, tag, changelog, publish,
   GitHub release). `zen-release` (full) or `zen-release --dev` (quick `-dev.N`).
   Headless: add `--yes --bump <patch|minor|major>`.
