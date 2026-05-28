@@ -15,4 +15,7 @@ echo "linked zen-release -> scripts/release.py"
 ln -sf "$SCRIPT_DIR/scripts/commit.py" "$BIN_DIR/zen-commit"
 echo "linked zen-commit -> scripts/commit.py"
 
+ln -sf "$SCRIPT_DIR/scripts/pgp.py" "$BIN_DIR/zen-pgp"
+echo "linked zen-pgp -> scripts/pgp.py"
+
 echo "done — ensure $BIN_DIR is on your PATH"

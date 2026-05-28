@@ -15,19 +15,19 @@
 
 ### Requirements
 
-- nvim aur:neovim
-    - packer
-    - fzf
+- nvim aur:neovim (uses lazy.nvim, self-bootstraps)
     - ripgrep
+    - fzf
 - gpg
 - nerdfonts (Hack Nerd Font) aur:ttf-hack-nerd
 - ohmyzsh
 - alacritty
+- mise (version manager)
 - uv (python pkg manager)
-    - vectorcode
-
 - i3
     - playerctl
+
+See `docs/wiki/manjaroi3/fresh-install.md` for full setup.
 
 ### Structure
 

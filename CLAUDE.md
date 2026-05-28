@@ -24,6 +24,8 @@ Global commands via `./link-bin` (symlinked into `~/.local/bin`):
   guardrail → AI message → commit. Headless with `--all --yes`.
 - **`zen-release`** (`release.py`) — resumable release orchestrator; `BACKLOG.md`
   has the design. `zen-release setup` once, then `zen-release` / `--dev`.
+- **`zen-pgp`** (`pgp.py`) — gum-driven PGP encrypt/decrypt over `gpg`
+  (symmetric passphrase or recipient key). `zen-pgp encrypt|decrypt [FILE]`.
 
 Tests: `uv run scripts/test_release.py`, `uv run scripts/test_commit.py`.
 
@@ -34,7 +36,7 @@ Root-level link scripts:
 
 - `./link` — symlinks `.zshrc`, `.gitconfig`, `biome.json` to `~`
 - `./link-claude` — symlinks `.claude/settings.json` and `.claude/skills/` to `~/.claude/`
-- `./link-bin` — symlinks `zen-release` / `zen-commit` into `~/.local/bin`
+- `./link-bin` — symlinks `zen-release` / `zen-commit` / `zen-pgp` into `~/.local/bin`
 
 Run from the repo root.
 
