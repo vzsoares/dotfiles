@@ -21,4 +21,9 @@ rm -rf "$TARGET_DIR/skills"
 ln -s "$DOTFILES_CLAUDE/skills" "$TARGET_DIR/skills"
 echo "linked skills/"
 
+# Statusline command
+rm -f "$TARGET_DIR/statusline-command.sh"
+ln -s "$DOTFILES_CLAUDE/statusline-command.sh" "$TARGET_DIR/statusline-command.sh"
+echo "linked statusline-command.sh"
+
 echo "done"

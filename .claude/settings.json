@@ -48,5 +48,9 @@
       }
     }
   },
-  "model": "sonnet"
+  "model": "sonnet",
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/zizmackrok/.claude/statusline-command.sh"
+  }
 }

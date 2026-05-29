@@ -27,6 +27,11 @@ hand-rolling commits / releases.
 Both are gum-driven; without the headless flags they prompt, so run those forms
 in a real terminal.
 
+# Package managers
+
+- Python: use `uv`
+- Node: use `bun`
+
 # Automated memory rules
 
 - After making an error, log a reference memory documenting what went wrong and the correct behavior, so it's not repeated in future conversations
