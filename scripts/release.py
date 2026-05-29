@@ -831,7 +831,7 @@ def phase_secret_scan(state: State, config: Config, no_scan: bool) -> None:
         log_opts = f"{remote_ref.stdout.strip()}..HEAD"
     else:
         log_opts = "HEAD"
-    result = run(["gitleaks", "detect", f"--log-opts={log_opts}", "--redact", "--no-banner"])
+    result = run(["gitleaks", "detect", f"--log-opts={log_opts}", "--redact", "--no-banner"], title="Scanning for secrets...")
     if result.returncode != 0:
         fail("gitleaks found potential secrets.")
         if result.stdout:
@@ -1456,6 +1456,10 @@ def do_release(
             else create_repo_config(state, config)
         )
 
+    # Resolve branches before optional phases so secret_scan has target_branch.
+    if not state.target_branch:
+        apply_branches_from_repo(state, repo_cfg, source, target)
+
     # Pre-branch phases (optional, gated by the repo config)
     run_optional("hooks", repo_cfg, state, lambda: phase_hooks(state, config))
     run_optional(
@@ -1465,9 +1469,8 @@ def do_release(
         lambda: phase_secret_scan(state, config, no_scan),
     )
 
-    # Branch + version decision (only if not already chosen on a prior run)
+    # Version decision (only if not already chosen on a prior run)
     if not state.version:
-        apply_branches_from_repo(state, repo_cfg, source, target)
         decide_version(state, config, bump)
         save_state(state)
 
