@@ -140,30 +140,6 @@ def test_scan_filenames_allows_safe() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Guardrail: content                                                            #
-# --------------------------------------------------------------------------- #
-
-
-def test_scan_content_flags_secrets() -> None:
-    added = "\n".join(
-        [
-            "+AKIAIOSFODNN7EXAMPLE",  # gitleaks:allow
-            "+ghp_" + "a" * 36,
-            "+-----BEGIN OPENSSH PRIVATE KEY-----",  # gitleaks:allow
-        ]
-    )
-    labels = commit.scan_content(added)
-    joined = " ".join(labels)
-    assert "AWS Access Key ID" in joined
-    assert "GitHub PAT" in joined
-    assert "Private key block" in joined
-
-
-def test_scan_content_clean() -> None:
-    assert commit.scan_content("+const x = 1\n+print('hello')") == []
-
-
-# --------------------------------------------------------------------------- #
 # is_noisy_file                                                                 #
 # --------------------------------------------------------------------------- #
 
@@ -194,18 +170,38 @@ def test_scan_secrets_staged_env(git_repo: Path) -> None:
     assert any(".env" in v for v in commit.scan_secrets())
 
 
-def test_scan_secrets_content(git_repo: Path) -> None:
-    (git_repo / "app.py").write_text("KEY = 'AKIAIOSFODNN7EXAMPLE'\n")  # gitleaks:allow
+def test_scan_secrets_content(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / "app.py").write_text("KEY = 'AKIAIOSFODNN7EXAMPLE'\n")
     _git("add", "app.py")
-    assert any("AWS" in v for v in commit.scan_secrets())
+    _real_run = subprocess.run
+
+    def _mock_run(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:1] == ["gitleaks"]:
+            return subprocess.CompletedProcess(cmd, 1, "Finding: aws-access-key-id\n", "")
+        return _real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(commit.subprocess, "run", _mock_run)
+    assert any("gitleaks" in v for v in commit.scan_secrets())
 
 
-def test_scan_secrets_honors_gitleaks_allow(git_repo: Path) -> None:
-    # A real secret on a line marked gitleaks:allow is not flagged.
+def test_scan_secrets_honors_gitleaks_allow(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # gitleaks returning 0 means no findings (it handles gitleaks:allow natively).
     (git_repo / "app.py").write_text(
-        "KEY = 'AKIAIOSFODNN7EXAMPLE'  # gitleaks:allow\n"  # gitleaks:allow
+        "KEY = 'AKIAIOSFODNN7EXAMPLE'  # gitleaks:allow\n"
     )
     _git("add", "app.py")
+    _real_run = subprocess.run
+
+    def _mock_run(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[:1] == ["gitleaks"]:
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return _real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(commit.subprocess, "run", _mock_run)
     assert commit.scan_secrets() == []
 
 

@@ -825,7 +825,13 @@ def phase_secret_scan(state: State, config: Config, no_scan: bool) -> None:
     if not config.enabled("gitleaks"):
         info("gitleaks not enabled (run setup) — skipping secret scan.")
         return
-    result = run(["gitleaks", "detect", "--redact", "--no-banner"])
+    # Scan only commits not yet on remote (same logic as pre-push-gitleaks hook).
+    remote_ref = git("rev-parse", f"origin/{state.target_branch}")
+    if remote_ref.returncode == 0:
+        log_opts = f"{remote_ref.stdout.strip()}..HEAD"
+    else:
+        log_opts = "HEAD"
+    result = run(["gitleaks", "detect", f"--log-opts={log_opts}", "--redact", "--no-banner"])
     if result.returncode != 0:
         fail("gitleaks found potential secrets.")
         if result.stdout:

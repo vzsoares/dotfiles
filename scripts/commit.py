@@ -65,19 +65,6 @@ SSH_KEY_MARKERS = ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
 ENV_OK_SUFFIXES = (".example", ".sample", ".template")
 CRED_BASENAMES = ("token.json", "credentials.json", "auth.json")
 
-# Content patterns scanned against ADDED diff lines: (regex, label).
-CONTENT_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"AKIA[0-9A-Z]{16}", "AWS Access Key ID"),
-    (r"ASIA[0-9A-Z]{16}", "AWS temporary credentials"),
-    (r"gh[pousr]_[A-Za-z0-9]{36}", "GitHub PAT"),
-    (r"github_pat_[A-Za-z0-9_]{80,}", "GitHub fine-grained PAT"),
-    (r"glpat-[A-Za-z0-9_-]{20}", "GitLab PAT"),
-    (r"sk-ant-(api03|admin01)-[A-Za-z0-9_-]{80,}", "Anthropic API key"),
-    (r"sk-(proj-)?[A-Za-z0-9]{40,}", "OpenAI API key"),
-    (r"xox[baprs]-[A-Za-z0-9-]{10,}", "Slack token"),
-    (r"BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY", "Private key block"),
-)
-
 # Lock / generated files: list names but omit their (noisy) diff body.
 NOISY_BASENAMES = frozenset(
     (
@@ -126,14 +113,6 @@ def scan_filenames(files: list[str]) -> list[str]:
     return out
 
 
-def scan_content(added: str) -> list[str]:
-    """Flag secret-looking content in ADDED diff lines (pure)."""
-    return [
-        f"content matched: {label}"
-        for regex, label in CONTENT_PATTERNS
-        if re.search(regex, added)
-    ]
-
 
 def scan_secrets() -> list[str]:
     """Full staged-content guardrail (reads git state)."""
@@ -144,14 +123,15 @@ def scan_secrets() -> list[str]:
             content = git("show", f":{f}").stdout
             if "_authToken" in content:
                 violations.append(f"{f} — contains _authToken")
-    # Added lines, minus any carrying a `gitleaks:allow` marker (honored by
-    # gitleaks too) so intentional fixtures/examples don't trip the guardrail.
-    added = "\n".join(
-        line
-        for line in git("diff", "--cached", "-U0").stdout.splitlines()
-        if re.match(r"^\+[^+]", line) and "gitleaks:allow" not in line
+    result = subprocess.run(
+        ["gitleaks", "protect", "--staged", "--redact", "--no-banner"],
+        text=True,
+        capture_output=True,
+        check=False,
     )
-    violations += scan_content(added)
+    if result.returncode != 0:
+        lines = (result.stdout + result.stderr).strip().splitlines()
+        violations += [f"gitleaks: {l}" for l in lines if l.strip()] or ["gitleaks: secrets detected"]
     return violations
 
 
