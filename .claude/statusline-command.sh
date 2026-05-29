@@ -47,4 +47,11 @@ if [ -n "$remaining" ]; then
   printf " \033[2;38;2;224;222;244mctx:%s%%\033[0m" "$used_int"
 fi
 
+# 5-hour quota used
+quota=$(echo "$input" | "$JQ" -r '.rate_limits.five_hour.used_percentage // empty')
+if [ -n "$quota" ]; then
+  quota_int=$(printf "%.0f" "$quota")
+  printf " \033[2;38;2;224;222;244mquota:%s%%\033[0m" "$quota_int"
+fi
+
 printf "\n"
