@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+
+if ! command -v gitleaks &>/dev/null; then
+    echo "pre-push: gitleaks not found, skipping secret scan" >&2
+    exit 0
+fi
+
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue
+
+    if [ "$remote_sha" = "$zero" ]; then
+        gitleaks detect --log-opts="$local_sha" --redact --no-banner
+    else
+        gitleaks detect --log-opts="$remote_sha..$local_sha" --redact --no-banner
+    fi
+done

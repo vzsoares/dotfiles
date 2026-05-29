@@ -633,6 +633,95 @@ def test_apply_branches_missing_branch_aborts(
         release.apply_branches_from_repo(release.State(), cfg)
 
 
+def test_apply_branches_feature_branch_chains_through_source(
+    git_repo: Path, offline_gum: None
+) -> None:
+    """On a feature branch with a source configured: chain feature -> source -> target."""
+    _git("branch", "dev")
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "feature/xyz")
+    cfg = release.RepoConfig(
+        schema=1, source_branch="dev", target_branch="prod", phases={}
+    )
+    state = release.State()
+    release.apply_branches_from_repo(state, cfg)
+    assert state.no_merge is False
+    assert state.branches == ["feature/xyz", "dev", "prod"]
+    assert state.source_branch == "dev"  # immediate source = chain[-2]
+    assert state.target_branch == "prod"
+
+
+def test_apply_branches_feature_branch_no_source(
+    git_repo: Path, offline_gum: None
+) -> None:
+    """On a feature branch with no source: chain straight into the target."""
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "feature/xyz")
+    cfg = release.RepoConfig(
+        schema=1, source_branch="", target_branch="prod", phases={}
+    )
+    state = release.State()
+    release.apply_branches_from_repo(state, cfg)
+    assert state.no_merge is False
+    assert state.branches == ["feature/xyz", "prod"]
+    assert state.source_branch == "feature/xyz"
+    assert state.target_branch == "prod"
+
+
+def test_apply_branches_on_target_uses_configured_source(
+    git_repo: Path, offline_gum: None
+) -> None:
+    """Standing on the target with an empty configured source = no merge, even when
+    other branches exist (release in place, no checkout)."""
+    _git("branch", "feature/xyz")
+    cfg = release.RepoConfig(
+        schema=1, source_branch="", target_branch="main", phases={}
+    )
+    state = release.State()
+    release.apply_branches_from_repo(state, cfg)
+    assert state.no_merge is True
+    assert state.branches == ["main"]
+    assert state.source_branch == ""
+    assert state.target_branch == "main"
+
+
+def test_apply_branches_cli_overrides_config(
+    git_repo: Path, offline_gum: None
+) -> None:
+    """--source/--target override the saved repo config for a single run."""
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "feature/xyz")
+    cfg = release.RepoConfig(
+        schema=1, source_branch="", target_branch="main", phases={}
+    )
+    state = release.State()
+    release.apply_branches_from_repo(
+        state, cfg, cli_source="feature/xyz", cli_target="prod"
+    )
+    assert state.no_merge is False
+    assert state.branches == ["feature/xyz", "prod"]
+    assert state.target_branch == "prod"
+
+
+def test_apply_branches_cli_source_still_chains_from_current(
+    git_repo: Path, offline_gum: None
+) -> None:
+    """--source overrides config, but the branch you're on still leads the chain."""
+    _git("branch", "dev")
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "feature/xyz")
+    cfg = release.RepoConfig(
+        schema=1, source_branch="", target_branch="main", phases={}
+    )
+    state = release.State()
+    release.apply_branches_from_repo(
+        state, cfg, cli_source="dev", cli_target="prod"
+    )
+    assert state.branches == ["feature/xyz", "dev", "prod"]
+    assert state.source_branch == "dev"
+    assert state.target_branch == "prod"
+
+
 def test_e2e_disabled_phases_are_skipped(
     git_repo: Path, xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -959,6 +1048,75 @@ def test_e2e_release_with_merge(
     log = _git("log", "--oneline")
     assert "Release version 0.0.1" in log  # the --no-ff merge commit
     assert "feat: add feature" in log
+
+
+def test_e2e_headless_feature_branch_chain(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    """Headless from a feature branch: chain feature -> develop -> master.
+
+    The feature merges into develop, develop into master, master is tagged, then
+    all three branches are synced back down. Exercises the full multi-leg chain.
+    """
+    write_config()
+    _add_bare_remote(git_repo)
+    _git("branch", "develop")
+    _git("branch", "master")
+    _git("checkout", "-q", "-b", "feature/xyz")
+    (git_repo / "feature.txt").write_text("feature\n")
+    _git("add", ".")
+    _git("commit", "-q", "-m", "feat: add feature")
+    write_repo_config(source="develop", target="master")
+
+    release.do_release(
+        resume=False,
+        restart=False,
+        dry_run=False,
+        no_scan=False,
+        no_changelog=False,
+        yes=True,
+        bump="patch",
+    )
+
+    assert "v0.0.1" in _git("tag").split()
+    master_log = _git("log", "master", "--oneline")
+    assert "Release version 0.0.1" in master_log  # release merge landed on master
+    assert "feat: add feature" in master_log
+    # The feature reached develop too (the intermediate leg), and develop was
+    # synced back down to the released master.
+    assert "feat: add feature" in _git("log", "develop", "--oneline")
+    assert "Release version 0.0.1" in _git("log", "develop", "--oneline")
+
+
+def test_e2e_headless_feature_branch_override(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    """--source/--target override the saved (no-merge) repo config for one run."""
+    write_config()
+    _add_bare_remote(git_repo)
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "feature/xyz")
+    (git_repo / "feature.txt").write_text("feature\n")
+    _git("add", ".")
+    _git("commit", "-q", "-m", "feat: add feature")
+    write_repo_config(source="", target="main")  # saved config = no-merge on main
+
+    release.do_release(
+        resume=False,
+        restart=False,
+        dry_run=False,
+        no_scan=False,
+        no_changelog=False,
+        yes=True,
+        bump="patch",
+        source="feature/xyz",  # override: merge the feature branch...
+        target="prod",  # ...into prod, not the configured main
+    )
+
+    assert "v0.0.1" in _git("tag").split()
+    prod_log = _git("log", "prod", "--oneline")
+    assert "Release version 0.0.1" in prod_log  # merge commit landed on prod
+    assert "feat: add feature" in prod_log
 
 
 def test_e2e_dry_run_mutates_nothing(

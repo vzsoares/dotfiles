@@ -18,4 +18,7 @@ echo "linked zen-commit -> scripts/commit.py"
 ln -sf "$SCRIPT_DIR/scripts/pgp.py" "$BIN_DIR/zen-pgp"
 echo "linked zen-pgp -> scripts/pgp.py"
 
+ln -sf "$SCRIPT_DIR/scripts/hash.sh" "$BIN_DIR/zen-hash"
+echo "linked zen-hash -> scripts/hash.sh"
+
 echo "done — ensure $BIN_DIR is on your PATH"

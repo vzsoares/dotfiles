@@ -36,7 +36,7 @@
 #      --reconfigure   Re-run this repo's first-run config (branches/phases).
 #      --yes / -y      Headless: no prompts, auto-confirm (needs --bump).
 #      --bump VALUE    Headless version choice: patch|minor|major|finalize|auto.
-#      --source/--target  Headless branches when no repo config exists.
+#      --source/--target  Override the source/target branches for this run.
 #
 #  HEADLESS
 #      zen-release --yes --bump patch          # full release, no prompts
@@ -53,6 +53,12 @@
 #      On its first run in a repo it asks (once) for the source/target branches
 #      and which optional phases to enable, saving them to a per-repo config so
 #      later runs don't re-ask. Change those answers later with --reconfigure.
+#
+#      The branch you're on is the source: running from a feature branch merges
+#      it into the configured target. Only when you're already on the target is
+#      the configured source used (empty = release the target with no merge).
+#      --source/--target override the saved config for a single run, headless or
+#      interactive.
 #
 #  PHASES
 #      hooks -> secret_scan -> branch+version -> merge -> write_version
@@ -419,6 +425,11 @@ class State:
     source_branch: str = ""
     target_branch: str = ""
     no_merge: bool = True
+    # Ordered merge chain, target last (e.g. ["feature/x", "develop", "master"]).
+    # Each consecutive pair is one merge; the last lands on the target. Empty/one
+    # element = no merge. source_branch/target_branch are kept as the immediate
+    # source (chain[-2]) and the target (chain[-1]) for the tag/push/rebase phases.
+    branches: list[str] = field(default_factory=list)
     dev: bool = False  # lightweight dev release (-dev.N tag on current branch)
     # per-run repo capabilities
     project_type: str = "generic"
@@ -573,8 +584,10 @@ def headless_repo_config(
 ) -> RepoConfig:
     """Ephemeral repo config for a headless run with no saved one (not persisted).
 
-    Branches from --source/--target (empty source = release the current branch);
-    phases default to detection. Run interactively once to persist real choices.
+    Branches come from --source/--target; an empty source means the branch you're
+    on is used (the current branch is merged into the target, or released directly
+    when you're already on it). Phases default to detection. Run interactively once
+    to persist real choices.
     """
     defaults = detected_phase_defaults(state, config)
     info("No repo config — using detection defaults (run interactively once to save).")
@@ -586,48 +599,65 @@ def headless_repo_config(
     )
 
 
-def apply_branches_from_repo(state: State, repo_cfg: RepoConfig) -> None:
-    """Set source/target/no_merge from the repo config; validate branches exist.
+def apply_branches_from_repo(
+    state: State,
+    repo_cfg: RepoConfig,
+    cli_source: str = "",
+    cli_target: str = "",
+) -> None:
+    """Resolve the merge chain for this run (target last), then validate it.
 
-    The target branch is honored even without a source: a sourceless release runs
-    directly on the target (which defaults to the current branch when unset).
-    The source branch is only validated when a merge is actually requested.
+    The chain is the branch you're on flowing up through the configured source into
+    the target — `feature/xyz -> develop -> master`. Each leg is one merge; the
+    last lands the release on the target. The shape adapts to where you stand:
+
+      * on a feature branch + a source set  -> [current, source, target]
+      * on a feature branch + no source     -> [current, target]
+      * on the target + a source set        -> [source, target]
+      * on the target + no source           -> [target]  (release in place, no merge)
+
+    --source/--target override the saved config (the source still merges *after*
+    the branch you're on). No branch switch happens unless a merge needs it, so a
+    release-in-place never leaves the current branch.
     """
     branches = git("branch", "--format=%(refname:short)").stdout.split()
     current = git("branch", "--show-current").stdout.strip()
-    source = repo_cfg.source_branch
-    target = repo_cfg.target_branch or current
 
-    # The target is always used, so it must exist regardless of merge mode.
-    if target not in branches:
+    source = cli_source or repo_cfg.source_branch
+    target = cli_target or repo_cfg.target_branch or current
+
+    chain: list[str] = []
+    if current and current != target:
+        chain.append(current)
+    if source and source != target and source != current:
+        chain.append(source)
+    chain.append(target)
+
+    missing = [b for b in chain if b not in branches]
+    if missing:
         fail(
-            f"Configured target branch '{target}' does not exist. Re-run with --reconfigure."
+            f"Branch(es) don't exist: {', '.join(missing)}. Re-run with --reconfigure."
         )
         raise typer.Exit(1)
 
-    if not source:
-        # No merge — release directly on the target branch.
-        if target != current:
-            checkout = git("checkout", target)
-            if checkout.returncode != 0:
-                fail(f"Could not switch to target branch '{target}'.")
-                raise typer.Exit(1)
-        state.no_merge = True
-        state.source_branch = ""
-        state.target_branch = target
-        info(f"Releasing {target} (no merge)")
-        return
+    state.branches = chain
+    state.target_branch = chain[-1]
+    state.source_branch = chain[-2] if len(chain) >= 2 else ""
+    state.no_merge = len(chain) < 2
 
-    # Merge flow — the source branch must exist too.
-    if source not in branches:
-        fail(
-            f"Configured source branch '{source}' does not exist. Re-run with --reconfigure."
-        )
-        raise typer.Exit(1)
-    state.no_merge = False
-    state.source_branch = source
-    state.target_branch = target
-    info(f"{source} -> {target}")
+    if state.no_merge:
+        info(f"Releasing {state.target_branch} (no merge)")
+    else:
+        info(" -> ".join(chain))
+
+
+def merge_chain(state: State) -> list[str]:
+    """The chain for this run, reconstructed from legacy state if `branches` is unset."""
+    if state.branches:
+        return state.branches
+    if state.no_merge or not state.source_branch:
+        return [state.target_branch]
+    return [state.source_branch, state.target_branch]
 
 
 # --------------------------------------------------------------------------- #
@@ -899,36 +929,39 @@ def decide_version_dev(state: State, bump: str = "") -> None:
 
 
 def phase_merge(state: State) -> None:
-    """P5 — merge source into target."""
-    if state.no_merge:
+    """P5 — merge each leg of the chain up into the target.
+
+    For `feature -> develop -> master` this merges feature into develop, then
+    develop into master, ending checked out on the target. Already-merged legs are
+    no-ops (git reports "Already up to date"), so a --resume re-runs safely.
+    """
+    chain = merge_chain(state)
+    if len(chain) < 2:
         return
     if (git_dir() / "MERGE_HEAD").exists():
         info(
             "Merge already in progress — leaving it for you to resolve, then --resume."
         )
         return
-    run(
-        ["git", "checkout", state.target_branch],
-        title=f"Switching to {state.target_branch}...",
-    )
-    run(
-        ["git", "pull", "origin", state.target_branch],
-        title=f"Pulling {state.target_branch}...",
-    )
-    merge = run(
-        [
-            "git",
-            "merge",
-            state.source_branch,
-            "--no-ff",
-            "-m",
-            f"Release version {state.version}",
-        ],
-        title=f"Merging {state.source_branch} into {state.target_branch}...",
-    )
-    if merge.returncode != 0:
-        fail("Merge failed (conflicts?). Resolve, commit, then re-run with --resume.")
-        raise typer.Exit(1)
+    for i in range(1, len(chain)):
+        frm, into = chain[i - 1], chain[i]
+        is_last = i == len(chain) - 1
+        run(["git", "checkout", into], title=f"Switching to {into}...")
+        run(["git", "pull", "origin", into], title=f"Pulling {into}...")
+        message = (
+            f"Release version {state.version}"
+            if is_last
+            else f"Merge {frm} into {into} for release {state.version}"
+        )
+        merge = run(
+            ["git", "merge", frm, "--no-ff", "-m", message],
+            title=f"Merging {frm} into {into}...",
+        )
+        if merge.returncode != 0:
+            fail(
+                "Merge failed (conflicts?). Resolve, commit, then re-run with --resume."
+            )
+            raise typer.Exit(1)
 
 
 def find_config_version_files() -> list[Path]:
@@ -1213,7 +1246,12 @@ def phase_github_release(state: State) -> None:
 
 
 def phase_rebase_source(state: State) -> None:
-    """P12 — rebase source branch back onto target."""
+    """P12 — sync the source branch back onto the target after the release.
+
+    Rebases the immediate source (the integration branch, e.g. `develop`) onto the
+    released target and pushes it, so it ends aligned with `master`. Any feature
+    branch you started the chain from is left as-is — rebase it yourself if needed.
+    """
     if state.no_merge:
         return
     source = state.source_branch
@@ -1420,7 +1458,7 @@ def do_release(
 
     # Branch + version decision (only if not already chosen on a prior run)
     if not state.version:
-        apply_branches_from_repo(state, repo_cfg)
+        apply_branches_from_repo(state, repo_cfg, source, target)
         decide_version(state, config, bump)
         save_state(state)
 
@@ -1520,10 +1558,12 @@ def main(
     source: str = typer.Option(
         "",
         "--source",
-        help="Headless source branch when no repo config (empty = current).",
+        help="Override the source branch for this run (empty = the branch you're on).",
     ),
     target: str = typer.Option(
-        "", "--target", help="Headless target branch when no repo config."
+        "",
+        "--target",
+        help="Override the target branch for this run (overrides saved config).",
     ),
 ) -> None:
     """Run a release by default; `setup` detects tools (run once)."""

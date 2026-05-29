@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+[ -f .env ] || exit 0
+[ -f .env.pgp ] || exit 0
+
+env_hash=$(sha256sum .env | awk '{print $1}')
+pgp_hash=$(sha256sum .env.pgp | awk '{print $1}')
+
+if [ "$env_hash" != "$pgp_hash" ]; then
+    echo "pre-push: .env and .env.pgp hashes differ — re-encrypt .env before pushing" >&2
+    echo "  .env     $env_hash" >&2
+    echo "  .env.pgp $pgp_hash" >&2
+    exit 1
+fi

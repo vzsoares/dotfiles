@@ -29,15 +29,29 @@ Re-run `setup` to heal it.
 file). *What this repo wants done.* Created on first run: asks for source/target
 branches, then a gum checklist of the optional phases (pre-checked by detection).
 
-- The **target** branch is always asked, so it can be set even when there's no
-  source branch.
-- Empty **source** = no merge: the release runs directly on the target (which
-  defaults to the current branch when the target is also left empty).
-- At release time the **target** is always validated (it's where the release
-  lands, and is checked out in no-merge mode if it differs from the current
-  branch); the **source** is only validated when a merge is actually requested.
-- `--reconfigure` re-runs the picker; a configured branch that no longer exists
-  aborts pointing at it.
+### Branch resolution — the merge chain
+
+A release flows up a **chain** of branches, target last: the branch you're on →
+the configured source → the target. Each consecutive pair is one merge; the last
+leg lands the release on the target. The chain is built per-run from where you
+stand, so you're never forced onto another branch unless a merge needs it:
+
+| You're on…                  | Source configured? | Chain                          |
+| --------------------------- | ------------------ | ------------------------------ |
+| a feature branch            | yes (`develop`)    | `feature → develop → master`   |
+| a feature branch            | no                 | `feature → master`             |
+| the target (`master`)       | yes (`develop`)    | `develop → master`             |
+| the target (`master`)       | no                 | `master` — release in place    |
+
+- **Release in place** (single-element chain) does **no merge and no checkout** —
+  the tag/bump/push happen on the branch you're on.
+- After the release lands on the target, the chain is **synced back down**
+  (`rebase_source`): each lower branch is rebased onto the one above and pushed,
+  so `develop` and the feature branch end aligned with the released `master`.
+- `--source` / `--target` override the saved config for a single run (the branch
+  you're on still leads the chain); `--target` defaults to the current branch.
+- Every branch in the chain is validated up front; a missing one aborts pointing
+  at it. `--reconfigure` re-runs the picker.
 
 ## Tooling (enabled → use, else → skip)
 
@@ -72,11 +86,12 @@ hooks → secret_scan → branch+version → merge → write_version → changel
 
 - **Optional / repo-toggleable:** hooks, secret_scan, changelog, publish, github_release.
 - **Core / always run:** merge, write_version, tag, push, rebase_source — gated by `no_merge`.
+  `merge` walks every leg of the chain; `rebase_source` syncs them back down.
 - **Dev mode** (`--dev`): bump to `-dev.N`, tag + push the current branch only.
   Stateless (no resume), since each step is idempotent.
 - **Headless** (`--yes --bump <level>`): no gum prompts — confirms auto-accept,
-  secret findings **abort**, no changelog editor. `--source`/`--target` supply
-  branches when the repo has no saved config.
+  secret findings **abort**, no changelog editor. `--source`/`--target` override
+  the saved branch config (else the chain is built from where you stand).
 
 ## State & resume
 

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+STDIN=$(cat)
+
+for hook in "$HOOKS_DIR"/pre-push-*; do
+    [ -x "$hook" ] || continue
+    echo "$STDIN" | "$hook" "$@"
+done

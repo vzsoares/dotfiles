@@ -1,46 +1,52 @@
 {
-    "permissions": {
-        "additionalDirectories": ["/home/zizmackrok/code"]
+  "permissions": {
+    "additionalDirectories": [
+      "/home/zizmackrok/code"
+    ]
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": []
+  },
+  "enabledPlugins": {},
+  "tui": "default",
+  "skipDangerousModePermissionPrompt": false,
+  "editorMode": "vim",
+  "skipAutoPermissionPrompt": true,
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--output-dir",
+        "/tmp/playwright-mcp"
+      ]
     },
-    "hooks": {
-        "Notification": [
-            {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
-                    }
-                ]
-            }
-        ],
-        "SessionStart": []
-    },
-    "enabledPlugins": {},
-    "tui": "default",
-    "skipDangerousModePermissionPrompt": false,
-    "editorMode": "vim",
-    "skipAutoPermissionPrompt": true,
-    "mcpServers": {
-        "playwright": {
-            "type": "stdio",
-            "command": "npx",
-            "args": [
-                "-y",
-                "@playwright/mcp@latest",
-                "--output-dir",
-                "/tmp/playwright-mcp"
-            ]
-        },
-        "docs-mcp-server": {
-            "type": "stdio",
-            "command": "npx",
-            "args": ["-y", "@arabold/docs-mcp-server@latest"],
-            "env": {
-                "OPENAI_API_KEY": "ollama",
-                "OPENAI_API_BASE": "http://localhost:11434/v1",
-                "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
-            }
-        }
+    "docs-mcp-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@arabold/docs-mcp-server@latest"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "ollama",
+        "OPENAI_API_BASE": "http://localhost:11434/v1",
+        "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
+      }
     }
+  },
+  "model": "sonnet"
 }

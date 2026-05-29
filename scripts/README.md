@@ -38,9 +38,14 @@ zen-release --resume        # continue a release interrupted mid-run
 zen-release --yes --bump <patch|minor|major>   # headless
 ```
 Resumable, interactive orchestrator — state is saved so an interrupted run can
-`--resume`. `--dry-run` echoes mutating commands instead of running them. See
-`docs/wiki/architecture/release-tooling.md` for the full design, `BACKLOG.md`
-for future work.
+`--resume`. `--dry-run` echoes mutating commands instead of running them.
+
+A release flows up a **merge chain**, target last: the branch you're on → the
+configured source → the target (e.g. `feature/x → develop → master`). On a
+feature branch it merges up through the source; on the target with no source it
+releases in place (no merge, no checkout). `--source`/`--target` override the
+saved config for one run. See `docs/wiki/architecture/release-tooling.md` for the
+full design, `BACKLOG.md` for future work.
 
 ### zen-pgp
 ```
