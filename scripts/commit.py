@@ -370,6 +370,7 @@ def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
         git("add", *selected)
         info(f"Staged: {' '.join(selected)}")
 
+    info("Scanning for secrets...")
     violations = scan_secrets()
     if violations:
         gum_style(
@@ -404,6 +405,8 @@ def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
                 info("Aborted.")
                 raise typer.Exit(1)
             warn("Override accepted — proceeding.")
+    else:
+        good("No secrets found.")
 
     if message:
         final = message
