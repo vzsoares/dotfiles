@@ -990,6 +990,107 @@ def test_phase_tag_conflict_aborts(git_repo: Path, offline_gum: None) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Secret scan phase                                                             #
+# --------------------------------------------------------------------------- #
+
+
+def _make_gitleaks_config(xdg_home: Path, *, enabled: bool = True) -> release.Config:
+    tools = {
+        "git": release.ToolStatus(enabled=True, path="/bin/git", version="v1"),
+        "gum": release.ToolStatus(enabled=True, path="/bin/gum", version="v1"),
+    }
+    if enabled:
+        tools["gitleaks"] = release.ToolStatus(
+            enabled=True, path="/bin/gitleaks", version="v1"
+        )
+    return release.Config(schema=release.CONFIG_SCHEMA, created_at=0.0, tools=tools)
+
+
+def test_secret_scan_uses_remote_range(
+    git_repo: Path, xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When origin/<branch> exists, gitleaks is called with remote_sha..HEAD."""
+    config = _make_gitleaks_config(xdg_home)
+    state = release.State(no_merge=True, target_branch="main")
+    remote_sha = "abc1234def5678901234567890123456789012ab"
+
+    calls: list[list[str]] = []
+
+    def _mock_run(cmd, *, title=""):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(release, "run", _mock_run)
+    monkeypatch.setattr(
+        release,
+        "git",
+        lambda *args: subprocess.CompletedProcess(
+            list(args),
+            0,
+            remote_sha + "\n",
+            "",
+        ),
+    )
+
+    release.phase_secret_scan(state, config, no_scan=False)
+
+    gitleaks_call = next(c for c in calls if c[0] == "gitleaks")
+    assert f"--log-opts={remote_sha}..HEAD" in gitleaks_call
+
+
+def test_secret_scan_falls_back_to_head_when_no_remote(
+    git_repo: Path, xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When origin/<branch> doesn't exist, gitleaks scans from HEAD (new branch)."""
+    config = _make_gitleaks_config(xdg_home)
+    state = release.State(no_merge=True, target_branch="new-branch")
+
+    calls: list[list[str]] = []
+
+    def _mock_run(cmd, *, title=""):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(release, "run", _mock_run)
+    monkeypatch.setattr(
+        release,
+        "git",
+        lambda *args: subprocess.CompletedProcess(list(args), 1, "", ""),
+    )
+
+    release.phase_secret_scan(state, config, no_scan=False)
+
+    gitleaks_call = next(c for c in calls if c[0] == "gitleaks")
+    assert "--log-opts=HEAD" in gitleaks_call
+
+
+def test_secret_scan_skipped_when_disabled(
+    xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _make_gitleaks_config(xdg_home, enabled=False)
+    state = release.State(no_merge=True, target_branch="main")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        release, "run", lambda cmd, **k: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+    )
+    release.phase_secret_scan(state, config, no_scan=False)
+    assert not any(c[0] == "gitleaks" for c in calls)
+
+
+def test_secret_scan_skipped_with_no_scan_flag(
+    xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _make_gitleaks_config(xdg_home)
+    state = release.State(no_merge=True, target_branch="main")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        release, "run", lambda cmd, **k: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+    )
+    release.phase_secret_scan(state, config, no_scan=True)
+    assert not any(c[0] == "gitleaks" for c in calls)
+
+
+# --------------------------------------------------------------------------- #
 # End-to-end release flow (gum prompts scripted)                                #
 # --------------------------------------------------------------------------- #
 
