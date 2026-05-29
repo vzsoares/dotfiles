@@ -311,10 +311,14 @@ def build_diff() -> str:
 def run_claude(diff_text: str, full_prompt: str) -> str:
     """Invoke the Claude CLI to produce a raw commit message (monkeypatched in tests)."""
     result = subprocess.run(
-        [*CLAUDE_BASE, "--append-system-prompt", SYSTEM_PROMPT, full_prompt],
+        [
+            "gum", "spin", "--spinner", "dot",
+            "--title", "Generating commit message...", "--",
+            *CLAUDE_BASE, "--append-system-prompt", SYSTEM_PROMPT, full_prompt,
+        ],
         input=diff_text,
         text=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
         check=False,
     )
     return result.stdout
