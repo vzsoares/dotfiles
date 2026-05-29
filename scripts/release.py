@@ -914,7 +914,10 @@ def decide_version_dev(state: State, bump: str = "") -> None:
 
     if bump or HEADLESS:
         if not bump:
-            _no_prompt("the version bump (use --bump)")
+            if "continue" in candidates:
+                bump = "continue"
+            else:
+                _no_prompt("the version bump (use --bump)")
         if bump in candidates:
             state.version = candidates[bump]
         else:
