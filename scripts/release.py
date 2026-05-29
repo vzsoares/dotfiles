@@ -87,6 +87,9 @@ detected once by `release.py setup` and saved to a global config; release runs
 read that config and skip any phase whose tool isn't enabled. There is no
 fallback tool chain — a missing/disabled tool means the phase is skipped with a
 notice. See docs/wiki/architecture/release-tooling.md for the design.
+
+# TODO: monorepo / multiple packages per repo
+# TODO: signing tags/artifacts (GPG, cosign)
 """
 
 from __future__ import annotations
