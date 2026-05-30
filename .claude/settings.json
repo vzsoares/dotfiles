@@ -18,6 +18,10 @@
     ],
     "SessionStart": []
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/zizmackrok/.claude/statusline-command.sh"
+  },
   "enabledPlugins": {},
   "tui": "default",
   "skipDangerousModePermissionPrompt": false,
@@ -47,10 +51,5 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
-  },
-  "model": "sonnet",
-  "statusLine": {
-    "type": "command",
-    "command": "bash /home/zizmackrok/.claude/statusline-command.sh"
   }
 }
