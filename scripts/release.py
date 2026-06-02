@@ -389,12 +389,13 @@ def gum_input(header: str, placeholder: str = "", value: str = "") -> str:
     return _gum(*args)
 
 
-def gum_confirm(prompt: str) -> bool:
+def gum_confirm(prompt: str, default: bool = True) -> bool:
     if HEADLESS:
         # --yes implies "yes" to every confirmation.
         info(f"[--yes] {prompt}")
         return True
-    result = subprocess.run(["gum", "confirm", prompt], check=False)
+    default_flag = "--default=true" if default else "--default=false"
+    result = subprocess.run(["gum", "confirm", default_flag, prompt], check=False)
     return result.returncode == 0
 
 
@@ -1075,7 +1076,7 @@ def phase_changelog(
     changelog.write_text(section + "\n\n" + existing if existing else section + "\n")
 
     # Never open an editor headless (it would block on a TTY).
-    if not HEADLESS and gum_confirm("Edit CHANGELOG.md before committing?"):
+    if not HEADLESS and gum_confirm("Edit CHANGELOG.md before committing?", default=False):
         editor = os.environ.get("EDITOR", "nvim")
         subprocess.run([editor, str(changelog)], check=False)
         state.changelog = changelog.read_text().split("\n\n")[0]
