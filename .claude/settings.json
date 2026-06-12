@@ -51,6 +51,5 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
-  },
-  "model": "sonnet"
+  }
 }
