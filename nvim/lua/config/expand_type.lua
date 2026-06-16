@@ -36,7 +36,7 @@ local UTIL = {
 local ALIAS = "__ExpandedType"
 local NS = vim.api.nvim_create_namespace("expand_type")
 
-local function expand(target, is_value)
+local function expand(target, is_value, enter)
     local buf = vim.api.nvim_get_current_buf()
     if not FT[vim.bo[buf].filetype] then
         vim.notify("expand-type: not a TS/JS buffer", vim.log.levels.WARN)
@@ -105,13 +105,18 @@ local function expand(target, is_value)
                 vim.notify("expand-type: no type info for '" .. target .. "'", vim.log.levels.INFO)
                 return
             end
-            vim.lsp.util.open_floating_preview(contents, "markdown", {
+            local _, fwin = vim.lsp.util.open_floating_preview(contents, "markdown", {
                 border = "rounded",
                 focusable = true,
                 focus_id = "textDocument/hover",
                 wrap = true,
                 max_width = math.floor(vim.o.columns * 0.8),
             })
+            -- Land inside the expanded float so it can be scrolled right away,
+            -- without the extra K to re-enter it.
+            if enter and fwin and vim.api.nvim_win_is_valid(fwin) then
+                pcall(vim.api.nvim_set_current_win, fwin)
+            end
         end)
     end, 220)
 end
@@ -133,7 +138,7 @@ function M.smart_hover()
     if in_float then
         if last and last.target then
             pcall(vim.api.nvim_win_close, 0, true) -- leave the float, back to source
-            expand(last.target, last.is_value)
+            expand(last.target, last.is_value, true) -- enter the expanded float
         end
         return
     end
