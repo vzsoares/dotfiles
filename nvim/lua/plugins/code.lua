@@ -221,7 +221,7 @@ return {
 			-- Global LSP keymaps
 			vim.keymap.set("n", "gd", vim.lsp.buf.definition, { desc = "Go to Definition" })
 			vim.keymap.set("n", "gr", vim.lsp.buf.references, { desc = "Go to References" })
-			vim.keymap.set("n", "K", vim.lsp.buf.hover, { desc = "Hover Documentation" })
+			-- K (hover, and K-K-K to expand TS types) is owned by config.expand_type
 			vim.keymap.set("n", "<leader>vd", function()
 				vim.diagnostic.open_float({ focusable = true })
 			end)

@@ -61,7 +61,7 @@ local SECTIONS = {
         {
             { "gd",         "Go to definition" },
             { "gr",         "Go to references" },
-            { "K",          "Hover docs" },
+            { "K",          "Hover docs (K→enter float→K expand TS type)" },
             { "<leader>vd", "Show diagnostic float" },
             { "<F2>",       "Rename symbol" },
             { "<F4>",       "Code action" },
