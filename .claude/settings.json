@@ -25,7 +25,9 @@
   "enabledPlugins": {},
   "tui": "default",
   "skipDangerousModePermissionPrompt": false,
+  "skipWorkflowUsageWarning": true,
   "editorMode": "vim",
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "mcpServers": {
     "playwright": {

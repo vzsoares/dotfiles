@@ -12,7 +12,8 @@
       "Bash(uvx --with tomlkit --with typer --with pytest mypy --ignore-missing-imports scripts/release.py scripts/test_release.py)",
       "Bash(uv run *)",
       "Bash(sed -n '40,43p' scripts/README.md)",
-      "Bash(sed -n '70,90p' scripts/release.py)"
+      "Bash(sed -n '70,90p' scripts/release.py)",
+      "Bash(luajit -bl /home/zizmackrok/code/personal/dotfiles/nvim/lua/config/expand_type.lua /dev/null)"
     ]
   }
 }

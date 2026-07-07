@@ -1,11 +1,18 @@
 -- Expand the TypeScript type under the cursor into its full structural form.
 --
--- tsserver normally prints alias *names* (`User`) instead of their structure.
--- We force expansion by appending `type _ = ExpandRecursively<TARGET>` to the
--- buffer in-memory (off-screen, at EOF, so types in module scope resolve), then
--- hovering that alias with a manual LSP request. The injected lines are removed
--- as soon as the response comes back, and the float is shown right at your
--- cursor -- your view never moves.
+-- tsserver normally prints alias *names* (`User`) instead of their structure,
+-- and its *hover* output is truncated at a hard-coded budget (`... N more ...`,
+-- collapsed `{ ...; }`) that no compiler option can lift. Only the *diagnostic*
+-- (error-message) path honours `noErrorTruncation`, so we force a type error:
+-- we append, off-screen at EOF, a probe that assigns the recursively-expanded
+-- type to `1`. tsserver then reports "Type '<full structure>' is not assignable
+-- to type '1'." -- with `noErrorTruncation: true` in the project's tsconfig the
+-- `<full structure>` is complete. We read it from the diagnostic, strip the
+-- injected lines, pretty-print it, and float it at your cursor.
+--
+-- REQUIRES `"noErrorTruncation": true` in the project's tsconfig compilerOptions
+-- (editor-only; safe under `noEmit`). Without it the expansion is still
+-- truncated -- that limit lives in tsserver, not here.
 --
 -- UX -- a single smart K drives the whole thing:
 --   K            -> normal hover (alias names)
@@ -33,8 +40,51 @@ local UTIL = {
     "            ? T extends infer O ? { [K in keyof O]: __ExpandRec<O[K]> } : never",
     "            : T;",
 }
-local ALIAS = "__ExpandedType"
+local PROBE = "const __ExpandProbe: 1 = (0 as unknown as __ExpandRec<%s>);"
 local NS = vim.api.nvim_create_namespace("expand_type")
+
+-- Pretty-print tsserver's single-line type string into indented form.
+local function pretty(s)
+    local res, depth, buf, bol = {}, 0, {}, false
+    local function flush()
+        res[#res + 1] = table.concat(buf)
+        buf = {}
+    end
+    local function nl()
+        flush()
+        res[#res + 1] = "\n" .. string.rep("    ", depth)
+        bol = true
+    end
+    local i, n = 1, #s
+    while i <= n do
+        local c, nxt = s:sub(i, i), s:sub(i + 1, i + 1)
+        if bol and c == " " then
+            -- swallow leading spaces after a line break
+        elseif c == "{" and nxt == "}" then
+            buf[#buf + 1] = "{}"
+            i = i + 1
+            bol = false
+        elseif c == "{" then
+            buf[#buf + 1] = "{"
+            depth = depth + 1
+            nl()
+        elseif c == "}" then
+            depth = math.max(depth - 1, 0)
+            nl()
+            res[#res + 1] = "}"
+            bol = false
+        elseif c == ";" then
+            buf[#buf + 1] = ";"
+            nl()
+        else
+            buf[#buf + 1] = c
+            bol = false
+        end
+        i = i + 1
+    end
+    flush()
+    return (table.concat(res):gsub("\n%s*\n", "\n"))
+end
 
 local function expand(target, is_value, enter)
     local buf = vim.api.nvim_get_current_buf()
@@ -57,7 +107,7 @@ local function expand(target, is_value, enter)
 
     local lines = { "" }
     vim.list_extend(lines, UTIL)
-    table.insert(lines, string.format("type %s = __ExpandRec<%s>;", ALIAS, expr))
+    table.insert(lines, string.format(PROBE, expr))
 
     -- Append off-screen, kept out of undo history, tracked by an extmark so we
     -- can find the block again even if it shifts.
@@ -66,9 +116,6 @@ local function expand(target, is_value, enter)
     vim.api.nvim_buf_set_lines(buf, first, first, false, lines)
     vim.bo[buf].undolevels = ul
     local mark = vim.api.nvim_buf_set_extmark(buf, NS, first, 0, {})
-
-    local alias_line = vim.api.nvim_buf_line_count(buf) - 1 -- 0-based, last line
-    local alias_col = #"type " -- 0-based start of the alias identifier
 
     local function cleanup()
         if not vim.api.nvim_buf_is_valid(buf) then
@@ -84,41 +131,60 @@ local function expand(target, is_value, enter)
         vim.bo[buf].modified = modified
     end
 
-    local params = {
-        textDocument = vim.lsp.util.make_text_document_params(buf),
-        position = { line = alias_line, character = alias_col },
-    }
-
-    -- Wait for the debounced didChange to reach the server, then hover the alias.
-    vim.defer_fn(function()
-        vim.lsp.buf_request_all(buf, "textDocument/hover", params, function(results)
-            cleanup()
-            local contents
-            for _, res in pairs(results or {}) do
-                local r = res.result
-                if r and r.contents then
-                    contents = vim.lsp.util.convert_input_to_markdown_lines(r.contents)
-                    break
+    -- Pull the expanded structure out of the probe's "not assignable" error.
+    local function extract()
+        for _, d in ipairs(vim.diagnostic.get(buf)) do
+            if d.lnum >= first then
+                local t = d.message:match("^Type '(.*)' is not assignable to type '1'")
+                if t then
+                    return t
                 end
             end
-            if not contents or vim.tbl_isempty(contents) then
-                vim.notify("expand-type: no type info for '" .. target .. "'", vim.log.levels.INFO)
-                return
-            end
-            local _, fwin = vim.lsp.util.open_floating_preview(contents, "markdown", {
-                border = "rounded",
-                focusable = true,
-                focus_id = "textDocument/hover",
-                wrap = true,
-                max_width = math.floor(vim.o.columns * 0.8),
-            })
-            -- Land inside the expanded float so it can be scrolled right away,
-            -- without the extra K to re-enter it.
-            if enter and fwin and vim.api.nvim_win_is_valid(fwin) then
-                pcall(vim.api.nvim_set_current_win, fwin)
-            end
-        end)
-    end, 220)
+        end
+        return nil
+    end
+
+    local function show(t)
+        local body = pretty(t)
+        local out = vim.split("type __ExpandedType = " .. body, "\n", { plain = true })
+        local _, fwin = vim.lsp.util.open_floating_preview(out, "typescript", {
+            border = "rounded",
+            focusable = true,
+            focus_id = "textDocument/hover",
+            max_width = math.floor(vim.o.columns * 0.8),
+            max_height = math.floor(vim.o.lines * 0.8),
+        })
+        if enter and fwin and vim.api.nvim_win_is_valid(fwin) then
+            pcall(vim.api.nvim_set_current_win, fwin)
+        end
+    end
+
+    -- The injected edit reaches tsserver after the debounced didChange, then it
+    -- recomputes and publishes diagnostics. Poll until our probe error lands.
+    local tries = 0
+    local function poll()
+        if not vim.api.nvim_buf_is_valid(buf) then
+            return
+        end
+        local t = extract()
+        if t then
+            cleanup()
+            show(t)
+            return
+        end
+        tries = tries + 1
+        if tries < 30 then
+            vim.defer_fn(poll, 80)
+        else
+            cleanup()
+            vim.notify(
+                "expand-type: no expansion for '" .. target .. "' "
+                    .. "(any/unknown/primitive, or tsconfig missing noErrorTruncation)",
+                vim.log.levels.INFO
+            )
+        end
+    end
+    vim.defer_fn(poll, 220)
 end
 
 local function is_value_name(word)
