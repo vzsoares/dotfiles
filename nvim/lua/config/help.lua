@@ -74,6 +74,35 @@ local SECTIONS = {
         },
     },
     {
+        "Debug — DAP (Go / delve)",
+        {
+            { "<F5>",        "Start / continue" },
+            { "<F10>",       "Step over" },
+            { "<F11>",       "Step into" },
+            { "<F12>",       "Step out" },
+            { "<F6>",        "Terminate / quit session" },
+            { "<leader>b",   "Toggle breakpoint" },
+            { "<leader>B",   "Conditional breakpoint" },
+            { "<leader>dt",  "Debug Go test nearest cursor" },
+            { "<leader>du",  "Toggle debug UI" },
+            { "<leader>dr",  "Open REPL" },
+            { "",            "Go katas need a go.mod (module) to launch" },
+        },
+    },
+    {
+        "Folds & Marks (built-in)",
+        {
+            { "za",         "Toggle fold under cursor (zo open · zc close)" },
+            { "zR / zM",    "Open all folds / close all folds" },
+            { "zf{motion}", "Create a fold (e.g. zfip, zfj) · zd delete fold" },
+            { "zj / zk",    "Jump to next / previous fold" },
+            { "m{a-z}",     "Set mark (lowercase: file-local, A-Z: global)" },
+            { "`{a-z}",     "Jump to mark (exact spot) · '{a-z} jumps to line" },
+            { "``",         "Jump back to position before the last jump" },
+            { "'. / `.",    "Jump to last edit  ·  :marks lists all marks" },
+        },
+    },
+    {
         "Editing",
         {
             { "J / K (visual)", "Move selection down / up" },
