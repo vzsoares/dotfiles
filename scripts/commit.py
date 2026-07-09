@@ -87,6 +87,21 @@ NOISY_BASENAMES = frozenset(
 )
 NOISY_SUFFIXES = (".min.js", ".min.css", ".map", ".snap")
 
+# Binary media: diffs are huge / unreadable (and can blow the CLI arg limit).
+# List names only, same as lock files.
+BINARY_SUFFIXES = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".ico",
+    ".tiff",
+    ".svg",
+    ".pdf",
+)
+
 
 def scan_filenames(files: list[str]) -> list[str]:
     """Flag sensitive file paths (pure — no git/IO)."""
@@ -137,7 +152,12 @@ def scan_secrets() -> list[str]:
 
 def is_noisy_file(name: str) -> bool:
     base = name.rsplit("/", 1)[-1]
-    return base in NOISY_BASENAMES or name.endswith(NOISY_SUFFIXES)
+    lower = name.lower()
+    return (
+        base in NOISY_BASENAMES
+        or name.endswith(NOISY_SUFFIXES)
+        or lower.endswith(BINARY_SUFFIXES)
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -283,7 +303,7 @@ def build_diff() -> str:
     if normal:
         parts.append(git("diff", "--cached", "--", *normal).stdout)
     if noisy:
-        parts.append("\n# Lock/generated files changed (diff omitted):")
+        parts.append("\n# Lock/generated/binary files changed (diff omitted):")
         parts += [f"#   {f}" for f in noisy]
     return "\n".join(parts)
 
