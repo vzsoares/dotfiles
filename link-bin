@@ -24,4 +24,7 @@ echo "linked zen-hash -> scripts/hash.sh"
 ln -sf "$SCRIPT_DIR/scripts/env-build.py" "$BIN_DIR/zen-env"
 echo "linked zen-env -> scripts/env-build.py"
 
+ln -sf "$SCRIPT_DIR/scripts/ytdl.py" "$BIN_DIR/zen-ytdl"
+echo "linked zen-ytdl -> scripts/ytdl.py"
+
 echo "done — ensure $BIN_DIR is on your PATH"
