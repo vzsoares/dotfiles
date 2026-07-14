@@ -1,10 +1,11 @@
 # AWS
 alias aws-approva-dev="export AWS_PROFILE=approva-dev"
 alias aws-approva-prod="export AWS_PROFILE=approva-prod"
-alias aws-myself="export AWS_PROFILE=myself"
+alias aws-zenhalab-prod="export AWS_PROFILE=zenhalab-prod-go"
 
 alias aws-approva-dev-go="export AWS_PROFILE=approva-dev && aws login --profile approva-dev-login"
 alias aws-approva-prod-go="export AWS_PROFILE=approva-prod && aws login --profile approva-prod-login"
+alias aws-zenhalab-prod-go="export AWS_PROFILE=zenhalab-prod && aws login --profile zenhalab-prod-login"
 
 # Tools
 alias ts="tsx"
