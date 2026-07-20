@@ -370,7 +370,7 @@ def test_publish_records_target(
 ) -> None:
     (git_repo / "package.json").write_text('{"name": "pkg", "version": "1.0.0"}')
     monkeypatch.setattr(release, "already_published", lambda *a: False)
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: True)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: True)
     monkeypatch.setattr(
         release,
         "run",
@@ -401,7 +401,7 @@ def test_github_release_captures_url(
         "run",
         lambda *a, **k: subprocess.CompletedProcess(a, 1, "", ""),
     )
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: True)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: True)
     monkeypatch.setattr(
         release,
         "run",
@@ -438,6 +438,21 @@ def test_find_config_version_files(git_repo: Path) -> None:
 # --------------------------------------------------------------------------- #
 # Version writing                                                               #
 # --------------------------------------------------------------------------- #
+
+
+def test_write_version_config_variants(git_repo: Path) -> None:
+    # Unannotated Portuguese key (VERSAO), annotated VERSION, and __version__.
+    (git_repo / "core").mkdir()
+    (git_repo / "core" / "settings.py").write_text('VERSAO = "1.0.0"\n')
+    (git_repo / "app").mkdir()
+    (git_repo / "app" / "config.py").write_text('VERSION: str = "1.0.0"\n')
+    (git_repo / "pkg").mkdir()
+    (git_repo / "pkg" / "settings.py").write_text('__version__ = "1.0.0"\n')
+    state = release.State(version="1.2.0", no_merge=True, target_branch="main")
+    release.phase_write_version(state)
+    assert (git_repo / "core" / "settings.py").read_text() == 'VERSAO = "1.2.0"\n'
+    assert (git_repo / "app" / "config.py").read_text() == 'VERSION: str = "1.2.0"\n'
+    assert (git_repo / "pkg" / "settings.py").read_text() == '__version__ = "1.2.0"\n'
 
 
 def test_write_version_preserves_toml(git_repo: Path) -> None:
@@ -500,7 +515,7 @@ def test_changelog_amend_folds_into_bump_commit(
 ) -> None:
     """--amend-changelog puts CHANGELOG.md in the bump commit, no separate commit."""
     (git_repo / "package.json").write_text('{"name": "x", "version": "1.0.0"}\n')
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)  # don't edit
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)  # don't edit
     state = release.State(version="1.1.0", no_merge=True, target_branch="main")
     release.phase_write_version(state)  # makes the "chore: bump version to 1.1.0"
     bump_commit = _git("rev-parse", "HEAD").strip()
@@ -520,7 +535,7 @@ def test_changelog_separate_commit_default(
     git_repo: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (git_repo / "package.json").write_text('{"name": "x", "version": "1.0.0"}\n')
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
     state = release.State(version="1.1.0", no_merge=True, target_branch="main")
     release.phase_write_version(state)
     release.phase_changelog(state, _empty_config(), no_changelog=False, amend=False)
@@ -732,7 +747,7 @@ def test_e2e_disabled_phases_are_skipped(
         phases={"changelog": False, "publish": False, "github_release": False},
     )
     monkeypatch.setattr(release, "gum_choose", lambda header, options: options[0])
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
 
     release.do_release(
         resume=False, restart=False, dry_run=False, no_scan=False, no_changelog=False
@@ -751,7 +766,7 @@ def test_e2e_first_run_creates_repo_config(
     monkeypatch.setattr(release, "gum_choose", lambda header, options: options[0])
     # First call (phase multi-select) returns none-checked; rest decline.
     monkeypatch.setattr(release, "gum_choose_multi", lambda h, opts, sel: [])
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
 
     release.do_release(
         resume=False, restart=False, dry_run=False, no_scan=False, no_changelog=False
@@ -893,7 +908,7 @@ def test_e2e_dev_release(
     """--dev: bump to -dev.N, tag current branch; no merge/changelog/repo-config."""
     write_config()  # NOTE: no repo config written — dev mode must not need one
     monkeypatch.setattr(release, "gum_choose", lambda h, opts: opts[0])  # patch -dev.1
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)  # skip push
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)  # skip push
 
     release.do_dev_release(dry_run=False)
 
@@ -915,7 +930,7 @@ def test_dev_release_is_stateless(
     release.save_state(leftover)
 
     monkeypatch.setattr(release, "gum_choose", lambda h, opts: opts[0])
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
     release.do_dev_release(dry_run=False)
 
     # The dev run tagged its own version and left the full-release state intact.
@@ -1105,7 +1120,7 @@ def test_e2e_release_current_branch(
         release, "gum_choose", lambda header, options: options[0]
     )  # patch bump
     monkeypatch.setattr(
-        release, "gum_confirm", lambda prompt: False
+        release, "gum_confirm", lambda prompt, default=True: False
     )  # decline push/edit/rebase
 
     release.do_release(
@@ -1138,7 +1153,7 @@ def test_e2e_release_with_merge(
     monkeypatch.setattr(
         release, "gum_choose", lambda header, options: options[0]
     )  # patch
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
 
     release.do_release(
         resume=False, restart=False, dry_run=False, no_scan=False, no_changelog=False
@@ -1227,7 +1242,7 @@ def test_e2e_dry_run_mutates_nothing(
     write_repo_config(source="")
     before = _git("rev-parse", "HEAD").strip()
     monkeypatch.setattr(release, "gum_choose", lambda header, options: options[0])
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
 
     release.do_release(
         resume=False, restart=False, dry_run=True, no_scan=False, no_changelog=False
@@ -1259,7 +1274,7 @@ def test_e2e_resume_after_crash(
     write_config()
     write_repo_config(source="")
     monkeypatch.setattr(release, "gum_choose", lambda header, options: options[0])
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt: False)
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
 
     # First run: blow up inside the tag phase.
     real_tag = release.phase_tag

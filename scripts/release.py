@@ -1013,11 +1013,17 @@ def phase_write_version(state: State) -> None:
                 Path("pyproject.toml").write_text(tomlkit.dumps(doc))
             updated.append("pyproject.toml")
 
-    version_re = re.compile(r'^(\s*)VERSION: str = "[^"]*"', re.MULTILINE)
+    # Match common version constants (VERSION, VERSAO, __version__) with or
+    # without a type annotation, preserving the name/annotation and only
+    # swapping the quoted value.
+    version_re = re.compile(
+        r'^(\s*(?:VERSION|VERSAO|__version__)(?:\s*:\s*\w+)?\s*=\s*)"[^"]*"',
+        re.MULTILINE,
+    )
     for path in find_config_version_files():
         text = path.read_text()
         if version_re.search(text):
-            new = version_re.sub(rf'\1VERSION: str = "{version}"', text)
+            new = version_re.sub(rf'\g<1>"{version}"', text)
             if not DRY_RUN:
                 path.write_text(new)
             updated.append(str(path))

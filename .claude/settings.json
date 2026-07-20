@@ -53,5 +53,6 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
-  }
+  },
+  "autoCompactWindow": 800000
 }
