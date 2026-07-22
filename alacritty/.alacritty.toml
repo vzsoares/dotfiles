@@ -10,6 +10,9 @@
   dynamic_padding = true
   opacity = 1
 
+[selection]
+  save_to_clipboard = true
+
 [terminal.shell]
     program = "/bin/zsh"
 
