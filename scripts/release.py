@@ -832,7 +832,10 @@ def phase_secret_scan(state: State, config: Config, no_scan: bool) -> None:
         log_opts = f"{remote_ref.stdout.strip()}..HEAD"
     else:
         log_opts = "HEAD"
-    result = run(["gitleaks", "detect", f"--log-opts={log_opts}", "--redact", "--no-banner"], title="Scanning for secrets...")
+    result = run(
+        ["gitleaks", "detect", f"--log-opts={log_opts}", "--redact", "--no-banner"],
+        title="Scanning for secrets...",
+    )
     if result.returncode != 0:
         fail("gitleaks found potential secrets.")
         if result.stdout:
@@ -990,8 +993,23 @@ def find_config_version_files() -> list[Path]:
     return found
 
 
+def check_conflict_markers() -> None:
+    """Abort if tracked files carry committed merge-conflict markers.
+
+    Catches the case where a merge conflict was "resolved" by committing the
+    file with the markers still in, then the release was resumed.
+    """
+    result = git("grep", "-n", "-E", r"^(<{7} |>{7} )")
+    if result.returncode == 0 and result.stdout.strip():
+        fail("Merge-conflict markers found in tracked files:")
+        info(result.stdout.strip())
+        fail("Fix the resolution, commit, then re-run with --resume.")
+        raise typer.Exit(1)
+
+
 def phase_write_version(state: State) -> None:
     """P6 — write version into project files + commit."""
+    check_conflict_markers()
     version = state.version
     updated: list[str] = []
 
@@ -1001,6 +1019,15 @@ def phase_write_version(state: State) -> None:
         if not DRY_RUN:
             Path("package.json").write_text(new)
         updated.append("package.json")
+
+    # npm lockfiles duplicate the package version (root + packages[""]); the
+    # first two "version" fields are exactly those, dependency versions follow.
+    if Path("package-lock.json").exists():
+        text = Path("package-lock.json").read_text()
+        new = re.sub(r'"version":\s*"[^"]*"', f'"version": "{version}"', text, count=2)
+        if not DRY_RUN:
+            Path("package-lock.json").write_text(new)
+        updated.append("package-lock.json")
 
     if Path("pyproject.toml").exists():
         import tomlkit
@@ -1082,7 +1109,9 @@ def phase_changelog(
     changelog.write_text(section + "\n\n" + existing if existing else section + "\n")
 
     # Never open an editor headless (it would block on a TTY).
-    if not HEADLESS and gum_confirm("Edit CHANGELOG.md before committing?", default=False):
+    if not HEADLESS and gum_confirm(
+        "Edit CHANGELOG.md before committing?", default=False
+    ):
         editor = os.environ.get("EDITOR", "nvim")
         subprocess.run([editor, str(changelog)], check=False)
         state.changelog = changelog.read_text().split("\n\n")[0]
