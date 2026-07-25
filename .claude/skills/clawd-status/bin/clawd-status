@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# clawd-status — CLI
+#
+#   clawd-status preview [state] [secs]  animate a sprite in this terminal
+#   clawd-status frames  [state]         print every frame of a state, side by side
+#   clawd-status hide | show | toggle    hide or show the character
+#   clawd-status install                 wire the status line into ~/.claude/settings.json
+#   clawd-status uninstall               restore the previous status line
+#   clawd-status doctor                  check the wiring
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+# shellcheck source=../lib/sprite.sh
+source "$ROOT/lib/sprite.sh"
+# shellcheck source=../lib/state.sh
+source "$ROOT/lib/state.sh"
+
+SETTINGS="$HOME/.claude/settings.json"
+BACKUP="$HOME/.claude/clawd-status-previous-statusline.json"
+STATUSLINE="\$HOME/.claude/skills/clawd-status/scripts/statusline.sh"
+
+cmd_preview() {
+  local state=${1:-idle} secs=${2:-6}
+  local frames=0 total=$(( secs * 4 ))
+  printf '\n'
+  while (( frames < total )); do
+    clawd_render "$(clawd_frame "$state" "$frames")" "$CLAWD_W"
+    for r in 0 1 2; do printf '  %s\n' "${CLAWD_ROWS[r]}"; done
+    sleep 0.25
+    printf '\e[3A'
+    frames=$(( frames + 1 ))
+  done
+  printf '\e[3B\n'
+}
+
+cmd_frames() {
+  local state=${1:-idle}
+  local -a cycle
+  case "$state" in
+    work | working) cycle=("${CLAWD_WORK[@]}") ;;
+    wait | waiting) cycle=("${CLAWD_WAIT[@]}") ;;
+    mini) cycle=("${CLAWD_MINI[@]}") ;;
+    *) cycle=("${CLAWD_IDLE[@]}") ;;
+  esac
+
+  local width=$CLAWD_W
+  [[ $state == mini ]] && width=$CLAWD_MINI_W
+
+  local -a out=("" "" "")
+  local i rows=0
+  for ((i = 0; i < ${#cycle[@]}; i++)); do
+    clawd_render "${cycle[i]}" "$width"
+    rows=${#CLAWD_ROWS[@]}
+    for ((r = 0; r < rows; r++)); do out[r]+="${CLAWD_ROWS[r]}   "; done
+  done
+  printf '\n'
+  for ((r = 0; r < rows; r++)); do printf '  %s\n' "${out[r]}"; done
+  printf '\n'
+}
+
+cmd_install() {
+  local jq_bin tmp
+  jq_bin=$(clawd_jq)
+  command -v "$jq_bin" >/dev/null 2>&1 || [[ -x $jq_bin ]] || {
+    echo "clawd: jq not found" >&2
+    return 1
+  }
+  [[ -f $SETTINGS ]] || { echo "clawd: $SETTINGS not found" >&2; return 1; }
+
+  # Stash whatever status line is there now in a sidecar, not in settings.json
+  # itself, so no unrecognised key ends up in the settings schema.
+  if ! "$jq_bin" -e '(.statusLine.command // "") | test("clawd-status")' "$SETTINGS" >/dev/null 2>&1; then
+    "$jq_bin" '.statusLine // null' "$SETTINGS" >"$BACKUP" 2>/dev/null || true
+  fi
+
+  tmp=$(mktemp)
+  "$jq_bin" --arg cmd "$STATUSLINE" \
+    '.statusLine = {type: "command", command: $cmd, refreshInterval: 1}' \
+    "$SETTINGS" >"$tmp" || { rm -f "$tmp"; return 1; }
+
+  # Write through the file: ~/.claude/settings.json is a symlink into dotfiles
+  # and `mv` would replace the link with a regular file.
+  cat "$tmp" >"$SETTINGS"
+  rm -f "$tmp"
+  echo "clawd: status line installed (restart Claude Code)"
+}
+
+cmd_uninstall() {
+  local jq_bin tmp
+  jq_bin=$(clawd_jq)
+  [[ -f $SETTINGS ]] || return 0
+  tmp=$(mktemp)
+  if [[ -s $BACKUP ]] && ! "$jq_bin" -e '. == null' "$BACKUP" >/dev/null 2>&1; then
+    "$jq_bin" --slurpfile prev "$BACKUP" '.statusLine = $prev[0]' "$SETTINGS" >"$tmp" ||
+      { rm -f "$tmp"; return 1; }
+  else
+    "$jq_bin" 'del(.statusLine)' "$SETTINGS" >"$tmp" || { rm -f "$tmp"; return 1; }
+  fi
+  cat "$tmp" >"$SETTINGS"
+  rm -f "$tmp" "$BACKUP"
+  echo "clawd: status line restored (restart Claude Code)"
+}
+
+cmd_hide() {
+  clawd_set_hidden true
+  echo "clawd-status: character hidden — the status line collapses to one row"
+}
+
+cmd_show() {
+  clawd_set_hidden false
+  echo "clawd-status: character visible"
+}
+
+cmd_toggle() {
+  if clawd_hidden; then cmd_show; else cmd_hide; fi
+}
+
+cmd_doctor() {
+  local jq_bin ok=0
+  jq_bin=$(clawd_jq)
+
+  printf 'plugin root   %s\n' "$ROOT"
+  printf 'state dir     %s\n' "$CLAWD_DIR"
+  printf 'jq            %s\n' "$(command -v "$jq_bin" || echo "$jq_bin")"
+  local via="$CLAWD_CONFIG"
+  [[ -n ${CLAWD_HIDDEN:-} ]] && via="CLAWD_HIDDEN=$CLAWD_HIDDEN"
+  if clawd_hidden; then
+    printf 'character     hidden (via %s)\n' "$via"
+  else
+    printf 'character     visible\n'
+  fi
+
+  if [[ -f $SETTINGS ]]; then
+    local cur
+    cur=$("$jq_bin" -r '.statusLine.command // "(none)"' "$SETTINGS" 2>/dev/null)
+    printf 'status line   %s\n' "$cur"
+    [[ $cur == *clawd-status* ]] || { echo "  ! not pointing at clawd — run: clawd install"; ok=1; }
+    printf 'refresh       %ss\n' "$("$jq_bin" -r '.statusLine.refreshInterval // "(unset)"' "$SETTINGS" 2>/dev/null)"
+  else
+    echo "status line   $SETTINGS missing"
+    ok=1
+  fi
+
+  for f in scripts/statusline.sh scripts/subagent.sh scripts/state-hook.sh; do
+    [[ -x $ROOT/$f ]] || { echo "  ! $f is not executable"; ok=1; }
+  done
+
+  if [[ -d $CLAWD_DIR ]]; then
+    printf 'live sessions %s\n' "$(find "$CLAWD_DIR" -name '*.state' 2>/dev/null | wc -l)"
+  fi
+  return $ok
+}
+
+case "${1:-preview}" in
+  preview) shift; cmd_preview "$@" ;;
+  frames) shift; cmd_frames "$@" ;;
+  hide) cmd_hide ;;
+  show) cmd_show ;;
+  toggle) cmd_toggle ;;
+  install) cmd_install ;;
+  uninstall) cmd_uninstall ;;
+  doctor) cmd_doctor ;;
+  *) sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//' ;;
+esac

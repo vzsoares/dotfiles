@@ -20,7 +20,8 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash /home/zizmackrok/.claude/statusline-command.sh"
+    "command": "$HOME/.claude/skills/clawd-status/scripts/statusline.sh",
+    "refreshInterval": 1
   },
   "enabledPlugins": {},
   "tui": "default",

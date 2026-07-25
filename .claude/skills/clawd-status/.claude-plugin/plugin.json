@@ -1,0 +1,9 @@
+{
+  "name": "clawd-status",
+  "description": "A little pixel Clawd that lives in your status line — breathes when idle, works when Claude works, and waves when it needs you.",
+  "version": "0.1.0",
+  "author": {
+    "name": "vzsoares"
+  },
+  "keywords": ["statusline", "sprite", "fun", "clawd"]
+}

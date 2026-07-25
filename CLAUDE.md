@@ -11,6 +11,8 @@ nvim/         # neovim config (lua)
 tmux/         # tmux config
 zsh/          # zsh aliases, plugins, themes
 .claude/      # Claude Code settings & skills
+              #   skills/clawd-status/ — status line sprite plugin (auto-loads
+              #   as clawd-status@skills-dir; see its README)
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
 
