@@ -68,11 +68,28 @@ pixel as foreground and bottom as background. Every frame in a cycle **must**
 be 6 rows of exactly `CLAWD_W` characters — `clawd-status frames` renders ragged rows
 as misaligned columns, which is the fastest way to spot a typo.
 
+The body spans cols 0-9 (wide row) and 1-8 (narrow rows), putting its centre on
+4.5; eyes (2, 7) and legs (1, 3, 6, 8) mirror across it. Four legs can only sit
+symmetrically under a body whose centre is a half column, so changing the body
+width by one pixel breaks the mirror unless the legs move with it. Col 10 is the
+alert slot, used only by `CLAWD_WAIT`.
+
+The walk cycle animates by *lifting* feet — a planted leg fills both pixel rows,
+a lifted one only the top — never by shifting the bottom pixel row sideways.
+Shifting it leaves every leg half-height and offset from its own column, which
+reads as tangled legs rather than a stride.
+
 Add a palette colour by adding a `CLAWD_PAL` entry; the renderer picks it up
 with no other change.
 
 ## Gotchas
 
+- Claude Code strips leading whitespace from every status line row. A row whose
+  col 0 is transparent — the narrow body rows, the leg row — would lose it and
+  render one pixel left of the wide row. `clawd_render` opens each row with
+  `\e[0m` so the line never begins with a real space. Don't "simplify" that
+  away: the symptom is a sprite whose body looks shifted, and it only shows up
+  in the real status line, never in `clawd-status preview`.
 - Don't parse the jq output with tabs. Tab is IFS whitespace, so `read`
   collapses runs of it and empty fields shift every later field left. The
   scripts join with `` instead.
