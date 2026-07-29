@@ -88,6 +88,9 @@ return {
 				width = "100%",
 				relativenumber = true,
 				number = true,
+				-- without this, opening/closing the tree re-equalizes every window
+				-- (nvim's equalalways), which blows dapui's sidebar up to full size
+				preserve_window_proportions = true,
 			},
 			renderer = {
 				group_empty = true,

@@ -28,6 +28,44 @@ return {
 			-- buried in the bottom tray; put it on the always-visible sidebar pane
 			dapui.setup({
 				controls = { enabled = true, element = "scopes" },
+				layouts = {
+					{
+						position = "left",
+						-- fraction of the screen rather than a fixed 40 columns, so
+						-- values have room without eating the source on a small term
+						size = 0.25,
+						elements = {
+							{ id = "repl", size = 0.2 },
+							{ id = "watches", size = 0.3 },
+							{ id = "stacks", size = 0.3 },
+							{ id = "breakpoints", size = 0.2 },
+						},
+					},
+					{
+						position = "bottom",
+						size = 10,
+						-- no "console": it only ever shows nvim-dap's integrated
+						-- terminal, and delve rejects any outputMode but "remote"
+						-- (verified: 'unsupported outputMode attribute "terminal"'),
+						-- so for Go it is permanently empty. Program stdout arrives
+						-- as DAP output events, which land in the repl instead.
+						elements = { "scopes" },
+					},
+				},
+				render = {
+					indent = 1,
+					max_type_length = nil, -- never abbreviate the type
+					max_value_lines = 200, -- long slices/maps stay readable
+				},
+			})
+
+			-- wrap long values instead of running them off the edge of the pane
+			vim.api.nvim_create_autocmd("FileType", {
+				group = vim.api.nvim_create_augroup("DapUiWrap", { clear = true }),
+				pattern = { "dapui_scopes", "dapui_watches", "dapui_hover" },
+				callback = function()
+					vim.opt_local.wrap = true
+				end,
 			})
 			require("nvim-dap-virtual-text").setup()
 
@@ -128,12 +166,61 @@ return {
 					vim.cmd("wincmd =")
 				end)
 			end
+			local ui_open = false
+
+			-- nvim-tree opening/closing/resizing perturbs every other window, and
+			-- dapui has no automatic recovery. `reset = true` re-applies the
+			-- configured layout sizes (dapui/init.lua: "Reset windows to original
+			-- size"), so the debug panes snap back instead of drifting bigger.
+			-- ask the windows themselves rather than trusting a flag: the UI can be
+			-- opened by dapui directly, not only through our own toggle
+			local function ui_is_open()
+				for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+					local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+					if ft:match("^dapui_") or ft == "dap-repl" then
+						return true
+					end
+				end
+				return false
+			end
+			local function reset_ui_layout()
+				if not ui_is_open() then
+					return
+				end
+				vim.schedule(function()
+					pcall(dapui.open, { reset = true })
+				end)
+			end
+			-- requiring the api loads nvim-tree through lazy if it isn't up yet; fall
+			-- back to VeryLazy only if that fails, rather than depending on it
+			local function subscribe_tree_events()
+				local ok, nvt = pcall(require, "nvim-tree.api")
+				if not ok then
+					return false
+				end
+				for _, ev in ipairs({
+					nvt.events.Event.TreeOpen,
+					nvt.events.Event.TreeClose,
+					nvt.events.Event.Resize,
+				}) do
+					nvt.events.subscribe(ev, reset_ui_layout)
+				end
+				return true
+			end
+			if not subscribe_tree_events() then
+				vim.api.nvim_create_autocmd("User", {
+					pattern = "VeryLazy",
+					once = true,
+					callback = subscribe_tree_events,
+				})
+			end
 
 			-- Open the UI with the session, but leave it up when the program ends so
 			-- the final state is still readable. <leader>du dismisses it.
 			dap.listeners.after.event_initialized["dapui_config"] = function()
 				close_file_tree()
 				dapui.open()
+				ui_open = true
 			end
 			dap.listeners.before.event_terminated["dapui_config"] = function()
 				vim.notify("Debug: program exited", vim.log.levels.INFO)
@@ -210,6 +297,99 @@ return {
 				return nil, last_go_dir
 			end
 
+			-- nvim-dap holds breakpoints as buffer signs only, so they die with the
+			-- session. Persist them per project (keyed by cwd) under stdpath("state")
+			-- and restore each file's set when its buffer is read.
+			local bps = require("dap.breakpoints")
+			local bp_dir = vim.fn.stdpath("state") .. "/dap-breakpoints"
+			local function bp_store()
+				return bp_dir .. "/" .. vim.fn.getcwd():gsub("[^%w]", "_") .. ".json"
+			end
+
+			local function read_store()
+				local fd = io.open(bp_store(), "r")
+				if not fd then
+					return {}
+				end
+				local raw = fd:read("*a")
+				fd:close()
+				local ok, decoded = pcall(vim.json.decode, raw)
+				return (ok and type(decoded) == "table") and decoded or {}
+			end
+
+			local function save_breakpoints()
+				local store = read_store()
+				-- drop entries for every buffer currently loaded, then re-add from
+				-- live state; untouched files keep whatever was already on disk
+				for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+					if vim.api.nvim_buf_is_loaded(bufnr) then
+						local path = vim.api.nvim_buf_get_name(bufnr)
+						if path ~= "" then
+							store[path] = nil
+						end
+					end
+				end
+				for bufnr, buf_bps in pairs(bps.get()) do
+					local path = vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_get_name(bufnr) or ""
+					if path ~= "" and #buf_bps > 0 then
+						local list = {}
+						for _, bp in ipairs(buf_bps) do
+							table.insert(list, {
+								line = bp.line,
+								condition = bp.condition,
+								hitCondition = bp.hitCondition,
+								logMessage = bp.logMessage,
+							})
+						end
+						store[path] = list
+					end
+				end
+				vim.fn.mkdir(bp_dir, "p")
+				local fd = io.open(bp_store(), "w")
+				if fd then
+					fd:write(vim.json.encode(store))
+					fd:close()
+				end
+			end
+
+			local restored = {}
+			local function restore_breakpoints(bufnr)
+				local path = vim.api.nvim_buf_get_name(bufnr)
+				if path == "" or restored[path] then
+					return
+				end
+				local list = read_store()[path]
+				if not list then
+					return
+				end
+				restored[path] = true
+				for _, bp in ipairs(list) do
+					bps.set({
+						condition = bp.condition,
+						hit_condition = bp.hitCondition,
+						log_message = bp.logMessage,
+					}, bufnr, bp.line)
+				end
+			end
+
+			local bp_group = vim.api.nvim_create_augroup("DapBreakpointPersist", { clear = true })
+			vim.api.nvim_create_autocmd("BufReadPost", {
+				group = bp_group,
+				callback = function(args)
+					restore_breakpoints(args.buf)
+				end,
+			})
+			vim.api.nvim_create_autocmd("VimLeavePre", {
+				group = bp_group,
+				callback = save_breakpoints,
+			})
+			-- buffers already read before this config ran get no BufReadPost
+			for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+				if vim.api.nvim_buf_is_loaded(bufnr) then
+					restore_breakpoints(bufnr)
+				end
+			end
+
 			-- A kata `main` finishes in microseconds, so launching with no breakpoint
 			-- just runs to completion and tears the UI straight back down. If nothing
 			-- is set anywhere, park one on the first statement of the current file's
@@ -245,7 +425,13 @@ return {
 			-- the windows dapui was sharing space with keep their squeezed sizes
 			local function toggle_ui()
 				dapui.toggle()
-				balance_windows()
+				-- only re-even the splits when the UI went AWAY. Doing it on open
+				-- too makes `wincmd =` inflate dapui's panes to full equal shares,
+				-- which is exactly the "debugger is giant" problem.
+				ui_open = not ui_open
+				if not ui_open then
+					balance_windows()
+				end
 			end
 			-- F5 is overloaded in nvim-dap: with no session it picks a config, when
 			-- parked on a stopped thread it continues, and in every other state it
@@ -300,12 +486,23 @@ return {
 			end, { desc = "Debug: Session menu" })
 			-- direct shortcut, skips the menu
 			map("n", "<leader>dR", dap.restart, { desc = "Debug: Restart session" })
-			map("n", "<leader>b", dap.toggle_breakpoint, { desc = "Debug: Toggle Breakpoint" })
+			-- persist on every change, so a crash or :qa! can't lose them
+			map("n", "<leader>b", function()
+				dap.toggle_breakpoint()
+				save_breakpoints()
+			end, { desc = "Debug: Toggle Breakpoint" })
 			map("n", "<leader>B", function()
 				dap.set_breakpoint(vim.fn.input("Breakpoint condition: "))
+				save_breakpoints()
 			end, { desc = "Debug: Conditional Breakpoint" })
 			map("n", "<leader>dr", dap.repl.open, { desc = "Debug: Open REPL" })
 			map("n", "<leader>du", toggle_ui, { desc = "Debug: Toggle UI" })
+
+			-- inspect the value under the cursor (or the visual selection) in a
+			-- scrollable float -- the way to read values too big for the pane
+			map({ "n", "v" }, "<leader>de", function()
+				dapui.eval(nil, { enter = true })
+			end, { desc = "Debug: Eval under cursor" })
 
 			-- Go: debug the test nearest the cursor
 			map("n", "<leader>dt", function()
