@@ -82,7 +82,10 @@ return {
 				sorter = "case_sensitive",
 			},
 			view = {
-				width = 100,
+				-- share of the screen, not a fixed 100 columns: a hard width wider
+				-- than the terminal squeezes every other split to nothing, and
+				-- nvim-tree re-imposes it so `wincmd =` can't recover the layout
+				width = "100%",
 				relativenumber = true,
 				number = true,
 			},

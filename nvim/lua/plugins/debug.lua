@@ -113,13 +113,47 @@ return {
 				})
 			end
 
+			-- nvim-tree is a 100-column sidebar; dapui adds its own sidebar plus a
+			-- bottom tray. Both open at once leaves no room for the source, and
+			-- whichever closes second leaves the survivors at odd widths. Give the
+			-- debug UI the screen, and re-even the splits when it goes away.
+			local function close_file_tree()
+				local ok, api = pcall(require, "nvim-tree.api")
+				if ok and api.tree.is_visible() then
+					api.tree.close()
+				end
+			end
+			local function balance_windows()
+				vim.schedule(function()
+					vim.cmd("wincmd =")
+				end)
+			end
+
 			-- Open the UI with the session, but leave it up when the program ends so
 			-- the final state is still readable. <leader>du dismisses it.
 			dap.listeners.after.event_initialized["dapui_config"] = function()
+				close_file_tree()
 				dapui.open()
 			end
 			dap.listeners.before.event_terminated["dapui_config"] = function()
 				vim.notify("Debug: program exited", vim.log.levels.INFO)
+			end
+
+			-- On a panic delve parks at runtime.fatalpanic in panic.go and carries the
+			-- message in the stopped event -- nothing in the UI shows it, so you land
+			-- in unfamiliar runtime source with no idea what blew up. Surface it.
+			dap.listeners.after.event_stopped["panic_message"] = function(s, body)
+				if body.reason ~= "exception" then
+					return
+				end
+				local msg = body.text or body.description
+				if msg then
+					vim.notify("Debug panic: " .. msg, vim.log.levels.ERROR)
+				elseif s.capabilities.supportsExceptionInfoRequest then
+					s:request("exceptionInfo", { threadId = body.threadId }, function(_, resp)
+						vim.notify("Debug panic: " .. ((resp and resp.description) or "?"), vim.log.levels.ERROR)
+					end)
+				end
 			end
 
 			-- Stepping past the end of main lands in Go's runtime (runtime.main in
@@ -127,6 +161,12 @@ return {
 			-- crash. Nothing above main is yours, so end the session there instead.
 			-- current_frame is only populated once the stackTrace response lands,
 			-- which is what this hooks (see dap/session.lua get_top_frame).
+			--
+			-- Match these two names EXACTLY. A broad "^runtime%." also catches
+			-- runtime.gopanic/sigpanic/fatalpanic, which is where delve parks you on
+			-- a panic -- terminating there throws away the stack and the panic
+			-- message, which is the one moment you most need them.
+			local past_main = { ["runtime.main"] = true, ["runtime.goexit"] = true }
 			local leaving_main = false
 			dap.listeners.after.event_initialized["stop_at_runtime"] = function()
 				leaving_main = false
@@ -136,7 +176,7 @@ return {
 					return -- several stackTrace responses can be in flight; act once
 				end
 				local frame = s.current_frame
-				if frame and type(frame.name) == "string" and frame.name:match("^runtime%.") then
+				if frame and past_main[frame.name] then
 					leaving_main = true
 					vim.notify("Debug: returned from main, ending session", vim.log.levels.INFO)
 					dap.terminate()
@@ -201,6 +241,12 @@ return {
 
 			-- Keymaps
 			local map = vim.keymap.set
+			-- every path that dismisses the UI has to re-even the splits, otherwise
+			-- the windows dapui was sharing space with keep their squeezed sizes
+			local function toggle_ui()
+				dapui.toggle()
+				balance_windows()
+			end
 			-- F5 is overloaded in nvim-dap: with no session it picks a config, when
 			-- parked on a stopped thread it continues, and in every other state it
 			-- pops an 8-entry menu with Terminate/Disconnect at the top. Collapse
@@ -239,7 +285,7 @@ return {
 					table.insert(actions, { label = "Terminate session", action = dap.terminate })
 					table.insert(actions, { label = "Restart session", action = dap.restart })
 				end
-				table.insert(actions, { label = "Toggle UI", action = dapui.toggle })
+				table.insert(actions, { label = "Toggle UI", action = toggle_ui })
 				table.insert(actions, { label = "Open REPL", action = dap.repl.open })
 				vim.ui.select(actions, {
 					prompt = "Debug session> ",
@@ -259,7 +305,7 @@ return {
 				dap.set_breakpoint(vim.fn.input("Breakpoint condition: "))
 			end, { desc = "Debug: Conditional Breakpoint" })
 			map("n", "<leader>dr", dap.repl.open, { desc = "Debug: Open REPL" })
-			map("n", "<leader>du", dapui.toggle, { desc = "Debug: Toggle UI" })
+			map("n", "<leader>du", toggle_ui, { desc = "Debug: Toggle UI" })
 
 			-- Go: debug the test nearest the cursor
 			map("n", "<leader>dt", function()

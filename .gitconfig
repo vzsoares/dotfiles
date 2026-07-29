@@ -19,3 +19,8 @@
 	rebase = true
 [push]
 	autoSetupRemote = true
+[status]
+	; list untracked files individually instead of collapsing them into "dir/".
+	; a collapsed dir makes fugitive's <CR> edit a directory path, which nvim-tree
+	; hijacks and swaps in over the status window
+	showUntrackedFiles = all
