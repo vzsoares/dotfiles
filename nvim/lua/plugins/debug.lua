@@ -17,9 +17,13 @@ return {
 			local dap = require("dap")
 			local dapui = require("dapui")
 
-			-- Ensure the delve adapter is installed via Mason
+			-- Ensure the adapters are installed via Mason. These are
+			-- mason-nvim-dap source names, not package names: "python" resolves
+			-- to debugpy and "js" to js-debug-adapter (see its
+			-- mappings/source.lua). `handlers = {}` disables its automatic
+			-- adapter setup -- every adapter here is configured by hand.
 			require("mason-nvim-dap").setup({
-				ensure_installed = { "delve" },
+				ensure_installed = { "delve", "python", "js" },
 				automatic_installation = true,
 				handlers = {},
 			})
@@ -71,6 +75,13 @@ return {
 
 			-- Go: wraps delve, adds debug-test helpers
 			require("dap-go").setup()
+
+			-- JS/TS/React/Next.js (vscode-js-debug) and Python/uv (debugpy).
+			-- Kept in their own modules; this file is already Go-heavy.
+			local dap_js = require("config.dap_js")
+			local dap_python = require("config.dap_python")
+			dap_js.setup(dap)
+			dap_python.setup(dap)
 
 			-- Trim dap-go's seven configs down to the ones that still differ once
 			-- `program` is pinned below: "Debug", "Debug (Arguments & Build Flags)"
@@ -444,7 +455,10 @@ return {
 					vim.notify("Debug: " .. what, vim.log.levels.INFO)
 					return
 				end
-				if not s then
+				-- Go needs its launch configs re-pointed at the current package
+				-- before every start (see the ${fileDirname} note above); the
+				-- JS/Python configs resolve their own cwd at launch time.
+				if not s and vim.bo.filetype == "go" then
 					local _, dir = go_source_buf()
 					if dir then
 						for _, cfg in ipairs(dap.configurations.go) do
@@ -504,10 +518,38 @@ return {
 				dapui.eval(nil, { enter = true })
 			end, { desc = "Debug: Eval under cursor" })
 
-			-- Go: debug the test nearest the cursor
+			-- Debug the current file's tests. Go gets dap-go's cursor-aware
+			-- helper; the others run the named config for their runner.
+			local function run_named_config(ft, name)
+				for _, cfg in ipairs(dap.configurations[ft] or {}) do
+					if cfg.name == name then
+						dap.run(cfg)
+						return true
+					end
+				end
+				return false
+			end
 			map("n", "<leader>dt", function()
-				require("dap-go").debug_test()
-			end, { desc = "Debug: Go test nearest cursor" })
+				local ft = vim.bo.filetype
+				if ft == "go" then
+					require("dap-go").debug_test()
+					return
+				end
+				if ft == "python" then
+					run_named_config(ft, dap_python.test_config)
+					return
+				end
+				if vim.tbl_contains(dap_js.filetypes, ft) then
+					local name = dap_js.test_config()
+					if not name then
+						vim.notify("Debug: no vitest or jest in node_modules", vim.log.levels.WARN)
+						return
+					end
+					run_named_config(ft, name)
+					return
+				end
+				vim.notify("Debug: no test runner for filetype " .. ft, vim.log.levels.WARN)
+			end, { desc = "Debug: test for current file" })
 		end,
 	},
 }
