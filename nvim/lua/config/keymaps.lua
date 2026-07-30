@@ -36,8 +36,25 @@ vim.keymap.set("n", "<C-z>", "", {
     silent = true
 })
 
+-- Reload the current config file. Bare `:so` executes the BUFFER as Vimscript,
+-- so hitting this in any other filetype tries to run the source as Ex commands
+-- (a .tsx buffer dies on `'use client';` with E481). Only source what can be
+-- sourced.
 vim.keymap.set("n", "<leader><leader>", function()
-    vim.cmd("so")
-end)
+    local ft = vim.bo.filetype
+    if ft ~= "lua" and ft ~= "vim" then
+        vim.notify("Nothing to source: " .. (ft == "" and "no filetype" or ft), vim.log.levels.WARN)
+        return
+    end
+    -- name the file explicitly rather than relying on the bare form
+    local file = vim.api.nvim_buf_get_name(0)
+    if file == "" then
+        vim.notify("Nothing to source: buffer has no file", vim.log.levels.WARN)
+        return
+    end
+    local ok, err = pcall(vim.cmd.source, file)
+    vim.notify(ok and ("Sourced " .. vim.fn.fnamemodify(file, ":t")) or tostring(err),
+        ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+end, { desc = "Source current file" })
 
 vim.keymap.set("v", "<leader>ae", ":CodeCompanion /buffer ", { noremap = true, silent = false })
