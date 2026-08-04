@@ -1,0 +1,15 @@
+/* Print-heavy diagrams: let the cards and screenshots breathe.
+   Pairs with .zen-diagram.json (wrappingWidth 640) — mermaid caps the label
+   before CSS applies, so raising only one of the two does nothing useful. */
+.zen-card {
+    max-width: 640px;
+}
+
+.zen-shot,
+.zen-shot.lg {
+    max-width: 620px;
+}
+
+.zen-shot.sm {
+    max-width: 280px;
+}

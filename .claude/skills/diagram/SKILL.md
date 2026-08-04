@@ -123,25 +123,22 @@ Mermaid measures an HTML label against `flowchart.wrappingWidth` (default
 ~200px) **before** any CSS max-width applies. So `class=zen-shot lg` and a
 `width=` attribute both look like they do nothing — every screenshot lands at
 the same postage-stamp size, and you will waste a render cycle testing them
-against each other. Raise the wrap first, in a `.zen-diagram.json` beside the
-diagram — the ignored assets directory is a fine home for it, since the
-walk-up starts at the `.mmd`:
+against each other.
 
-```json
-{ "flowchart": { "wrappingWidth": 640 } }
+The fix is a pair of files, shipped with this skill. Drop them beside the
+`.mmd` — the ignored assets directory is a fine home, since the walk-up starts
+at the diagram:
+
+```sh
+cp ~/.claude/skills/diagram/presets/prints/.zen-diagram.* docs/.diagram-assets/
 ```
 
-then let a sibling `.zen-diagram.css` widen the card and the print:
-
-```css
-.zen-card { max-width: 640px; }
-.zen-shot, .zen-shot.lg { max-width: 620px; }
-.zen-shot.sm { max-width: 280px; }
-```
-
-Both halves are needed, and each caps the other. Measured on the same
-print-heavy flow: neither → prints at ~215px; `wrappingWidth` alone → ~300px,
-where `.zen-card`/`.zen-shot` take over; both → the ~600px you asked for.
+`.zen-diagram.json` raises `flowchart.wrappingWidth` to 640; `.zen-diagram.css`
+lifts `.zen-card` to 640px and `.zen-shot` to 620px. Both halves are needed and
+each caps the other — measured on the same print-heavy flow: neither → prints
+at ~215px; `wrappingWidth` alone → ~300px, where `.zen-card`/`.zen-shot` take
+over; both → the ~600px you asked for. Edit the numbers in the copies, not in
+the preset.
 
 **Crop for the node, not for the page.** A 1500×460 hero screenshot capped at
 the label width is a 60px sliver. Crop to the part that carries the point — the
