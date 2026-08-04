@@ -19,20 +19,36 @@ export type OutputFormat = 'svg' | 'png' | 'pdf';
 /** mermaid's own default; see the note in `renderFile`. */
 const DEFAULT_MAX_TEXT_SIZE = 50_000;
 
-/** Chrome is already installed system-wide; puppeteer's own download is skipped. */
-const CHROME_CANDIDATES = [
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/brave',
-    '/opt/google/chrome/chrome',
-];
+/**
+ * Chrome is expected to be installed system-wide; puppeteer's own download is
+ * skipped (see .npmrc). Falls back to puppeteer's `channel: 'chrome'` lookup
+ * when none of these exist, so an unlisted install still works.
+ */
+export function chromeCandidates(
+    platform: NodeJS.Platform = process.platform,
+): string[] {
+    if (platform === 'darwin') {
+        return [
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            '/Applications/Chromium.app/Contents/MacOS/Chromium',
+            '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        ];
+    }
+    return [
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/brave',
+        '/opt/google/chrome/chrome',
+    ];
+}
 
 function findChrome(): string | undefined {
     const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH;
     if (fromEnv) return fromEnv;
-    return CHROME_CANDIDATES.find((path) => existsSync(path));
+    return chromeCandidates().find((path) => existsSync(path));
 }
 
 export async function launchBrowser(): Promise<Browser> {

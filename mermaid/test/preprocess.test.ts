@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 
 import { preprocess } from '../src/preprocess.ts';
+import { chromeCandidates } from '../src/render.ts';
 
 const FIXTURES = join(import.meta.dir, 'fixtures');
 /** Any path in this dir; only its dirname is used to resolve relative assets. */
@@ -144,5 +145,28 @@ describe('comments', () => {
         expect(text).toContain(PNG_PREFIX);
         // no mask placeholder leaked through
         expect(text).not.toContain('\u0000');
+    });
+});
+
+describe('chrome discovery', () => {
+    test('macOS candidates are .app bundle paths', () => {
+        const mac = chromeCandidates('darwin');
+        expect(mac.length).toBeGreaterThan(0);
+        expect(mac.every((path) => path.includes('.app/Contents/MacOS/'))).toBe(
+            true,
+        );
+        expect(mac[0]).toContain('Google Chrome');
+    });
+
+    test('linux candidates are plain unix binaries', () => {
+        const linux = chromeCandidates('linux');
+        expect(linux.length).toBeGreaterThan(0);
+        expect(linux.every((path) => path.startsWith('/'))).toBe(true);
+        expect(linux.some((path) => path.includes('.app/'))).toBe(false);
+    });
+
+    test('the two platforms do not share a path', () => {
+        const mac = new Set(chromeCandidates('darwin'));
+        expect(chromeCandidates('linux').some((p) => mac.has(p))).toBe(false);
     });
 });

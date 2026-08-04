@@ -35,6 +35,11 @@ Useful flags: `-t zen-light`, `-b transparent`, `-w/--height`, `-s <scale>`,
 so the file stands alone. Use PNG when the target can't render SVG, or when you
 need to look at the result yourself.
 
+`-s 2` only sharpens the vector chrome. An embedded screenshot carries the
+resolution it was captured at, so a 2× PNG of a print-heavy diagram is mostly a
+bigger file — render those at `-s 1` and re-capture the print if you need
+detail.
+
 ## Workflow
 
 1. Collect the screenshots and data you need into an **ignored** assets
@@ -68,7 +73,7 @@ Then reference it relatively: `@img(./.diagram-assets/login.png)`.
 
 Commit the `.mmd` and the rendered output. Do not commit the assets.
 
-Two things to get right:
+A few things to get right:
 
 - **Don't put referenced assets in the session scratchpad.** It is
   session-scoped, so the `.mmd` breaks the next time anyone renders it.
@@ -76,6 +81,15 @@ Two things to get right:
   at ignored assets cannot be re-rendered from a clean checkout — the rendered
   output is the reproducible artifact. If the diagram needs to stay re-renderable
   by other people or by CI, tell the user and commit the assets instead.
+- **If only the rendered file is wanted, the `.mmd` goes in the ignored
+  directory too** — and the re-render command goes into whatever doc embeds the
+  diagram, so the next person can find it: `zen-diagram
+  docs/.diagram-assets/<name>.mmd -f png --out-dir docs`.
+- **A repo linter may choke on the rendered SVG.** biome ≥2.5 parses `.svg` as
+  HTML, so a `lint-staged` pre-commit hook rejects a committed diagram with
+  dozens of bogus errors. Ignore `*.svg` in the linter config, or commit the
+  PNG. (Watch the commit actually land — a wrapper script may report success
+  while the hook rejected it.)
 
 ## Embedding screenshots and HTML
 
@@ -103,6 +117,58 @@ flowchart TD
     A -->|"REST"| B
 ```
 
+## Sizing prints
+
+Mermaid measures an HTML label against `flowchart.wrappingWidth` (default
+~200px) **before** any CSS max-width applies. So `class=zen-shot lg` and a
+`width=` attribute both look like they do nothing — every screenshot lands at
+the same postage-stamp size, and you will waste a render cycle testing them
+against each other. Raise the wrap first, in a `.zen-diagram.json` beside the
+diagram — the ignored assets directory is a fine home for it, since the
+walk-up starts at the `.mmd`:
+
+```json
+{ "flowchart": { "wrappingWidth": 640 } }
+```
+
+then let a sibling `.zen-diagram.css` widen the card and the print:
+
+```css
+.zen-card { max-width: 640px; }
+.zen-shot, .zen-shot.lg { max-width: 620px; }
+.zen-shot.sm { max-width: 280px; }
+```
+
+Both halves are needed, and each caps the other. Measured on the same
+print-heavy flow: neither → prints at ~215px; `wrappingWidth` alone → ~300px,
+where `.zen-card`/`.zen-shot` take over; both → the ~600px you asked for.
+
+**Crop for the node, not for the page.** A 1500×460 hero screenshot capped at
+the label width is a 60px sliver. Crop to the part that carries the point — the
+card, the drawer, the result list — so the shape is closer to square. A
+full-page shot earns a node only when "where this lives on the page" is itself
+the message.
+
+## Flows for readers outside the team
+
+When the audience is a PM, a designer or a client rather than the person who
+wrote the code:
+
+- **Screenshots carry the story, edges are the clicks.** Label each edge with
+  what the user does — "clique · Ver imóveis com desconto" — not with the
+  handler that runs.
+- **Cut the file and component nodes.** `HeroHeader/index.tsx → HeroCarousel`
+  means nothing to them. One or two text nodes are fine; a chain of them is a
+  different diagram for a different reader.
+- **End on the destination screen.** A node that reads `/busca?uf=RJ` is a
+  guess; a screenshot of that page with results in it is the payoff.
+- **One labelled subgraph per system.** Anything crossing into another site,
+  app or partner gets its own box with the name in the title, and the crossing
+  edge says so ("sai do site Approva"). Without that box, a destination
+  screenshot reads as just one more example of the thing above it — this is the
+  single most common "the diagram isn't clear" complaint.
+- **`A <--> B` beats two labelled edges** for "you can go back and forth".
+
 ## Rules that bite
 
 1. **Single quotes only inside a label.** A `"` ends the mermaid label, so
@@ -115,6 +181,12 @@ flowchart TD
 4. **Directives inside `%%` comments are not expanded** — safe to comment one out.
 5. **Escape `<` and `>` in visible text** as `&lt;` / `&gt;`, or it is parsed as
    a tag and vanishes.
+6. **Repeated spaces collapse.** Labels and subgraph titles are HTML, so a
+   letterspacing hack like `"S I T E   A P P R O V A"` loses the gap between
+   words and reads as one run. Space it with CSS or not at all.
+7. **Decorative glyphs may not be in the font.** `▸`, `◂`, arrows and dingbats
+   fall back to a blob in the mono stack — the label still renders, just wrong.
+   Write the word ("clique na seta da direita").
 
 ## Styling
 
@@ -156,6 +228,11 @@ one is a common wrong guess that appears to do nothing.
 - **Parse error pointing at line 1** — almost always a bare `%%` line.
 - **Screenshot missing, no error** — check stderr for `asset not found`; the
   path is resolved relative to the file it is written in.
+- **Every print is postage-stamp sized** — `flowchart.wrappingWidth`, not CSS.
+  See Sizing prints; `class=zen-shot lg` on its own will not move it.
+- **A `.zen-diagram.*` override seems ignored** — the walk-up starts at the
+  directory of the *first input file*, not the cwd. Check you are pointing at
+  the diagram you think you are.
 - **Chrome won't launch** — set `PUPPETEER_EXECUTABLE_PATH`.
 - **`zen-diagram: command not found`** — run `bun install` in `mermaid/`, then
   `./link-bin` from the dotfiles root.

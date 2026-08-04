@@ -22,8 +22,11 @@ cd mermaid && bun install
 cd .. && ./link-bin                  # puts zen-diagram on PATH
 ```
 
-Chrome is found automatically (`/usr/bin/google-chrome-stable` and friends);
-puppeteer's own download is skipped. Override with `PUPPETEER_EXECUTABLE_PATH`.
+Chrome is found automatically — `/usr/bin/google-chrome-stable` and friends on
+Linux, `/Applications/Google Chrome.app/…` on macOS — and puppeteer falls back to
+its own `channel: 'chrome'` lookup if none match, so an unlisted install still
+works. puppeteer's bundled download is skipped. Override with
+`PUPPETEER_EXECUTABLE_PATH`.
 
 ## Screenshots and custom HTML
 
