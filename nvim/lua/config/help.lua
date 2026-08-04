@@ -28,6 +28,7 @@ local SECTIONS = {
         {
             { "<C-h>",      "Toggle NvimTree" },
             { "<leader>pv", "Toggle NvimTree" },
+            { "T",          "In NvimTree: open node in file manager (Thunar / Finder)" },
             { "<C-p>",      "Find git files (Telescope)" },
             { "<leader>pf", "Find files (Telescope)" },
             { "<leader>ps", "Grep string in project (Telescope)" },
