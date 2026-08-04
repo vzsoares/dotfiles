@@ -118,6 +118,37 @@ return {
 
 				-- default mappings
 				api.config.mappings.default_on_attach(bufnr)
+
+				-- open the node under the cursor in Thunar; set after the
+				-- defaults so it wins any future upstream binding of "T"
+				vim.keymap.set("n", "T", function()
+					if vim.fn.executable("thunar") == 0 then
+						vim.notify("thunar is not installed", vim.log.levels.ERROR)
+						return
+					end
+
+					local node = api.tree.get_node_under_cursor()
+					local path
+					if not node or node.name == ".." then
+						-- the ".." row, and an empty tree, both mean the root
+						local root = api.tree.get_nodes()
+						path = root and root.absolute_path
+					elseif node.type == "directory" then
+						path = node.absolute_path
+					else
+						-- Thunar opens folders, not documents: show the file's
+						-- directory rather than handing it a file path
+						path = vim.fn.fnamemodify(node.absolute_path, ":h")
+					end
+
+					if not path then
+						vim.notify("nvim-tree: no path under the cursor", vim.log.levels.WARN)
+						return
+					end
+
+					-- detached, so Thunar outlives this nvim session
+					vim.system({ "thunar", path }, { detach = true })
+				end, opts("Open in Thunar"))
 			end
 
 			opts.on_attach = my_on_attach
