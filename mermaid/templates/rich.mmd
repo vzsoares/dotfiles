@@ -1,0 +1,29 @@
+%% Rich labels: real HTML lives inside the node, styled by themes/zen.css.
+%% Rules that bite:
+%%   - wrap the label in ["..."] and use SINGLE quotes inside it
+%%     (a double quote ends the mermaid label)
+%%   - keep each label on one line
+%%   - never leave a bare "%%" line: mermaid only strips a comment that has
+%%     content after the marker, so an empty one reaches the parser
+%% To embed a screenshot or an HTML partial, uncomment and point at real files:
+%%   G["@img(./shots/login.png)"]
+%%   H["@html(./partials/card.html, title=Auth, badge=ok)"]
+
+flowchart TD
+    A["<div class='zen-card'><span class='zen-title'>Web app</span><span class='zen-sub'>React · Vite</span><span class='zen-badge info'>edge</span></div>"]
+
+    B["<div class='zen-card'><span class='zen-title'>API</span><table class='zen-kv'><tr><td>runtime</td><td>bun</td></tr><tr><td>port</td><td>3000</td></tr></table></div>"]
+
+    C["<div class='zen-card'><span class='zen-title'>Postgres</span><span class='zen-sub'>primary + read replica</span><span class='zen-badge ok'>healthy</span></div>"]
+
+    D["<div class='zen-card'><span class='zen-title'>Worker</span><span class='zen-sub'>queue consumer</span><span class='zen-code'>bun run worker</span></div>"]
+
+    A -->|"REST"| B
+    B --> C
+    B -->|"enqueue"| D
+    D --> C
+
+    class A zen-accent-blue
+    class B zen-accent-mauve
+    class C zen-accent-green
+    class D zen-accent-yellow

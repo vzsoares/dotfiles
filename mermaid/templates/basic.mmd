@@ -1,0 +1,8 @@
+flowchart LR
+    A[Client] --> B{Gateway}
+    B -->|authorised| C[Service]
+    B -->|rejected| D[401]
+    C --> E[(Database)]
+
+    class C zen-accent-green
+    class D zen-accent-red

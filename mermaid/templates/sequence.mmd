@@ -1,0 +1,17 @@
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant W as Web
+    participant A as API
+    participant D as DB
+
+    U->>W: submit form
+    W->>A: POST /orders
+    activate A
+    A->>D: INSERT order
+    D-->>A: id
+    A-->>W: 201 Created
+    deactivate A
+    W-->>U: confirmation
+
+    Note over A,D: wrapped in a transaction

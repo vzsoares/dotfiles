@@ -1,0 +1,178 @@
+/*
+ * zen (catppuccin mocha) — CSS injected into the rendering page.
+ *
+ * This is where custom HTML in labels gets styled. Anything you write inside a
+ * node label (`A["<div class='card'>…</div>"]`) is real DOM inside a
+ * <foreignObject>, so these rules apply to it.
+ */
+
+/* ── base ─────────────────────────────────────────────────────────────── */
+
+.nodeLabel,
+.edgeLabel,
+.label {
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+}
+
+/* Deliberately no padding/background on .edgeLabel: mermaid measures the label
+ * into a fixed <foreignObject>, and padding on that inline span throws the
+ * measurement out (the box grows to 3x and the backdrop paints as a cross).
+ * Mermaid's own edge-label backdrop already picks up `edgeLabelBackground`. */
+.edgeLabel {
+    border-radius: 4px;
+}
+
+/* subgraph titles */
+.cluster > .cluster-label .nodeLabel,
+.cluster-label .nodeLabel {
+    font-weight: 600;
+    color: #cba6f7;
+}
+
+/* ── custom HTML helpers ──────────────────────────────────────────────
+ * Use these classes inside node labels. Keep HTML on one line and prefer
+ * single quotes for attributes (see README).
+ * ────────────────────────────────────────────────────────────────────── */
+
+.zen-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 2px;
+    max-width: 320px;
+}
+
+.zen-card .zen-title {
+    font-weight: 700;
+    font-size: 15px;
+    color: #cdd6f4;
+}
+
+.zen-card .zen-sub {
+    font-size: 12px;
+    color: #a6adc8;
+    line-height: 1.35;
+}
+
+/* screenshots / "prints" */
+.zen-shot {
+    display: block;
+    max-width: 300px;
+    border-radius: 6px;
+    border: 1px solid #585b70;
+    box-shadow: 0 2px 10px rgba(17, 17, 27, 0.55);
+}
+
+.zen-shot.sm {
+    max-width: 160px;
+}
+.zen-shot.lg {
+    max-width: 460px;
+}
+
+/* small inline icon, sits on the text baseline */
+.zen-icon {
+    height: 1.15em;
+    width: auto;
+    vertical-align: -0.18em;
+    margin-right: 4px;
+    border-radius: 3px;
+}
+
+/* pill / badge */
+.zen-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #45475a;
+    color: #cdd6f4;
+}
+
+.zen-badge.ok {
+    background: #a6e3a1;
+    color: #11111b;
+}
+.zen-badge.warn {
+    background: #f9e2af;
+    color: #11111b;
+}
+.zen-badge.err {
+    background: #f38ba8;
+    color: #11111b;
+}
+.zen-badge.info {
+    background: #89b4fa;
+    color: #11111b;
+}
+
+/* key/value table inside a node */
+.zen-kv {
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.zen-kv td {
+    padding: 2px 8px 2px 0;
+    text-align: left;
+    color: #cdd6f4;
+}
+
+.zen-kv td:first-child {
+    color: #a6adc8;
+    font-weight: 600;
+}
+
+/* muted / monospace snippets */
+.zen-code {
+    font-family: "JetBrainsMono Nerd Font", monospace;
+    font-size: 12px;
+    background: #11111b;
+    color: #a6e3a1;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.zen-muted {
+    color: #6c7086;
+}
+
+/* ── node accents: class N zen-accent-blue ────────────────────────────── */
+
+.zen-accent-blue > rect,
+.zen-accent-blue > polygon,
+.zen-accent-blue > circle,
+.zen-accent-blue > path {
+    stroke: #89b4fa !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-green > rect,
+.zen-accent-green > polygon,
+.zen-accent-green > circle,
+.zen-accent-green > path {
+    stroke: #a6e3a1 !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-red > rect,
+.zen-accent-red > polygon,
+.zen-accent-red > circle,
+.zen-accent-red > path {
+    stroke: #f38ba8 !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-yellow > rect,
+.zen-accent-yellow > polygon,
+.zen-accent-yellow > circle,
+.zen-accent-yellow > path {
+    stroke: #f9e2af !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-mauve > rect,
+.zen-accent-mauve > polygon,
+.zen-accent-mauve > circle,
+.zen-accent-mauve > path {
+    stroke: #cba6f7 !important;
+    stroke-width: 2px !important;
+}

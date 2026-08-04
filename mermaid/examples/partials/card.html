@@ -1,0 +1,14 @@
+<!--
+  An @html partial. {{placeholders}} are filled from the call site:
+      @html(./partials/card.html, title=Editor, sub=neovim, shot=../../static/nvim.png, badge=ok, state=live)
+
+  Paths inside a partial resolve against the PARTIAL's directory.
+  Double quotes are rewritten to single quotes on inline, but writing single
+  quotes here keeps what you see closer to what you get.
+-->
+<div class='zen-card'>
+  <span class='zen-title'>{{title}}</span>
+  <img src='{{shot}}' class='zen-shot sm' alt='{{title}} screenshot'/>
+  <span class='zen-sub'>{{sub}}</span>
+  <span class='zen-badge {{badge}}'>{{state}}</span>
+</div>

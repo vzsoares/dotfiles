@@ -1,0 +1,24 @@
+{
+    "name": "zen-diagram",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Themed mermaid renderer with screenshot + custom HTML support",
+    "bin": {
+        "zen-diagram": "./src/cli.ts"
+    },
+    "scripts": {
+        "check": "bunx --bun tsc --noEmit",
+        "test": "bun test"
+    },
+    "dependencies": {
+        "@mermaid-js/mermaid-cli": "^11.16.0",
+        "puppeteer": "25.5.0"
+    },
+    "devDependencies": {
+        "@types/bun": "latest"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    }
+}

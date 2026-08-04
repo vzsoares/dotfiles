@@ -1,0 +1,17 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+    "extends": ["../biome.json"],
+    "files": {
+        "includes": ["!examples/partials", "!test/fixtures"]
+    },
+    "overrides": [
+        {
+            "includes": ["themes/*.css"],
+            "linter": {
+                "rules": {
+                    "complexity": { "noImportantStyles": "off" }
+                }
+            }
+        }
+    ]
+}

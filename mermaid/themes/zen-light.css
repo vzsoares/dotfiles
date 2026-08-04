@@ -1,0 +1,163 @@
+/*
+ * zen-light (catppuccin latte) — CSS injected into the rendering page.
+ * Mirrors themes/zen.css; see that file for what each helper is for.
+ */
+
+/* ── base ─────────────────────────────────────────────────────────────── */
+
+.nodeLabel,
+.edgeLabel,
+.label {
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+}
+
+/* No padding on .edgeLabel — see the note in themes/zen.css. */
+.edgeLabel {
+    border-radius: 4px;
+}
+
+.cluster > .cluster-label .nodeLabel,
+.cluster-label .nodeLabel {
+    font-weight: 600;
+    color: #8839ef;
+}
+
+/* ── custom HTML helpers ──────────────────────────────────────────────── */
+
+.zen-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 2px;
+    max-width: 320px;
+}
+
+.zen-card .zen-title {
+    font-weight: 700;
+    font-size: 15px;
+    color: #4c4f69;
+}
+
+.zen-card .zen-sub {
+    font-size: 12px;
+    color: #6c6f85;
+    line-height: 1.35;
+}
+
+.zen-shot {
+    display: block;
+    max-width: 300px;
+    border-radius: 6px;
+    border: 1px solid #acb0be;
+    box-shadow: 0 2px 10px rgba(76, 79, 105, 0.18);
+}
+
+.zen-shot.sm {
+    max-width: 160px;
+}
+.zen-shot.lg {
+    max-width: 460px;
+}
+
+.zen-icon {
+    height: 1.15em;
+    width: auto;
+    vertical-align: -0.18em;
+    margin-right: 4px;
+    border-radius: 3px;
+}
+
+.zen-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #ccd0da;
+    color: #4c4f69;
+}
+
+.zen-badge.ok {
+    background: #40a02b;
+    color: #eff1f5;
+}
+.zen-badge.warn {
+    background: #df8e1d;
+    color: #eff1f5;
+}
+.zen-badge.err {
+    background: #d20f39;
+    color: #eff1f5;
+}
+.zen-badge.info {
+    background: #1e66f5;
+    color: #eff1f5;
+}
+
+.zen-kv {
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.zen-kv td {
+    padding: 2px 8px 2px 0;
+    text-align: left;
+    color: #4c4f69;
+}
+
+.zen-kv td:first-child {
+    color: #6c6f85;
+    font-weight: 600;
+}
+
+.zen-code {
+    font-family: "JetBrainsMono Nerd Font", monospace;
+    font-size: 12px;
+    background: #dce0e8;
+    color: #40a02b;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.zen-muted {
+    color: #9ca0b0;
+}
+
+/* ── node accents: class N zen-accent-blue ────────────────────────────── */
+
+.zen-accent-blue > rect,
+.zen-accent-blue > polygon,
+.zen-accent-blue > circle,
+.zen-accent-blue > path {
+    stroke: #1e66f5 !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-green > rect,
+.zen-accent-green > polygon,
+.zen-accent-green > circle,
+.zen-accent-green > path {
+    stroke: #40a02b !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-red > rect,
+.zen-accent-red > polygon,
+.zen-accent-red > circle,
+.zen-accent-red > path {
+    stroke: #d20f39 !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-yellow > rect,
+.zen-accent-yellow > polygon,
+.zen-accent-yellow > circle,
+.zen-accent-yellow > path {
+    stroke: #df8e1d !important;
+    stroke-width: 2px !important;
+}
+.zen-accent-mauve > rect,
+.zen-accent-mauve > polygon,
+.zen-accent-mauve > circle,
+.zen-accent-mauve > path {
+    stroke: #8839ef !important;
+    stroke-width: 2px !important;
+}

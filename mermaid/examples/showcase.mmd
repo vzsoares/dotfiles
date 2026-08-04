@@ -1,0 +1,25 @@
+%% Every embedding mechanism in one diagram. Render it with:
+%%   zen-diagram examples/showcase.mmd -f png
+%% Screenshots come from the repo's static/ dir and are inlined as data URIs.
+
+flowchart TD
+    subgraph edit ["authoring"]
+        A["@html(./partials/card.html, title=Editor, sub=nvim + lua config, shot=../../../static/nvim.png, badge=ok, state=live)"]
+        B["<div class='zen-card'><span class='zen-title'>File tree</span>@img(../../static/nvimtree.png, class=zen-shot sm)<span class='zen-sub'>nvim-tree</span></div>"]
+    end
+
+    C["<div class='zen-card'><span class='zen-title'>zen-diagram</span><table class='zen-kv'><tr><td>runtime</td><td>bun</td></tr><tr><td>theme</td><td>zen</td></tr><tr><td>out</td><td>svg/png/pdf</td></tr></table></div>"]
+
+    D["<div class='zen-card'><span class='zen-title'>Rendered</span><span class='zen-sub'>self-contained, assets inlined</span><span class='zen-badge ok'>done</span></div>"]
+
+    E["<span class='zen-muted'>plain html img →</span> <img src='../../static/base.png' class='zen-icon'/> <span class='zen-code'>&lt;img src='…'&gt;</span>"]
+
+    A --> C
+    B --> C
+    C -->|"render"| D
+    E -.-> C
+
+    class A zen-accent-blue
+    class B zen-accent-mauve
+    class C zen-accent-yellow
+    class D zen-accent-green
