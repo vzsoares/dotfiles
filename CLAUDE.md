@@ -7,6 +7,9 @@ Personal dotfiles for vzsoares. Manjaro Linux (i3).
 ```
 alacritty/    # terminal emulator config
 i3/           # i3 window manager config
+mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
+              #   custom HTML in diagram nodes — see its README.
+              #   Driven by the `diagram` skill in .claude/skills/
 nvim/         # neovim config (lua)
 tmux/         # tmux config
 zsh/          # zsh aliases, plugins, themes
@@ -25,7 +28,8 @@ Root-level link scripts:
 
 - `./link` — symlinks `.zshrc`, `.gitconfig`, `biome.json` to `~`
 - `./link-claude` — symlinks `.claude/settings.json` and `.claude/skills/` to `~/.claude/`
-- `./link-bin` — symlinks `zen-release` / `zen-commit` / `zen-pgp` into `~/.local/bin`
+- `./link-bin` — symlinks `zen-release` / `zen-commit` / `zen-pgp` / `zen-diagram`
+  into `~/.local/bin` (`zen-diagram` needs `bun install` in `mermaid/` first)
 
 Run from the repo root.
 

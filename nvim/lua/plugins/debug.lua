@@ -103,6 +103,66 @@ return {
 				dap.configurations.go = configs
 			end
 
+			-- Reverse debugging. Delve implements DAP's stepBack/reverseContinue,
+			-- but only advertises supportsStepBack once its backend is rr -- and the
+			-- only route to that over DAP is mode="replay", which makes delve set
+			-- backend=rr itself. So stepping backwards is a property of a *recording*,
+			-- not of a live process: `:GoRecord` produces a trace, this replays it.
+			local function rr_trace_root()
+				if vim.env._RR_TRACE_DIR and vim.env._RR_TRACE_DIR ~= "" then
+					return vim.env._RR_TRACE_DIR
+				end
+				if vim.env.XDG_DATA_HOME and vim.env.XDG_DATA_HOME ~= "" then
+					return vim.env.XDG_DATA_HOME .. "/rr"
+				end
+				return vim.fn.expand("~/.local/share/rr")
+			end
+			-- newest first: the trace just recorded is nearly always the wanted one.
+			-- `latest-trace` is a symlink to one of the others, so it would otherwise
+			-- show up as a duplicate entry.
+			local function rr_traces()
+				local dirs = {}
+				for _, path in ipairs(vim.fn.glob(rr_trace_root() .. "/*", true, true)) do
+					if vim.fn.isdirectory(path) == 1 and vim.fn.fnamemodify(path, ":t") ~= "latest-trace" then
+						table.insert(dirs, path)
+					end
+				end
+				table.sort(dirs, function(a, b)
+					return vim.fn.getftime(a) > vim.fn.getftime(b)
+				end)
+				return dirs
+			end
+			table.insert(dap.configurations.go, {
+				type = "delve",
+				name = "Replay (rr trace)",
+				request = "launch",
+				mode = "replay",
+				cwd = "${fileDirname}",
+				-- nvim-dap's eval_option awaits a coroutine returned by a config
+				-- function, which is what lets an async picker run here
+				traceDirPath = function()
+					return coroutine.create(function(dap_co)
+						local traces = rr_traces()
+						if #traces == 0 then
+							vim.notify(
+								"Debug: no rr traces under " .. rr_trace_root() .. " -- record one with :GoRecord",
+								vim.log.levels.WARN
+							)
+							coroutine.resume(dap_co, nil)
+							return
+						end
+						vim.ui.select(traces, {
+							prompt = "rr trace> ",
+							format_item = function(path)
+								return vim.fn.fnamemodify(path, ":t")
+							end,
+						}, function(choice)
+							coroutine.resume(dap_co, choice)
+						end)
+					end)
+				end,
+			})
+
 			-- Build/run from the current file's directory, not nvim's cwd. dap-go
 			-- points its launch configs at ${file} / ./${relativeFileDirname}; both
 			-- break for katas where each dir is its own `package main` and nvim was
@@ -112,8 +172,10 @@ return {
 			-- stackTrace with "Unable to produce stack trace" and every subsequent
 			-- step errors with "unknown goroutine 1". Stopping at a real breakpoint
 			-- in main is handled by ensure_breakpoint() below instead.
+			-- The replay config is request="launch" too, but it debugs a recording
+			-- rather than building anything -- delve rejects `program` there.
 			for _, cfg in ipairs(dap.configurations.go) do
-				if cfg.request == "launch" then
+				if cfg.request == "launch" and cfg.mode ~= "replay" then
 					cfg.program = "${fileDirname}"
 					cfg.cwd = "${fileDirname}"
 				end
@@ -430,6 +492,50 @@ return {
 				end
 			end
 
+			-- The other half of replay debugging: producing a trace. `-N -l` keeps the
+			-- binary mapped back to source, and asyncpreemptoff=1 silences Go's SIGURG
+			-- preemption storms -- the main reason rr recordings of Go programs are
+			-- flaky. Anything after :GoRecord is passed to the program as arguments.
+			vim.api.nvim_create_user_command("GoRecord", function(cmd)
+				if vim.fn.executable("rr") == 0 then
+					vim.notify("Debug: rr is not installed (sudo pacman -S rr)", vim.log.levels.ERROR)
+					return
+				end
+				local _, dir = go_source_buf()
+				if not dir then
+					vim.notify("Debug: open a Go file to record its package", vim.log.levels.ERROR)
+					return
+				end
+				-- NOT tempname(): that lives in nvim's per-session temp dir, which is
+				-- wiped on exit, and a trace outlives the nvim that recorded it. Delve
+				-- resolves the recorded binary by path when replaying.
+				local cache = vim.fn.stdpath("cache") .. "/rr-record"
+				vim.fn.mkdir(cache, "p")
+				local bin = cache .. "/" .. vim.fn.fnamemodify(dir, ":t")
+				local build = vim.system({ "go", "build", "-gcflags=all=-N -l", "-o", bin, "." }, {
+					cwd = dir,
+					text = true,
+				}):wait()
+				if build.code ~= 0 then
+					vim.notify("Debug: build failed\n" .. (build.stderr or ""), vim.log.levels.ERROR)
+					return
+				end
+				-- record in a terminal split, so the program keeps a real stdin/stdout
+				vim.cmd("botright 15new")
+				vim.fn.jobstart(vim.list_extend({ "rr", "record", bin }, cmd.fargs), {
+					term = true,
+					cwd = dir,
+					env = { GODEBUG = "asyncpreemptoff=1" },
+					on_exit = function(_, code)
+						if code == 0 then
+							vim.notify("Debug: trace recorded -- <F5> > Replay (rr trace)", vim.log.levels.INFO)
+						else
+							vim.notify("Debug: rr record exited " .. code, vim.log.levels.WARN)
+						end
+					end,
+				})
+			end, { nargs = "*", desc = "Record the current Go package with rr, for replay debugging" })
+
 			-- Keymaps
 			local map = vim.keymap.set
 			-- every path that dismisses the UI has to re-even the splits, otherwise
@@ -462,7 +568,7 @@ return {
 					local _, dir = go_source_buf()
 					if dir then
 						for _, cfg in ipairs(dap.configurations.go) do
-							if cfg.request == "launch" then
+							if cfg.request == "launch" and cfg.mode ~= "replay" then
 								cfg.program = dir
 								cfg.cwd = dir
 							end
@@ -475,6 +581,20 @@ return {
 			map("n", "<F10>", dap.step_over, { desc = "Debug: Step Over" })
 			map("n", "<F11>", dap.step_into, { desc = "Debug: Step Into" })
 			map("n", "<F12>", dap.step_out, { desc = "Debug: Step Out" })
+			-- Backwards. nvim-dap gates both on session.capabilities.supportsStepBack,
+			-- so outside an rr replay session these are silent no-ops by design.
+			map("n", "<F9>", dap.step_back, { desc = "Debug: Step Back" })
+			map("n", "<leader>dc", dap.reverse_continue, { desc = "Debug: Reverse Continue" })
+			-- Python and JS/TS get no stepBack at all: debugpy hardcodes the capability
+			-- to false and js-debug does too, and rr is no help there -- it records
+			-- native execution, so a recording of CPython or node steps through C++,
+			-- not your source. Each does offer a different partial rewind instead:
+			-- debugpy supports gotoTargets (move the pointer to another line and
+			-- re-run forward -- state is NOT restored), js-debug supports restartFrame
+			-- (re-enter the current function from the top). Both notify and no-op
+			-- where the adapter doesn't advertise them, so they're safe to map here.
+			map("n", "<leader>dg", dap.goto_, { desc = "Debug: Jump to cursor line (Python)" })
+			map("n", "<leader>dF", dap.restart_frame, { desc = "Debug: Restart frame (JS/TS)" })
 			-- session menu: the destructive actions the F5 menu used to offer, behind
 			-- their own key so they can't be hit by reflex while continuing
 			map("n", "<F6>", function()
