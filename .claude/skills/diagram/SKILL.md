@@ -37,16 +37,45 @@ need to look at the result yourself.
 
 ## Workflow
 
-1. Write the `.mmd` next to where it will be used (`docs/`, or beside the README).
-2. Render it.
-3. **Read the rendered PNG back and actually look at it.** This is the only way
+1. Collect the screenshots and data you need into an **ignored** assets
+   directory — see below.
+2. Write the `.mmd` next to where it will be used (`docs/`, or beside the README).
+3. Render it.
+4. **Read the rendered PNG back and actually look at it.** This is the only way
    to catch a clipped label, a missing screenshot, or an overlapping edge —
    none of which produce an error. If you rendered SVG, render a PNG too, just
    to inspect.
-4. Fix and re-render until it reads correctly.
+5. Fix and re-render until it reads correctly.
 
 Any warning on stderr (`asset not found`, `@html partial not found`) means the
 diagram rendered with that piece missing. Never report success over a warning.
+
+## Working assets stay out of git
+
+Screenshots, scrapes and intermediate files are **inputs, not deliverables**.
+The rendered SVG/PNG has them base64-inlined, so it already stands alone —
+committing the originals just duplicates them into the repo.
+
+Put everything you gather in a `.diagram-assets/` directory beside the diagram,
+and make sure it is ignored before writing anything into it:
+
+```sh
+mkdir -p docs/.diagram-assets
+grep -qxF '.diagram-assets/' .gitignore || echo '.diagram-assets/' >> .gitignore
+```
+
+Then reference it relatively: `@img(./.diagram-assets/login.png)`.
+
+Commit the `.mmd` and the rendered output. Do not commit the assets.
+
+Two things to get right:
+
+- **Don't put referenced assets in the session scratchpad.** It is
+  session-scoped, so the `.mmd` breaks the next time anyone renders it.
+- **Say the trade-off out loud when it bites.** A committed `.mmd` that points
+  at ignored assets cannot be re-rendered from a clean checkout — the rendered
+  output is the reproducible artifact. If the diagram needs to stay re-renderable
+  by other people or by CI, tell the user and commit the assets instead.
 
 ## Embedding screenshots and HTML
 
