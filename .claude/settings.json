@@ -24,6 +24,9 @@
     "refreshInterval": 1
   },
   "enabledPlugins": {},
+  "skillOverrides": {
+    "auto-mode-setup": "off"
+  },
   "tui": "default",
   "skipDangerousModePermissionPrompt": false,
   "skipWorkflowUsageWarning": true,
