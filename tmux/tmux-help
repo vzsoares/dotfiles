@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Personal tmux cheatsheet — popup help menu (open with <prefix> H).
+# Keep this in sync when adding/changing keybinds in tmux.conf.
+
+set -e
+
+# Section titles are lines starting with "# ", plain notes start with "• ".
+# Everything else is "<key>\t<description>".
+BOLD=$'\e[1m'
+DIM=$'\e[2m'
+CYAN=$'\e[36m'
+GREEN=$'\e[32m'
+RESET=$'\e[0m'
+
+section() { printf '\n%s\n' "${BOLD}${CYAN}  $1${RESET}"; }
+key()     { printf '    %s%-18s%s %s\n' "$GREEN" "$1" "$RESET" "$2"; }
+note()    { printf '      %s• %s%s\n' "$DIM" "$1" "$RESET"; }
+
+{
+printf '%s\n' "${BOLD}  tmux cheatsheet${RESET}   ${DIM}(q to close)${RESET}"
+printf '%s\n' "${DIM}  prefix = C-Space  (C-Space C-Space sends a literal C-Space)${RESET}"
+
+section "Sessions"
+key "<prefix> f"    "tmux-sessionizer — fzf a dir, attach/create session"
+key "<prefix> s"    "Session list (switch)"
+key "<prefix> \$"    "Rename session"
+key "<prefix> d"    "Detach client"
+key "<prefix> ("    "Previous session  ·  ) next session"
+note "detach-on-destroy off — killing a session drops you into another"
+
+section "Windows"
+key "<prefix> c"    "New window"
+key "<prefix> ,"    "Rename window"
+key "<prefix> &"    "Kill window"
+key "<prefix> w"    "Window list"
+key "<prefix> 1-9"  "Go to window N (base-index 1, auto renumbered)"
+key "M-H / M-L"     "Previous / next window (no prefix)"
+key "S-Left/Right"  "Previous / next window (no prefix)"
+key "<prefix> <"    "Window menu — l swap left, r swap right"
+
+section "Panes"
+key "<prefix> \""    "Split vertical, keep current path"
+key "<prefix> %"    "Split horizontal, keep current path"
+key "<prefix> hjkl" "Select pane left/down/up/right"
+key "M-arrows"      "Select pane (no prefix)"
+key "<prefix> z"    "Zoom / unzoom pane"
+key "<prefix> x"    "Kill pane"
+key "<prefix> {"    "Swap pane left  ·  } swap right"
+key "<prefix> space" "Cycle pane layouts"
+key "<prefix> !"    "Break pane into its own window"
+key "<prefix> q"    "Show pane numbers (type one to jump)"
+
+section "Copy mode (vi)"
+key "<prefix> ["    "Enter copy mode  ·  ] paste buffer"
+key "v"             "Begin selection  ·  V line  ·  C-v block"
+key "y / Enter"     "Copy selection to system clipboard (xclip)"
+key "C-j"           "Copy selection to system clipboard"
+key "mouse drag"    "Select + copy to clipboard"
+key "/ or ?"        "Search forward / backward  ·  n / N next-prev"
+key "g / G"         "Top / bottom  ·  C-u / C-d half page"
+key "q"             "Leave copy mode"
+note "history-limit 50000 · mouse on · set-clipboard on"
+
+section "Misc"
+key "<prefix> H"    "This cheatsheet"
+key "<prefix> ?"    "Built-in list of all key bindings"
+key "<prefix> :"    "tmux command prompt"
+key "<prefix> t"    "Big clock"
+key "<prefix> r"    "Reload tmux.conf"
+note "config: ~/.config/tmux/tmux.conf  (symlink to dotfiles/tmux)"
+printf '\n'
+} | less -R
