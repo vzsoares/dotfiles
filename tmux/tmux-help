@@ -58,7 +58,7 @@ key "C-j"           "Copy selection to system clipboard"
 key "mouse drag"    "Select + copy to clipboard"
 key "/ or ?"        "Search forward / backward  ·  n / N next-prev"
 key "g / G"         "Top / bottom  ·  C-u / C-d half page"
-key "q"             "Leave copy mode"
+key "q / Esc"       "Leave copy mode"
 note "history-limit 50000 · mouse on · set-clipboard on"
 
 section "Misc"
