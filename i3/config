@@ -95,6 +95,11 @@ bindsym $mod+F5 exec terminal -e 'mocp'
 bindsym $mod+t exec --no-startup-id pkill picom
 bindsym $mod+Ctrl+t exec --no-startup-id picom -b
 bindsym $mod+Shift+d --release exec "killall dunst; exec notify-send 'restart dunst'"
+# Dismiss every notification currently on screen (they no longer auto-expire —
+# the Claude Code hooks send them with expire-time 0). Shift brings the last
+# dismissed one back.
+bindsym $mod+p --release exec --no-startup-id "dunstctl close-all"
+bindsym $mod+Shift+p --release exec --no-startup-id "dunstctl history-pop"
 bindsym Print exec --no-startup-id i3-scrot
 bindsym $mod+Print --release exec --no-startup-id i3-scrot -w
 bindsym $mod+Shift+Print --release exec --no-startup-id i3-scrot -s
