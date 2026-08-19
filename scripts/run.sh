@@ -17,6 +17,13 @@ declare -A ALIASES=(
     ["release-dev"]="release.py --dev"
 )
 
+# Helpers that other things call rather than ones you pick by hand. They stay
+# selectable (and fuzzy-matchable) but sort to the bottom, so the scripts you
+# actually reach for keep the top of the list.
+DEMOTED=(
+    "bell.sh"
+)
+
 SCRIPTS=$(find "$SCRIPT_DIR" -maxdepth 1 \( -name "*.sh" -o -name "*.py" \) -not -name "$(basename "$0")" -not -name "test_*.py" -exec basename {} \; | sort)
 
 if [ -z "$SCRIPTS" ]; then
@@ -24,8 +31,21 @@ if [ -z "$SCRIPTS" ]; then
     exit 1
 fi
 
-# Combined, selectable list: alias names + script files, sorted together.
-CHOICES=$(printf '%s\n' "${!ALIASES[@]}" "$SCRIPTS" | sort)
+# Combined, selectable list: alias names + script files, sorted together, with
+# anything in DEMOTED moved to the end.
+ALL=$(printf '%s\n' "${!ALIASES[@]}" "$SCRIPTS" | sort)
+if [ ${#DEMOTED[@]} -gt 0 ]; then
+    DEMOTED_RE=$(printf '%s|' "${DEMOTED[@]}")
+    DEMOTED_RE="^(${DEMOTED_RE%|})$"
+    CHOICES=$(
+        {
+            printf '%s\n' "$ALL" | grep -vE "$DEMOTED_RE" || true
+            printf '%s\n' "$ALL" | grep -E "$DEMOTED_RE" || true
+        } | grep -v '^[[:space:]]*$' || true
+    )
+else
+    CHOICES="$ALL"
+fi
 
 # If the first arg isn't a flag, use it to fuzzy-match a choice; rest forwarded.
 CANDIDATES="$CHOICES"
