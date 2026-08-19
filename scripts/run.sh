@@ -22,6 +22,7 @@ declare -A ALIASES=(
 # actually reach for keep the top of the list.
 DEMOTED=(
     "bell.sh"
+    "cava.sh"
 )
 
 SCRIPTS=$(find "$SCRIPT_DIR" -maxdepth 1 \( -name "*.sh" -o -name "*.py" \) -not -name "$(basename "$0")" -not -name "test_*.py" -exec basename {} \; | sort)

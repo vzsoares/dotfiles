@@ -103,8 +103,11 @@ bindsym $mod+Shift+p --release exec --no-startup-id "dunstctl history-pop"
 bindsym Print exec --no-startup-id i3-scrot
 bindsym $mod+Print --release exec --no-startup-id i3-scrot -w
 bindsym $mod+Shift+Print --release exec --no-startup-id i3-scrot -s
-bindsym $mod+Shift+h exec xdg-open /usr/share/doc/manjaro/i3_help.pdf
+# Personal cheatsheet (i3/i3-help), replacing Manjaro's i3_help.pdf — that
+# documents the stock config, not this one.
+bindsym $mod+Shift+h exec --no-startup-id alacritty --class i3-help -o font.size=11 -e ~/.i3/i3-help
 bindsym $mod+Ctrl+x --release exec --no-startup-id xkill
+for_window [class="i3-help"] floating enable, resize set 1150 1950, move position center
 
 # focus_follows_mouse no
 

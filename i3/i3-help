@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Personal i3 cheatsheet — opens with mod+Shift+h.
+# Replaces Manjaro's shipped i3_help.pdf, which documents the stock config
+# rather than this one. Keep in sync when adding/changing keybinds in config.
+
+set -e
+
+# Section titles are lines starting with "# ", plain notes start with "• ".
+# Everything else is "<key>\t<description>".
+BOLD=$'\e[1m'
+DIM=$'\e[2m'
+CYAN=$'\e[36m'
+GREEN=$'\e[32m'
+RESET=$'\e[0m'
+
+section() { printf '\n%s\n' "${BOLD}${CYAN}  $1${RESET}"; }
+key()     { printf '    %s%-22s%s %s\n' "$GREEN" "$1" "$RESET" "$2"; }
+note()    { printf '      %s• %s%s\n' "$DIM" "$1" "$RESET"; }
+
+{
+printf '%s\n' "${BOLD}  i3 cheatsheet${RESET}   ${DIM}(q to close)${RESET}"
+printf '%s\n' "${DIM}  mod = Super (Windows key)${RESET}"
+
+section "Launch"
+key "mod+Return"          "Terminal (alacritty)"
+key "mod+d"               "dmenu (recency-ordered)"
+key "mod+z"               "Categorised menu (morc_menu)"
+key "mod+F2"              "Browser (Chrome)"
+key "mod+F3"              "File manager (pcmanfm)  ·  Shift for root"
+key "mod+F5"              "Music player (mocp)"
+key "mod+Ctrl+b"          "bmenu — CLI config tool"
+key "mod+Ctrl+m"          "pavucontrol — audio mixer"
+
+section "Windows"
+key "mod+Shift+q"         "Close focused window"
+key "mod+Ctrl+x"          "xkill — click a window to kill it"
+key "mod+f"               "Fullscreen toggle"
+key "mod+Shift+space"     "Floating toggle"
+key "mod+space"           "Focus between tiling / floating"
+key "mod+Shift+s"         "Sticky toggle (follows you across workspaces)"
+key "mod+a"               "Focus parent container"
+key "mod+minus"           "Show scratchpad  ·  Shift+minus sends window there"
+
+section "Focus & move"
+key "mod+j k l ;"         "Focus left / down / up / right"
+key "mod+Shift+j k l ;"   "Move window left / down / up / right"
+note "arrow keys work everywhere the letters do"
+
+section "Layout"
+key "mod+h"               "Split horizontal (next window opens beside)"
+key "mod+v"               "Split vertical (next window opens below)"
+key "mod+q"               "Toggle split direction"
+key "mod+s"               "Stacking layout"
+key "mod+w"               "Tabbed layout"
+key "mod+e"               "Toggle split layout"
+key "mod+u / y / n"       "Border: none / 1px / normal"
+key "mod+m"               "Hide/show the i3 bar"
+
+section "Workspaces"
+key "mod+1..8"            "Switch to workspace"
+key "mod+Shift+1..8"      "Move window there and follow"
+key "mod+Ctrl+1..8"       "Move window there, stay put"
+key "mod+Ctrl+Left/Right" "Previous / next workspace"
+key "mod+b"               "Back-and-forth  ·  Shift+b takes the window along"
+
+section "Notifications"
+key "mod+p"               "Dismiss every notification on screen"
+key "mod+Shift+p"         "Bring the last dismissed one back"
+key "mod+Shift+d"         "Restart dunst"
+note "Claude Code toasts never auto-expire — mod+p is how you clear them"
+
+section "Screenshots"
+key "Print"               "Whole screen"
+key "mod+Print"           "Focused window"
+key "mod+Shift+Print"     "Select a region"
+
+section "Transparency"
+key "mod+t"               "Kill picom (transparency off)"
+key "mod+Ctrl+t"          "Start picom (transparency on)"
+
+section "Modes"
+key "mod+r"               "Resize mode — j/k/l/; or arrows, Enter/Esc to exit"
+key "mod+Shift+g"         "Gaps mode — o outer / i inner, then +/-/0"
+note "in gaps mode, Shift+ +/-/0 applies to every workspace"
+key "mod+0"               "System mode — (l)ock (e)xit (s)uspend (u)ser"
+note "                    (h)ibernate (r)eboot Shift+(s)hutdown"
+
+section "i3 itself"
+key "mod+Shift+c"         "Reload config"
+key "mod+Shift+r"         "Restart in place (keeps your session)"
+key "mod+Shift+e"         "Exit i3 (ends the X session)"
+key "mod+Shift+h"         "This cheatsheet"
+note "config: ~/.i3/config  (symlink to dotfiles/i3)"
+
+section "Media keys"
+key "Volume up/down/mute" "pactl on sink 2"
+key "Play / Next / Prev"  "playerctl"
+note "playerctl is NOT installed — the play/next/prev keys are inert"
+
+printf '\n'
+} | less -R -Q

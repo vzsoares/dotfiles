@@ -1,0 +1,45 @@
+# bars — thin spectrum bars (default)
+#
+# Catppuccin Mocha, matching mermaid/themes/zen.json.
+#
+# output method is `noncurses` on purpose: the ncurses backend paints hex
+# colours by REDEFINING terminal palette entries, which needs terminfo `ccc`.
+# tmux has no such capability, so under ncurses every preset silently fell back
+# to the default xterm ramp and they all looked identical. noncurses writes
+# 24-bit colour directly and works anywhere.
+#
+# Default config (~/.config/cava/config); plain `cava` uses it.
+# Alternates live in presets/ — pick one with `zen-cava`.
+
+[general]
+framerate = 60
+bars = 0
+autosens = 1
+bar_width = 1
+bar_spacing = 1
+
+[input]
+method = pulse
+source = auto
+
+[output]
+method = noncurses
+channels = stereo
+# orientation: bottom (grow up, default) · top (hang down) · horizontal
+# (grow up AND down from a centre line — see the `center` preset).
+# left/right need the ncurses backend, which cannot do hex colours in tmux.
+orientation = bottom
+
+[color]
+background = default
+gradient = 1
+gradient_count = 5
+# blue, mauve, green, yellow, red
+gradient_color_1 = '#89b4fa'
+gradient_color_2 = '#cba6f7'
+gradient_color_3 = '#a6e3a1'
+gradient_color_4 = '#f9e2af'
+gradient_color_5 = '#f38ba8'
+
+[smoothing]
+noise_reduction = 77

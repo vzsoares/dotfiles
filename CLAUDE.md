@@ -6,6 +6,7 @@ Personal dotfiles for vzsoares. Manjaro Linux (i3).
 
 ```
 alacritty/    # terminal emulator config
+cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
 i3/           # i3 window manager config
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.

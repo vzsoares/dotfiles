@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -e
+
+mkdir -p ~/.config/cava
+rm -f ~/.config/cava/config
+ln -s "$(pwd)/config" ~/.config/cava/config
+echo "linked cava/config -> ~/.config/cava/config"
