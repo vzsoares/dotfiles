@@ -5,8 +5,9 @@ Utility scripts for this dotfiles repo. The Python scripts are
 deps in a `# /// script` header and run via the `#!/usr/bin/env -S uv run --script`
 shebang, so no virtualenv setup is needed.
 
-`zen-commit` and `zen-release` are symlinked onto `PATH` as global commands by
-the root `./link-bin` script.
+The `zen-*` commands are symlinked onto `PATH` by the root `./link-bin` script,
+which owns the authoritative name → source table. `./link-bin --check` reports
+drift (missing, dangling, or unmanaged links) without changing anything.
 
 ## Commands
 
@@ -15,6 +16,10 @@ the root `./link-bin` script.
 | `commit.py` | `zen-commit` | Conventional-Commit helper: stage → secret-scan → AI message (claude haiku) → commit. |
 | `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
+| `env-build.py` | `zen-env` | Resolves `.env.example` parameters from AWS SSM Parameter Store. |
+| `hash.sh` | `zen-hash` | `sha256sum` helper: hashes files given as args, or gum-picks them. |
+| `ytdl.py` | `zen-ytdl` | Interactive `yt-dlp` downloader with WhatsApp-safe re-encode. |
+| `bell.sh` | `zen-bell` | Plays a feedback sound / desktop notification, unless the terminal is focused. |
 | `run.sh` | — | Fuzzy picker that lists & runs the scripts in this dir (and aliases). |
 | `screenkey.sh` | — | Loops `screenkey` for on-screen keystroke display (demos/screencasts). |
 

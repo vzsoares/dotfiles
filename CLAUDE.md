@@ -27,9 +27,13 @@ Each config directory that needs symlinking has its own `link` script.
 Root-level link scripts:
 
 - `./link` — symlinks `.zshrc`, `.gitconfig`, `biome.json` to `~`
-- `./link-claude` — symlinks `.claude/settings.json` and `.claude/skills/` to `~/.claude/`
-- `./link-bin` — symlinks `zen-release` / `zen-commit` / `zen-pgp` / `zen-diagram`
-  into `~/.local/bin` (`zen-diagram` needs `bun install` in `mermaid/` first)
+- `./link-claude` — symlinks `.claude/` contents to `~/.claude/`: `CLAUDE.md`,
+  `settings.json`, `skills/`, `statusline-command.sh`
+- `./link-bin` — symlinks the `zen-*` commands into `~/.local/bin`. The `LINKS`
+  table at the top of that script is the authoritative list — read it there
+  rather than duplicating it. `./link-bin --check` reports drift (missing,
+  dangling, or unmanaged links) and exits non-zero.
+  (`zen-diagram` needs `bun install` in `mermaid/` first)
 
 Run from the repo root.
 

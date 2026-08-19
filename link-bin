@@ -5,35 +5,146 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 
-mkdir -p "$BIN_DIR"
-
 # Clean, extension-less CLI commands for the personal tools. ~/.local/bin is on
 # PATH (interactive and non-interactive), so these resolve in any repo.
-ln -sf "$SCRIPT_DIR/scripts/release.py" "$BIN_DIR/zen-release"
-echo "linked zen-release -> scripts/release.py"
+#
+# Single source of truth: command name -> source path, relative to the repo
+# root. Both linking and --check read this table, so a symlink made by hand (or
+# one whose source later disappears) gets reported instead of quietly rotting
+# on PATH.
+LINKS=(
+    "zen-release:scripts/release.py"
+    "zen-commit:scripts/commit.py"
+    "zen-pgp:scripts/pgp.py"
+    "zen-hash:scripts/hash.sh"
+    "zen-env:scripts/env-build.py"
+    "zen-ytdl:scripts/ytdl.py"
+    "zen-bell:scripts/bell.sh"
+    "zen-diagram:mermaid/src/cli.ts"
+)
 
-ln -sf "$SCRIPT_DIR/scripts/commit.py" "$BIN_DIR/zen-commit"
-echo "linked zen-commit -> scripts/commit.py"
+usage() {
+    cat <<'EOF'
+usage: link-bin [--check]
 
-ln -sf "$SCRIPT_DIR/scripts/pgp.py" "$BIN_DIR/zen-pgp"
-echo "linked zen-pgp -> scripts/pgp.py"
+  (no args)  link every zen-* command into ~/.local/bin, then report drift
+  --check    report only; make no changes. Exits 1 if anything is wrong.
 
-ln -sf "$SCRIPT_DIR/scripts/hash.sh" "$BIN_DIR/zen-hash"
-echo "linked zen-hash -> scripts/hash.sh"
+Reported as drift:
+  - a managed command whose source file is missing from the repo
+  - a managed command that is not linked yet
+  - a link that points somewhere other than this repo
+  - a dangling link (target no longer exists)
+  - a zen-* on PATH that this script does not manage
+EOF
+}
 
-ln -sf "$SCRIPT_DIR/scripts/env-build.py" "$BIN_DIR/zen-env"
-echo "linked zen-env -> scripts/env-build.py"
+do_link() {
+    local entry name src
+    for entry in "${LINKS[@]}"; do
+        name=${entry%%:*}
+        src=${entry#*:}
+        ln -sf "$SCRIPT_DIR/$src" "$BIN_DIR/$name"
+        echo "linked $name -> $src"
+    done
 
-ln -sf "$SCRIPT_DIR/scripts/ytdl.py" "$BIN_DIR/zen-ytdl"
-echo "linked zen-ytdl -> scripts/ytdl.py"
+    if [ ! -d "$SCRIPT_DIR/mermaid/node_modules" ]; then
+        echo "  note: run 'bun install' in mermaid/ before using zen-diagram"
+    fi
+}
 
-ln -sf "$SCRIPT_DIR/scripts/bell.sh" "$BIN_DIR/zen-bell"
-echo "linked zen-bell -> scripts/bell.sh"
+# Returns 1 if any drift was found, so --check is usable from a shell or CI.
+do_check() {
+    local status=0 entry name src want have found e f
+    local -a managed=()
 
-ln -sf "$SCRIPT_DIR/mermaid/src/cli.ts" "$BIN_DIR/zen-diagram"
-echo "linked zen-diagram -> mermaid/src/cli.ts"
-if [ ! -d "$SCRIPT_DIR/mermaid/node_modules" ]; then
-    echo "  note: run 'bun install' in mermaid/ before using zen-diagram"
-fi
+    for entry in "${LINKS[@]}"; do
+        name=${entry%%:*}
+        src=${entry#*:}
+        want="$SCRIPT_DIR/$src"
+        managed+=("$name")
 
-echo "done — ensure $BIN_DIR is on your PATH"
+        if [ ! -e "$want" ]; then
+            echo "  source missing: $name -> $src (not in the repo)"
+            status=1
+        fi
+
+        if [ ! -L "$BIN_DIR/$name" ]; then
+            if [ -e "$BIN_DIR/$name" ]; then
+                echo "  not a symlink:  $name (a real file is in the way)"
+            else
+                echo "  not linked:     $name (run ./link-bin)"
+            fi
+            status=1
+            continue
+        fi
+
+        have=$(readlink "$BIN_DIR/$name")
+        if [ "$have" != "$want" ]; then
+            echo "  wrong target:   $name -> $have"
+            echo "                  expected $want"
+            status=1
+        elif [ ! -e "$BIN_DIR/$name" ]; then
+            # -e follows the link, so this is a symlink to a missing file.
+            echo "  dangling:       $name -> $have"
+            status=1
+        fi
+    done
+
+    # Anything zen-* on PATH that this script does not know about. That is how a
+    # hand-made `ln -sf` drifts out of the repo's knowledge and then breaks: the
+    # shell reports a confusing "no such file" from the link, not "not found".
+    for f in "$BIN_DIR"/zen-*; do
+        [ -L "$f" ] || [ -e "$f" ] || continue # unmatched glob, or nothing there
+        name=$(basename "$f")
+        found=0
+        for e in "${managed[@]}"; do
+            if [ "$e" = "$name" ]; then
+                found=1
+                break
+            fi
+        done
+        if [ "$found" -eq 0 ]; then
+            if [ -e "$f" ]; then
+                echo "  unmanaged:      $name -> $(readlink "$f" 2>/dev/null || echo '(a real file)')"
+            else
+                echo "  unmanaged+dead: $name -> $(readlink "$f") (target gone)"
+            fi
+            echo "                  add it to LINKS in link-bin, or remove it"
+            status=1
+        fi
+    done
+
+    return $status
+}
+
+case "${1:-}" in
+    --check)
+        echo "checking $BIN_DIR ..."
+        if do_check; then
+            echo "ok — ${#LINKS[@]} commands linked, no drift"
+        else
+            echo "drift found (see above)"
+            exit 1
+        fi
+        ;;
+    -h | --help)
+        usage
+        ;;
+    "")
+        mkdir -p "$BIN_DIR"
+        do_link
+        echo
+        if do_check; then
+            echo "done — ${#LINKS[@]} commands in $BIN_DIR, no drift"
+        else
+            echo "done, but drift remains (see above)"
+        fi
+        echo "ensure $BIN_DIR is on your PATH"
+        ;;
+    *)
+        echo "link-bin: unknown argument '$1'" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
