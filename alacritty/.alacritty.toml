@@ -13,6 +13,11 @@
 [selection]
   save_to_clipboard = true
 
+[bell]
+  # Audible bell: anything emitting \a (long jobs, Claude Code, tmux passthrough)
+  command = { program = "pw-play", args = ["--volume=0.4", "/usr/share/sounds/freedesktop/stereo/complete.oga"] }
+  duration = 0
+
 [terminal.shell]
     program = "/bin/zsh"
 
