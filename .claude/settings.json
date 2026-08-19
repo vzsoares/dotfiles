@@ -11,7 +11,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
+            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'; zen-bell window-attention",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "zen-bell complete",
+            "async": true
           }
         ]
       }
