@@ -11,7 +11,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "notify-send 'Claude Code' 'Claude Code needs your attention'; zen-bell window-attention",
+            "command": "p=$(timeout 1 jq -r \".cwd // empty\" 2>/dev/null); p=${p:-$PWD}; n=$(git -C \"$p\" rev-parse --show-toplevel 2>/dev/null || echo \"$p\"); notify-send -t 0 \"Claude Code \u2014 ${n##*/}\" \"Needs your attention\"; zen-bell window-attention",
             "async": true
           }
         ]
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "zen-bell complete",
+            "command": "p=$(timeout 1 jq -r \".cwd // empty\" 2>/dev/null); p=${p:-$PWD}; n=$(git -C \"$p\" rev-parse --show-toplevel 2>/dev/null || echo \"$p\"); zen-bell complete -t 0 -n \"Claude Code \u2014 ${n##*/}\" -b \"Turn finished\"",
             "async": true
           }
         ]
