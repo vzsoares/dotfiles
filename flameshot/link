@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -e
+
+mkdir -p ~/.config/flameshot
+rm -f ~/.config/flameshot/flameshot.ini
+ln -s "$(pwd)/flameshot.ini" ~/.config/flameshot/flameshot.ini
+echo "linked flameshot/flameshot.ini -> ~/.config/flameshot/flameshot.ini"
+echo "note: changing a setting in flameshot's GUI replaces this symlink; re-run ./link after."

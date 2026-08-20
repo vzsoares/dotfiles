@@ -100,14 +100,18 @@ bindsym $mod+Shift+d --release exec "killall dunst; exec notify-send 'restart du
 # dismissed one back.
 bindsym $mod+p --release exec --no-startup-id "dunstctl close-all"
 bindsym $mod+Shift+p --release exec --no-startup-id "dunstctl history-pop"
-bindsym Print exec --no-startup-id i3-scrot
+# Screenshots. Whole-screen and region go through flameshot (annotate before
+# saving); flameshot has no focused-window mode, so that one stays on i3-scrot.
+bindsym Print exec --no-startup-id flameshot full -c -p ~/Pictures
 bindsym $mod+Print --release exec --no-startup-id i3-scrot -w
-bindsym $mod+Shift+Print --release exec --no-startup-id i3-scrot -s
+bindsym $mod+Shift+Print --release exec --no-startup-id flameshot gui
 # Personal cheatsheet (i3/i3-help), replacing Manjaro's i3_help.pdf — that
 # documents the stock config, not this one.
 bindsym $mod+Shift+h exec --no-startup-id alacritty --class i3-help -o font.size=11 -e ~/.i3/i3-help
 bindsym $mod+Ctrl+x --release exec --no-startup-id xkill
 for_window [class="i3-help"] floating enable, resize set 1150 1950, move position center
+# flameshot's overlay must not be tiled or it cannot cover the screen.
+for_window [class="flameshot"] floating enable, border none, fullscreen disable
 
 # focus_follows_mouse no
 

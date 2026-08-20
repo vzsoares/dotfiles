@@ -8,6 +8,7 @@ Personal dotfiles for vzsoares. Manjaro Linux (i3).
 alacritty/    # terminal emulator config
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
 i3/           # i3 window manager config
+flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+Print
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.
               #   Driven by the `diagram` skill in .claude/skills/
@@ -20,7 +21,8 @@ zsh/          # zsh aliases, plugins, themes
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
 
-Config dirs (alacritty, i3, nvim, tmux) each have their own `link` script.
+Config dirs (alacritty, cava, flameshot, i3, nvim, tmux) each have their own
+`link` script.
 
 ## Linking
 

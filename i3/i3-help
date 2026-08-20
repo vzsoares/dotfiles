@@ -70,9 +70,10 @@ key "mod+Shift+d"         "Restart dunst"
 note "Claude Code toasts never auto-expire — mod+p is how you clear them"
 
 section "Screenshots"
-key "Print"               "Whole screen"
-key "mod+Print"           "Focused window"
-key "mod+Shift+Print"     "Select a region"
+key "Print"               "Whole screen (flameshot, saved + copied)"
+key "mod+Print"           "Focused window (i3-scrot)"
+key "mod+Shift+Print"     "Select a region, then annotate (flameshot)"
+note "Saved to ~/Pictures; in flameshot Ctrl+S saves, Ctrl+C copies, Esc aborts"
 
 section "Transparency"
 key "mod+t"               "Kill picom (transparency off)"
