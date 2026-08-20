@@ -1,13 +1,13 @@
 ---
 title: Overview
 category: architecture
-updated: 2026-05-25
+updated: 2026-08-20
 related: [fresh-install, audio-pipewire-spotify]
 ---
 
 # Overview
 
-Personal dotfiles for **vzsoares** (zenha), targeting **Manjaro Linux** with the **i3** window manager. Minimalistic setup themed with [Catppuccin Mocha](https://github.com/catppuccin/catppuccin). The repo is a collection of per-tool config directories, each linked into place from the repo via small `link` scripts.
+Personal dotfiles for **vzsoares** (zenha), shared across **two** machines: **Manjaro Linux** with the **i3** window manager, and **macOS** (Apple Silicon). Every change must work on both — OS-specific settings go in a per-OS file or behind a guard, never in a shared file on the assumption they're a harmless no-op. Minimalistic setup themed with [Catppuccin Mocha](https://github.com/catppuccin/catppuccin). The repo is a collection of per-tool config directories, each linked into place from the repo via small `link` scripts.
 
 ## Repository layout
 
@@ -39,6 +39,8 @@ Each tool is symlinked into place (always **absolute paths**) by a `link` script
 - `nvim/link` — whole dir → `~/.config/nvim`
 - `tmux/link` — whole dir → `~/.config/tmux`
 - `mise/link` — whole dir → `~/.config/mise`
+
+> **The terminal must spawn a login shell.** `alacritty/.alacritty.toml` sets `[terminal.shell] program`, and naming a program there makes Alacritty launch it **non-login** — which skips `~/.zprofile` (Homebrew `shellenv` on macOS) and `/etc/zprofile` (`path_helper`), leaving `PATH` as a bare `/bin:/usr/bin:/usr/ucb:/usr/local/bin`. Hence the mandatory `args = ["--login"]`. Symptom when it regresses: brew, `git`, `nvim` and `gitleaks` all "disappear" in new terminals, and **rebooting doesn't help** because the cause is the config, not stale state. Diagnose with `env -i HOME=$HOME /bin/zsh --login -c 'echo $PATH'` versus the same command without `--login`.
 
 > **Clone location matters.** `.zshrc` hardcodes `ZSH_CUSTOM=$HOME/code/personal/dotfiles/zsh` and adds `$HOME/code/personal/dotfiles/scripts` to `PATH`. The repo must live at `~/code/personal/dotfiles` for zsh to load correctly.
 

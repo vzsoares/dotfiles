@@ -1,7 +1,7 @@
 ---
 title: Fresh Manjaro i3 Install
 category: concept
-updated: 2026-05-25
+updated: 2026-08-20
 related: [overview, audio-pipewire-spotify]
 ---
 
@@ -24,7 +24,7 @@ git submodule update --init --recursive   # zsh plugins live as submodules
 
 ```bash
 sudo pacman -S --needed \
-  neovim ripgrep fzf gpg \
+  neovim ripgrep fzf gpg gitleaks \
   alacritty i3-wm i3status \
   playerctl ttf-hack-nerd \
   pavucontrol pipewire pipewire-pulse pipewire-alsa wireplumber libpulse
@@ -32,6 +32,9 @@ sudo pacman -S --needed \
 
 - `neovim` — editor (config uses **lazy.nvim**, which self-bootstraps; no packer needed despite the README)
 - `ripgrep`, `fzf` — used by nvim + tmux-sessionizer
+- `gitleaks` — secret scanner. **Required on PATH**, not optional: work repos
+  run it from a husky `pre-commit` hook, and without it every commit in those
+  repos is rejected (see [Secret scanning](#secret-scanning-gitleaks) below)
 - `playerctl` — media keys under i3
 - `ttf-hack-nerd` — Hack Nerd Font (icons in nvim/tmux/prompt)
 - `pavucontrol` + pipewire stack — audio (see [[audio-pipewire-spotify]])
@@ -81,6 +84,37 @@ nvim              # lazy.nvim bootstraps and installs plugins on first run
 ## 6. Audio
 
 i3 ships no audio applet. After installing the pipewire stack above, enable the user services and pick an output with `pavucontrol`. If Spotify shows **"can't play this right now"**, follow [[audio-pipewire-spotify]] — the usual cause on a fresh install is a missing WirePlumber session manager / sink.
+
+## Secret scanning (gitleaks)
+
+`gitleaks` is a **hard dependency for committing**, required in two independent
+places:
+
+1. **`zen-commit`'s guardrail** — `scan_secrets()` shells out to
+   `gitleaks protect --staged` (`scripts/commit.py`). Filename/`.npmrc` checks are
+   pure Python, but the content scan is the real binary.
+2. **Repo `pre-commit` hooks** — several work repos have a husky hook running
+   `gitleaks git --staged --redact --verbose`, which aborts the commit if the
+   binary is missing.
+
+Note the two use **different subcommands** (`protect` vs `git --staged`); both
+exist in current gitleaks, but a version that drops `protect` would break
+`zen-commit` while leaving the hook working.
+
+Verify it resolves:
+
+```bash
+command -v gitleaks   # empty means you cannot commit at all
+```
+
+Install: `sudo pacman -S gitleaks` (Arch `extra`), `brew install gitleaks`
+(macOS), or `go install github.com/zricethezav/gitleaks/v8@latest` on either.
+
+> **PATH gotcha.** A `go install`-ed gitleaks lands in `~/go/bin` — and so does
+> `gum`, which `zen-commit` also needs. That directory is added by `.zshrc`, an
+> *interactive* shell file, so anything under a non-interactive shell won't see
+> it. `zen-commit` preflights both and exits with an install hint; a bare hook
+> just fails with `gitleaks not found on PATH`.
 
 ## Not handled by link scripts
 

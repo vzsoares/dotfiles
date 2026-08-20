@@ -501,6 +501,17 @@ def main(
             "Error: gum is required. Install it: https://github.com/charmbracelet/gum"
         )
         raise typer.Exit(1)
+    if shutil.which("gitleaks") is None:
+        # scan_secrets() shells out to gitleaks; without this preflight it dies
+        # with a raw FileNotFoundError traceback. Many repos also invoke it from
+        # a pre-commit hook, so a missing binary breaks committing either way.
+        print(
+            "Error: gitleaks is required. Install it:\n"
+            "  Arch:  sudo pacman -S gitleaks\n"
+            "  macOS: brew install gitleaks\n"
+            "  any:   go install github.com/zricethezav/gitleaks/v8@latest"
+        )
+        raise typer.Exit(1)
     if git("rev-parse", "--git-dir").returncode != 0:
         fail("Error: Not inside a git repository.")
         raise typer.Exit(1)
