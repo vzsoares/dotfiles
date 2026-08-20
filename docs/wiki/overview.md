@@ -32,7 +32,9 @@ Each tool is symlinked into place (always **absolute paths**) by a `link` script
 
 - `./link` — `.zshrc`, `.gitconfig`, `biome.json` → `~` (requires oh-my-zsh already installed)
 - `./link-claude` — `.claude/{CLAUDE.md,settings.json,skills}` → `~/.claude/`
-- `alacritty/link` — `.alacritty.toml` → `~`
+- `alacritty/link` — `.alacritty.toml` → `~/.config/alacritty/alacritty.toml`,
+  plus `macos.toml`/`linux.toml` (chosen by `uname`) → `local.toml`, which the
+  shared config pulls in via `[general] import`
 - `i3/link` — `config` → `~/.i3/config`, `.i3status.conf` → `~`
 - `nvim/link` — whole dir → `~/.config/nvim`
 - `tmux/link` — whole dir → `~/.config/tmux`

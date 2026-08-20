@@ -115,6 +115,7 @@ local SECTIONS = {
     {
         "Editing",
         {
+            { "H / L",       "Start (first non-blank) / end of line — replaces ^ and $" },
             { "J / K (visual)", "Move selection down / up" },
             { "J",           "Join line, keep cursor" },
             { "<leader>p (x)", "Paste over selection, keep register" },

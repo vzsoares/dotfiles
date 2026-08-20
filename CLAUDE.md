@@ -1,11 +1,19 @@
 # Dotfiles
 
-Personal dotfiles for vzsoares. Manjaro Linux (i3).
+Personal dotfiles for vzsoares. Shared across **two** machines: Manjaro Linux
+(i3, X11) and macOS (Apple Silicon).
+
+Every change must work on both. Never put OS-specific settings in a shared
+file assuming they're a harmless no-op elsewhere — use the per-OS split
+(`alacritty/macos.toml` / `linux.toml`), a guard
+(`[ -x /opt/homebrew/bin/brew ] && …`), or the untracked `~/.zshrc.local`.
 
 ## Structure
 
 ```
-alacritty/    # terminal emulator config
+alacritty/    # terminal emulator config; .alacritty.toml is shared, and
+              #   macos.toml / linux.toml hold OS-only keys (linked to
+              #   local.toml by ./link). Shell must stay a login shell.
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
 i3/           # i3 window manager config
 flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+Print

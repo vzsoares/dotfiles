@@ -21,6 +21,12 @@ vim.keymap.set({ "n", "v" }, "<leader>d", [["_d]])
 -- This is going to get me cancelled
 vim.keymap.set("i", "<C-c>", "<Esc>")
 
+-- Line-start / line-end without the dead-key dance: `^` is a dead key on the
+-- ABNT layout. Mapped for operators too ("o"), so d/c/y take them as targets.
+-- "x" not "v" on purpose: remapping select mode would break snippet placeholders.
+vim.keymap.set({ "n", "x", "o" }, "H", "^")
+vim.keymap.set({ "n", "x", "o" }, "L", "$")
+
 vim.keymap.set("n", "Q", "<nop>")
 vim.keymap.set("n", "<C-f>", "<cmd>silent !tmux neww tmux-sessionizer<CR>")
 vim.keymap.set("n", "<leader>F", vim.lsp.buf.format)

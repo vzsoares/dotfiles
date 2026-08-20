@@ -1,9 +1,14 @@
+# Shared config for macOS and Arch/Manjaro. Keep OS-only keys OUT of this file:
+# put them in macos.toml / linux.toml, which ./link wires to local.toml.
+
+[general]
+  # Machine/OS-specific overrides. Missing imports are skipped silently, and the
+  # importing file wins on conflicts, so nothing here can be overridden below.
+  import = ["~/.config/alacritty/local.toml"]
+
 [font]
   normal = { family = "Hack Nerd Font", style = "Regular" }
   size = 16.0
-
-[env]
-  WINIT_X11_SCALE_FACTOR = "1.5"
 
 [window]
   dimensions = { columns = 80, lines = 30 }
@@ -15,6 +20,10 @@
 
 [terminal.shell]
     program = "/bin/zsh"
+    # --login is required: naming a program here makes Alacritty spawn it as a
+    # NON-login shell, which skips ~/.zprofile (Homebrew shellenv on macOS) and
+    # /etc/zprofile (path_helper), leaving PATH nearly empty.
+    args = ["--login"]
 
 [[keyboard.bindings]]
     key = "NumpadEnter"

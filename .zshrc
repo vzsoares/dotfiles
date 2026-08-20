@@ -146,7 +146,7 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 # Python
 export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+#command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
 export POETRY_VIRTUALENVS_IN_PROJECT=true
 
@@ -183,3 +183,7 @@ eval "$(mise activate zsh)"
 
 # bun completions
 [ -s "$BUN_INSTALL/_bun" ] && source "$BUN_INSTALL/_bun"
+# macOS: Homebrew's shellenv normally comes from ~/.zprofile, which only login
+# shells source. Re-applying it here (guarded, so it's a silent no-op on Linux)
+# keeps PATH sane even if something spawns a non-login interactive shell.
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"

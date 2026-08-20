@@ -248,6 +248,29 @@ def test_headless_guardrail_force_overrides(git_repo: Path, quiet_gum: None) -> 
     assert _git("log", "-1", "--pretty=%s").strip() == "chore: env"
 
 
+def test_failing_pre_commit_hook_aborts(git_repo: Path, quiet_gum: None) -> None:
+    """A hook that rejects the commit must abort, not report success.
+
+    Regression: git() captures output, so a failing husky/gitleaks hook was
+    swallowed and the script printed "Committed" over a commit that never
+    happened, leaving everything staged.
+    """
+    hooks = git_repo / ".githooks"
+    hooks.mkdir()
+    hook = hooks / "pre-commit"
+    hook.write_text('#!/bin/sh\necho "gitleaks not found on PATH" >&2\nexit 1\n')
+    hook.chmod(0o755)
+    _git("config", "core.hooksPath", ".githooks")
+
+    (git_repo / "f.txt").write_text("x\n")
+    with pytest.raises(typer.Exit) as excinfo:
+        commit.do_commit(stage_all=True, message="feat: f", yes=True, force=False)
+    assert excinfo.value.exit_code != 0
+    # Nothing committed beyond the initial commit, and the work stays staged.
+    assert _git("rev-list", "--count", "HEAD").strip() == "1"
+    assert "f.txt" in _git("diff", "--cached", "--name-only")
+
+
 def test_headless_clean_run_count(git_repo: Path, quiet_gum: None) -> None:
     (git_repo / "f.txt").write_text("hello\n")
     commit.do_commit(stage_all=True, message="feat: f", yes=True, force=False)

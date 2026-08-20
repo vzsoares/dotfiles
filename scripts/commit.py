@@ -366,7 +366,9 @@ def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
     )
 
     if stage_all:
-        git("add", "-A")
+        if git("add", "-A").returncode != 0:
+            fail("git add -A failed.")
+            raise typer.Exit(1)
 
     if git("diff", "--cached", "--quiet").returncode == 0:
         unstaged = [
@@ -387,7 +389,9 @@ def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
         if not selected:
             fail("No files selected.")
             raise typer.Exit(1)
-        git("add", *selected)
+        if git("add", *selected).returncode != 0:
+            fail("git add failed.")
+            raise typer.Exit(1)
         info(f"Staged: {' '.join(selected)}")
 
     info("Scanning for secrets...")
@@ -436,7 +440,16 @@ def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
     else:
         final = _interactive_message_loop()
 
-    git("commit", "-m", final)
+    result = git("commit", "-m", final)
+    if result.returncode != 0:
+        # git() captures output, so a failing pre-commit hook (husky, gitleaks,
+        # lint-staged) would otherwise be swallowed and we'd report success on a
+        # commit that never happened. Surface whatever the hook printed.
+        fail("git commit failed — nothing was committed.")
+        for stream in (result.stdout, result.stderr):
+            if stream and stream.strip():
+                print(stream.rstrip(), file=sys.stderr)
+        raise typer.Exit(result.returncode)
     good("Committed")
 
 

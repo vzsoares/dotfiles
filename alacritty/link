@@ -2,5 +2,34 @@
 
 set -e
 
+# Alacritty prefers $XDG_CONFIG_HOME/alacritty/alacritty.toml over ~/.alacritty.toml,
+# so link the XDG path and drop the legacy one to avoid a stale config winning.
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/alacritty"
+mkdir -p "$config_dir"
+
+case "$(uname -s)" in
+	Darwin) os_config="macos.toml" ;;
+	Linux) os_config="linux.toml" ;;
+	*) os_config="" ;;
+esac
+
+link_one() {
+	local src="$1" target="$2"
+	if [ -e "$target" ] && [ ! -L "$target" ]; then
+		mv "$target" "$target.bak"
+		echo "backed up existing $(basename "$target") to $target.bak"
+	fi
+	rm -f "$target"
+	ln -s "$src" "$target"
+}
+
+link_one "$(pwd)/.alacritty.toml" "$config_dir/alacritty.toml"
 rm -f ~/.alacritty.toml
-ln -s "$(pwd)/.alacritty.toml" ~/.alacritty.toml
+
+# OS-specific overrides, imported by .alacritty.toml as local.toml.
+if [ -n "$os_config" ]; then
+	link_one "$(pwd)/$os_config" "$config_dir/local.toml"
+	echo "linked $os_config -> local.toml"
+else
+	echo "warning: unknown OS $(uname -s); skipping local.toml" >&2
+fi
