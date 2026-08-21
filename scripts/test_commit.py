@@ -139,6 +139,45 @@ def test_scan_filenames_allows_safe() -> None:
     assert commit.scan_filenames(files) == []
 
 
+def test_scan_filenames_allows_encrypted_env() -> None:
+    # `.env.gpg` beside a decrypt script is the point of committing it. The name
+    # is only half the exception — see the scan_secrets tests below.
+    files = [".env.gpg", "config/.env.age", "deploy/.env.asc", "a/.env.enc"]
+    assert commit.scan_filenames(files) == []
+
+
+# --------------------------------------------------------------------------- #
+# Guardrail: looks_encrypted                                                    #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"\x8c\x0d\x04\x09\x03\x0a\x05\x27\x4a\xe4",  # gpg -c, real header
+        b"\xc3\x0d\x04\x09\x03",  # OpenPGP new-format packet
+        b"-----BEGIN PGP MESSAGE-----\n\nhQIMA",  # ASCII armor
+        b"age-encryption.org/v1\n-> scrypt",  # age
+        b"Salted__\x01\x02\x03\x04",  # openssl enc
+    ],
+)
+def test_looks_encrypted_true(data: bytes) -> None:
+    assert commit.looks_encrypted(data)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"",  # empty file is not an encrypted blob
+        b"SECRET=1\nTOKEN=abc\n",  # the thing we are trying to catch
+        b"# comment\n",
+        b"\xef\xbb\xbfSECRET=1\n",  # UTF-8 BOM: bit 7 set, still plaintext
+    ],
+)
+def test_looks_encrypted_false(data: bytes) -> None:
+    assert not commit.looks_encrypted(data)
+
+
 # --------------------------------------------------------------------------- #
 # is_noisy_file                                                                 #
 # --------------------------------------------------------------------------- #
@@ -172,6 +211,20 @@ def test_scan_secrets_staged_env(git_repo: Path) -> None:
     (git_repo / ".env").write_text("SECRET=1\n")
     _git("add", ".env")
     assert any(".env" in v for v in commit.scan_secrets())
+
+
+def test_scan_secrets_allows_real_encrypted_env(git_repo: Path) -> None:
+    (git_repo / ".env.gpg").write_bytes(b"\x8c\x0d\x04\x09\x03" + bytes(range(256)))
+    _git("add", ".env.gpg")
+    assert commit.scan_secrets() == []
+
+
+def test_scan_secrets_flags_plaintext_under_encrypted_name(git_repo: Path) -> None:
+    # Without this, the suffix allowlist would be a hole: rename `.env` to
+    # `.env.gpg` and the guardrail waves it through.
+    (git_repo / ".env.gpg").write_text("SECRET=1\n")
+    _git("add", ".env.gpg")
+    assert any("plaintext contents" in v for v in commit.scan_secrets())
 
 
 def test_scan_secrets_content(

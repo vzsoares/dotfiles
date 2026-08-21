@@ -63,6 +63,14 @@ import typer
 CRYPTO_EXTS = (".pem", ".key", ".pfx", ".p12", ".keystore", ".jks")
 SSH_KEY_MARKERS = ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
 ENV_OK_SUFFIXES = (".example", ".sample", ".template")
+# Env files that are safe to commit because the content is encrypted at rest —
+# `.env.gpg` next to a `decrypt` script is a common pattern, and the encrypted
+# blob is the whole point of committing it.
+#
+# The suffix alone is NOT the exception: `scan_secrets` reads the staged bytes
+# and still flags the file if they aren't actually an encrypted blob. Without
+# that, renaming a plaintext `.env` to `.env.gpg` would sail straight through.
+ENV_ENCRYPTED_SUFFIXES = (".gpg", ".age", ".asc", ".enc")
 CRED_BASENAMES = ("token.json", "credentials.json", "auth.json")
 
 # Lock / generated files: list names but omit their (noisy) diff body.
@@ -103,6 +111,42 @@ BINARY_SUFFIXES = (
 )
 
 
+def is_env_path(f: str) -> bool:
+    """True for anything that reads as an env file by name."""
+    base = f.rsplit("/", 1)[-1]
+    return (
+        base == ".env"
+        or base.startswith(".env.")
+        or f.endswith(".env")
+        or ".env." in f
+    )
+
+
+def looks_encrypted(data: bytes) -> bool:
+    """True if `data` is an encrypted blob this guardrail recognises.
+
+    Heuristic by design: it exists to catch the accidental commit of plaintext
+    under an encrypted-looking name, not an adversary crafting a file to defeat
+    it. False negatives just mean the guardrail fires — the safe direction.
+    """
+    if not data:
+        return False
+    head = data[:64]
+    for magic in (
+        b"-----BEGIN PGP MESSAGE-----",  # PGP, ASCII-armored
+        b"age-encryption.org/v1",  # age
+        b"Salted__",  # openssl enc
+    ):
+        if head.startswith(magic):
+            return True
+    # OpenPGP binary: bit 7 of the first octet is always set (RFC 4880 §4.2);
+    # `gpg -c` emits 0x8c here. A UTF-8 BOM also has bit 7 set and plaintext is
+    # exactly what this check exists to catch, so rule the BOM out explicitly.
+    if head.startswith(b"\xef\xbb\xbf"):
+        return False
+    return bool(head[0] & 0x80)
+
+
 def scan_filenames(files: list[str]) -> list[str]:
     """Flag sensitive file paths (pure — no git/IO)."""
     out: list[str] = []
@@ -113,13 +157,7 @@ def scan_filenames(files: list[str]) -> list[str]:
             out.append(f"{f} — sensitive crypto extension")
         if any(m in f for m in SSH_KEY_MARKERS) and not f.endswith(".pub"):
             out.append(f"{f} — private SSH key")
-        is_env = (
-            base == ".env"
-            or base.startswith(".env.")
-            or f.endswith(".env")
-            or ".env." in f
-        )
-        if is_env and not f.endswith(ENV_OK_SUFFIXES):
+        if is_env_path(f) and not f.endswith(ENV_OK_SUFFIXES + ENV_ENCRYPTED_SUFFIXES):
             out.append(f"{f} — env file")
         if base in CRED_BASENAMES or (
             base.startswith("service-account") and base.endswith(".json")
@@ -138,6 +176,15 @@ def scan_secrets() -> list[str]:
             content = git("show", f":{f}").stdout
             if "_authToken" in content:
                 violations.append(f"{f} — contains _authToken")
+        # An encrypted-suffix env file skipped the name check above — verify it
+        # really is encrypted. Read bytes, not `git()`: that helper decodes as
+        # text and would mangle a binary blob.
+        if is_env_path(f) and f.endswith(ENV_ENCRYPTED_SUFFIXES):
+            blob = subprocess.run(
+                ["git", "show", f":{f}"], capture_output=True, check=False
+            ).stdout
+            if not looks_encrypted(blob):
+                violations.append(f"{f} — encrypted name but plaintext contents")
     result = subprocess.run(
         ["gitleaks", "protect", "--staged", "--redact", "--no-banner"],
         text=True,

@@ -32,7 +32,14 @@ zen-commit --all -m "..."  # headless: verbatim message, skip AI
 Stages files, scans the staged diff for secrets/sensitive files, generates a
 Conventional Commit message, then lets you commit / edit / regenerate. Runs
 headless (no `gum` prompts) when there's no TTY or `--yes`/`-m` is given. The
-secret guardrail aborts on findings.
+secret guardrail aborts on findings; `--force` overrides it.
+
+Env files are flagged by name, with two exceptions: the documentation suffixes
+(`.env.example`, `.sample`, `.template`) and **encrypted** ones (`.env.gpg`,
+`.age`, `.asc`, `.enc`) — the latter committed on purpose beside a decrypt
+script. The suffix is not enough on its own: the guardrail also reads the
+staged bytes and still aborts if they aren't an encrypted blob, so renaming a
+plaintext `.env` to `.env.gpg` does not get past it.
 
 ### zen-release
 ```
