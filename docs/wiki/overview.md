@@ -48,7 +48,7 @@ Each tool is symlinked into place (always **absolute paths**) by a `link` script
 
 - **Shell**: zsh + oh-my-zsh, custom theme `zenha` (`zsh/themes/`). Plugins: `git`, `zsh-autosuggestions`, `zsh-syntax-highlighting`, `zsh-vi-mode` — the latter three are **git submodules** under `zsh/plugins/`.
 - **Editor**: Neovim with a Lua config bootstrapped by **lazy.nvim** (`nvim/lua/config/layz.lua`, `nvim/lazy-lock.json`). The README's mention of `packer` is stale — lazy.nvim self-bootstraps on first launch.
-- **Tool versions**: managed by **mise** (`mise/config.toml`): go, bun, deno, node, python, rust, usage, watchexec. `.zshrc` also wires up nvm, bun, deno, pyenv, sdkman, and Go paths.
+- **Tool versions**: managed by **mise** (`mise/config.toml`): go, bun, deno, node, python, rust, usage, watchexec. `.zshrc` also wires up nvm, bun, deno, sdkman, and Go paths.
 - **Terminal multiplexer**: tmux with `tmux-sessionizer` and CPU/memory status scripts.
 - **Fonts**: Hack Nerd Font (`ttf-hack-nerd`).
 
