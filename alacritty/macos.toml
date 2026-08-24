@@ -5,4 +5,4 @@
   # reach tmux/nvim. Without this, Option composes characters and never sends
   # the ESC prefix. Use "OnlyLeft" instead if you want the right Option key to
   # keep composing accents (ó, ç).
-  option_as_alt = "Both"
+  option_as_alt = "OnlyLeft"
