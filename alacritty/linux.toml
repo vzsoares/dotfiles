@@ -1,4 +1,4 @@
 # Linux (Arch/Manjaro, X11) only — linked to ~/.config/alacritty/local.toml by ./link.
 
 [env]
-  WINIT_X11_SCALE_FACTOR = "1.5"
+  WINIT_X11_SCALE_FACTOR = "1"
