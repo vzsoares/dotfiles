@@ -129,7 +129,7 @@ local SECTIONS = {
         "Corretor ortográfico (pt-BR + en-US)",
         {
             { "<F4>",       "Suggestions for the word under the cursor (picker)" },
-            { "<leader>ts", "Toggle spell check for this window" },
+            { "<leader>ts", "Toggle spelling AND LTeX grammar (both off together)" },
             { "<leader>tl", "Cycle language: both -> pt-BR -> en-US (spell + grammar together)" },
             { "]s / [s",    "Next / previous misspelling" },
             { "zg / zw",    "Add word to dictionary / mark as wrong" },
@@ -137,6 +137,7 @@ local SECTIONS = {
             { "",           "On by default for markdown/mdx/gitcommit/text/tex/rst" },
             { "",           "Toggle + language persist across restarts (stdpath state)" },
             { "",           "Once toggled, the choice applies to every filetype" },
+            { "",           "ltex.language follows 'spelllang' however it changes" },
             { "",           "Default accepts pt + en; real typos still flagged in both" },
             { "",           "Grammar (crase, concordancia) via ltex_plus LSP in prose files" },
             { "",           "Pin a language with <leader>tl for sharper grammar feedback" },

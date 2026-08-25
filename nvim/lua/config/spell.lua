@@ -136,6 +136,112 @@ function M.smart_action()
   vim.lsp.buf.code_action()
 end
 
+-- LTeX's default `enabled` is the list of markup languages it checks. We stomp
+-- it with `false` to switch grammar off, so stash the original to restore later
+-- rather than guessing it back as `true` (which would widen the filetype set).
+local ltex_enabled_default = nil
+
+--- Stash the server's own `enabled` list the first time we see it.
+--- @param client vim.lsp.Client
+local function capture_ltex_default(client)
+  local cur = vim.tbl_get(client.settings or {}, "ltex", "enabled")
+  if type(cur) == "table" then
+    ltex_enabled_default = cur
+  end
+end
+
+--- @param client vim.lsp.Client
+--- @param patch table merged into the client's ltex settings
+local function push_ltex(client, patch)
+  capture_ltex_default(client)
+  local settings = vim.tbl_deep_extend("force", client.settings or {}, patch)
+  client.settings = settings
+  pcall(function()
+    client:notify("workspace/didChangeConfiguration", { settings = settings })
+  end)
+end
+
+--- Map a 'spelllang' value to the BCP-47 code LTeX expects, so the two are
+--- never describing different languages. Falls back to "auto" for anything
+--- unrecognised (including multi-language lists, which LTeX can't express).
+--- @param spelllang string
+--- @return string
+local function ltex_code_for(spelllang)
+  for _, mode in ipairs(LANGS) do
+    if mode.spell == spelllang then
+      return mode.ltex
+    end
+  end
+  if spelllang:find(",") then
+    return "auto"
+  end
+  local lang, region = spelllang:match("^(%a+)_(%a+)$")
+  if lang and region then
+    return lang:lower() .. "-" .. region:upper()
+  end
+  return "auto"
+end
+
+--- Push a language to any running LTeX+ client, so grammar follows the speller.
+--- @param code string BCP-47 code, or "auto"
+local function set_ltex_language(code)
+  for _, client in ipairs(vim.lsp.get_clients({ name = "ltex_plus" })) do
+    push_ltex(client, { ltex = { language = code } })
+  end
+end
+
+--- Turn grammar checking on/off. `ltex.enabled = false` is documented to
+--- disable every markup language, which is what <leader>ts should mean: no
+--- spelling underlines AND no grammar diagnostics.
+--- @param on boolean
+local function set_ltex_enabled(on)
+  for _, client in ipairs(vim.lsp.get_clients({ name = "ltex_plus" })) do
+    -- Capture before computing the value: on the first enable the stash would
+    -- otherwise still be empty and we'd widen `enabled` to `true`, checking
+    -- more filetypes than the server was configured for.
+    capture_ltex_default(client)
+    push_ltex(client, { ltex = { enabled = on and (ltex_enabled_default or true) or false } })
+    if not on then
+      -- Diagnostics already published stay on screen until the server retracts
+      -- them, so clear this client's namespace for immediate feedback.
+      local ok, ns = pcall(vim.lsp.diagnostic.get_namespace, client.id)
+      if ok then
+        pcall(vim.diagnostic.reset, ns)
+      end
+    end
+  end
+end
+
+-- <leader>tl pushes the language itself, but 'spelllang' can also change via
+-- :set, a modeline or another plugin. OptionSet catches those so grammar never
+-- silently checks a different language than the speller. (It does not fire
+-- during startup -- LspAttach below covers that case.)
+vim.api.nvim_create_autocmd("OptionSet", {
+  group = vim.api.nvim_create_augroup("zenha.spell.sync", { clear = true }),
+  pattern = "spelllang",
+  callback = function()
+    set_ltex_language(ltex_code_for(vim.v.option_new))
+  end,
+  desc = "Keep ltex.language in sync with 'spelllang'",
+})
+
+--- Re-apply the persisted state to an LTeX+ client that just attached, so a
+--- restart with the checker off doesn't come back with grammar still running.
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("zenha.spell.ltex", { clear = true }),
+  callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    if not client or client.name ~= "ltex_plus" then
+      return
+    end
+    set_ltex_language(ltex_code_for(vim.bo.spelllang))
+    if state.enabled == false then
+      set_ltex_enabled(false)
+    end
+  end,
+  desc = "Apply persisted spell state to a newly attached LTeX+ client",
+})
+
 --- Toggle spell for the current window.
 function M.toggle()
   local on = not vim.wo.spell
@@ -143,24 +249,15 @@ function M.toggle()
   vim.wo.spell = on
   state.enabled = on
   save_state()
+  set_ltex_enabled(on)
   vim.notify(
-    ("Corretor ortográfico: %s (%s)"):format(on and "ON" or "OFF", vim.bo.spelllang),
+    ("Corretor ortográfico: %s · gramática: %s (%s)"):format(
+      on and "ON" or "OFF",
+      on and "ON" or "OFF",
+      vim.bo.spelllang
+    ),
     vim.log.levels.INFO
   )
-end
-
---- Push a language to any running LTeX+ client, so grammar follows the speller.
---- @param code string BCP-47 code, or "auto"
-local function set_ltex_language(code)
-  for _, client in ipairs(vim.lsp.get_clients({ name = "ltex_plus" })) do
-    local settings = vim.tbl_deep_extend("force", client.settings or {}, {
-      ltex = { language = code },
-    })
-    client.settings = settings
-    pcall(function()
-      client:notify("workspace/didChangeConfiguration", { settings = settings })
-    end)
-  end
 end
 
 --- Cycle both engines: pt+en -> pt -> en. Enables spell if it was off, since
@@ -181,6 +278,7 @@ function M.cycle_lang()
   state.lang_idx = idx
   state.enabled = true
   save_state()
+  set_ltex_enabled(true)
   set_ltex_language(mode.ltex)
   vim.notify(
     ("Idioma: %s  (gramática: %s)"):format(mode.label, mode.ltex),
