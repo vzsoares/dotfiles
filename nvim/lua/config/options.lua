@@ -46,3 +46,29 @@ vim.filetype.add({
     },
 })
 
+
+-- Diff: make a one-character change actually readable.
+-- nvim already marks the changed region inside a line (diffopt inline:char), but
+-- rose-pine paints DiffText almost the same shade as DiffChange and gives
+-- DiffTextAdd an identical colour, so the marked region doesn't stand out.
+-- Applies to fugitive's :Gdiffsplit (ds/dh) since that's a real diff split.
+vim.opt.diffopt = {
+    "internal",
+    "filler",
+    "closeoff",
+    "indent-heuristic",
+    "algorithm:histogram", -- fewer spurious whole-block hunks than the myers default
+    "inline:char",         -- highlight the changed characters, not the whole line
+    "linematch:60",        -- pair changed lines up better, so inline diffing has a real counterpart
+}
+
+-- DiffChange (the whole changed line) stays muted; DiffText / DiffTextAdd are
+-- the actual edit and need to pop against it. Reapplied on every colorscheme
+-- load, since :colorscheme resets highlight groups (see ColorMyPencils).
+local function diff_highlights()
+    vim.api.nvim_set_hl(0, "DiffText", { bg = "#7d3f52", fg = "#e0def4", bold = true })
+    vim.api.nvim_set_hl(0, "DiffTextAdd", { bg = "#2f5d63", fg = "#e0def4", bold = true })
+end
+
+vim.api.nvim_create_autocmd("ColorScheme", { callback = diff_highlights })
+diff_highlights()
