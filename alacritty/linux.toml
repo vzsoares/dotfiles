@@ -2,3 +2,6 @@
 
 [env]
   WINIT_X11_SCALE_FACTOR = "1.5"
+
+[font]
+  size = 13.0

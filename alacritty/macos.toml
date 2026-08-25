@@ -6,3 +6,6 @@
   # the ESC prefix. Use "OnlyLeft" instead if you want the right Option key to
   # keep composing accents (ó, ç).
   option_as_alt = "OnlyLeft"
+
+[font]
+  size = 16.0

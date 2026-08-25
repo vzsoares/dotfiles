@@ -8,7 +8,9 @@
 
 [font]
   normal = { family = "Hack Nerd Font", style = "Regular" }
-  size = 13.0
+  # size lives in macos.toml / linux.toml (different DPI per machine). It must
+  # NOT be set here: this file is the importing one, so it loads LAST and would
+  # override whatever the per-OS import sets.
 
 [window]
   dimensions = { columns = 80, lines = 30 }
