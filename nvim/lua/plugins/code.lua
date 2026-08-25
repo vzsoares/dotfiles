@@ -51,6 +51,7 @@ return {
 					"black",
 					"stylua",
 					"markdownlint",
+					"ltex-ls-plus", -- LanguageTool grammar/spell (pt-BR) -- see config.spell
 				},
 			})
 		end,
@@ -214,6 +215,30 @@ return {
 				filetypes = { "go", "gomod", "gotmpl" },
 			})
 
+			-- LanguageTool grammar + spell checking for prose (pt-BR and en-US).
+			-- Complements the built-in speller in config.spell: that catches
+			-- misspellings, this catches grammar (crase, concordancia, regencia).
+			-- language is kept in sync with 'spelllang' by <leader>tl; "auto"
+			-- matches the default bilingual mode. Upstream warns the bundled
+			-- checker detects language less accurately than an Ngram server, so
+			-- pin pt-BR/en-US via <leader>tl when the feedback matters.
+			-- motherTongue = pt-BR makes it flag false friends in English text.
+			vim.lsp.config("ltex_plus", {
+				settings = {
+					ltex = {
+						language = "auto",
+						additionalRules = {
+							enablePickyRules = true,
+							motherTongue = "pt-BR",
+						},
+						-- Words added with zg go to the nvim spellfile, which
+						-- ltex does not read; keep project jargon here.
+						dictionary = { ["pt-BR"] = {}, ["en-US"] = {} },
+						disabledRules = { ["pt-BR"] = {}, ["en-US"] = {} },
+					},
+				},
+			})
+
 			vim.lsp.config("ansiblels", {
 				filetypes = { "yaml.ansible", ".ansible", "ansible.yaml" },
 			})
@@ -226,7 +251,11 @@ return {
 				vim.diagnostic.open_float({ focusable = true })
 			end)
 			vim.keymap.set("n", "<F2>", "<cmd>lua vim.lsp.buf.rename()<cr>")
-			vim.keymap.set("n", "<F4>", "<cmd>lua vim.lsp.buf.code_action()<cr>")
+			-- Spell suggestions when the cursor is on a misspelled word,
+			-- otherwise the LSP code action this key has always done.
+			vim.keymap.set("n", "<F4>", function()
+				require("config.spell").smart_action()
+			end, { desc = "Spell suggestions / LSP code action" })
 
 			-- Diagnostic configuration
 			vim.diagnostic.config({
@@ -257,6 +286,7 @@ return {
 				"html",
 				"cssls",
 				"marksman",
+				"ltex_plus",
 			})
 		end,
 	},
