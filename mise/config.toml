@@ -10,6 +10,9 @@ m = "mise"
 
 [tools]
 go = "latest"
+# Pinned to the 21 LTS line, not "latest": Gradle/AGP accept specific JDK
+# majors, so a surprise major bump breaks Android builds.
+java = "temurin-21"
 bun = "latest"
 deno = "latest"
 node = "latest"

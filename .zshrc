@@ -154,9 +154,11 @@ export PATH="$HOME/code/personal/dotfiles/scripts:$PATH"
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 
-# Linux-only: Java + Android SDK
+# Linux-only: Android SDK
+# JAVA_HOME is not set here -- mise owns it (see mise/config.toml, activated
+# below). Hardcoding a /usr/lib/jvm path went stale when the system JDK was
+# removed, and a stale JAVA_HOME stops bundled-JRE launchers from falling back.
 if [[ "$OSTYPE" == linux* ]]; then
-    export JAVA_HOME=/usr/lib/jvm/java-11-openjdk
     export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
     export ANDROID_HOME="$HOME/Android/Sdk"
     export PATH="$PATH:$ANDROID_SDK_ROOT/emulator"
