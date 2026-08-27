@@ -2,8 +2,9 @@
 
 - Editor: neovim
 - Shell: zsh (oh-my-zsh)
-- OS: Manjaro Linux (i3)
+- OS: Manjaro Linux (i3) on one machine, macOS (Apple Silicon) on the other
 - Git: vzsoares
+- VPN client: `eovp` on Linux, Tunnelblick on macOS
 
 # Quality checks
 
