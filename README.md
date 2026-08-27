@@ -13,7 +13,7 @@
 - https://github.com/ThePrimeagen/.dotfiles
 - https://github.com/olimorris/dotfiles/blob/main/.config/nvim/lua/plugins/coding.lua
 
-### Requirements
+### Software
 
 - nvim aur:neovim (uses lazy.nvim, self-bootstraps)
     - ripgrep
@@ -26,6 +26,9 @@
 - uv (python pkg manager)
 - i3
     - playerctl
+- vpn client (differs per OS)
+    - linux: eovp
+    - macos: tunnelblick
 
 See `docs/wiki/manjaroi3/fresh-install.md` for full setup.
 
