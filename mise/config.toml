@@ -31,3 +31,5 @@ just = "latest"
 lefthook = "latest"
 jq = "latest"
 terraform = "latest"
+# Typst: single-binary typesetter for long-form docs (book/thesis) — see typst/
+typst = "latest"

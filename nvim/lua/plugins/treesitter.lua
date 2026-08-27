@@ -14,6 +14,7 @@ return {
       local ensure_installed = {
         'vimdoc', 'javascript', 'typescript', 'tsx',
         'c', 'lua', 'rust', 'go', 'html', 'json', 'yaml',
+        'typst', 'bibtex',
       }
 
       -- Track in-flight installs so a parser is never installed twice at once,

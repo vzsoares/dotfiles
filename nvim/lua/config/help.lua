@@ -134,7 +134,7 @@ local SECTIONS = {
             { "]s / [s",    "Next / previous misspelling" },
             { "zg / zw",    "Add word to dictionary / mark as wrong" },
             { "z=",         "Built-in suggestion list (F4 is the nicer picker)" },
-            { "",           "On by default for markdown/mdx/gitcommit/text/tex/rst" },
+            { "",           "On by default for markdown/mdx/gitcommit/text/tex/rst/typst" },
             { "",           "Toggle + language persist across restarts (stdpath state)" },
             { "",           "Once toggled, the choice applies to every filetype" },
             { "",           "ltex.language follows 'spelllang' however it changes" },
@@ -142,6 +142,18 @@ local SECTIONS = {
             { "",           "Grammar (crase, concordancia) via ltex_plus LSP in prose files" },
             { "",           "Pin a language with <leader>tl for sharper grammar feedback" },
             { "",           ":SpellFetchPtBr re-downloads the dictionary" },
+        },
+    },
+    {
+        "Typst (livros, TCC — ver typst/)",
+        {
+            { ":TypstPin",  "Pin the entry file (book.typ) so every save builds the whole book" },
+            { ":TypstUnpin","Back to compiling whatever file is focused" },
+            { ":TypstOpen", "Open the exported PDF in the OS viewer" },
+            { "<leader>ip", "Paste clipboard image as a #figure (img-clip)" },
+            { "<leader>f",  "Format via tinymist/typstyle (LSP fallback)" },
+            { "",           "PDF is exported on every save (tinymist exportPdf)" },
+            { "",           "Citations: @key, #bibliography(\"refs.bib\") — BibTeX from Zotero" },
         },
     },
     {

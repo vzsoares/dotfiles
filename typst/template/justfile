@@ -1,0 +1,25 @@
+# Book tasks. `just` on its own starts the live rebuild loop.
+
+entry := "book.typ"
+pdf := "book.pdf"
+
+default: watch
+
+# Rebuild on every save (leave this running in a tmux pane).
+watch:
+    typst watch {{entry}}
+
+# One-off build.
+build:
+    typst compile {{entry}}
+
+# Build and open in the OS viewer (macOS `open`, i3 `xdg-open`).
+open: build
+    @if [ "$(uname)" = "Darwin" ]; then open {{pdf}}; else xdg-open {{pdf}}; fi
+
+# Word count of the prose, ignoring markup lines.
+words:
+    @cat chapters/*.typ | grep -v '^\s*[/#=]' | wc -w
+
+clean:
+    rm -f {{pdf}}

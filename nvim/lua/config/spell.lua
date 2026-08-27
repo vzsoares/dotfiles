@@ -315,6 +315,8 @@ local PROSE = {
   tex = true,
   rst = true,
   asciidoc = true,
+  -- LTeX+ parses Typst markup too, so .typ gets grammar as well as spell.
+  typst = true,
 }
 
 -- Decides spell for EVERY filetype, not just prose. It has to set the "off"

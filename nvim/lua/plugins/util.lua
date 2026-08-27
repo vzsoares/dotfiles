@@ -166,7 +166,34 @@ return {
     },
     { 'nvim-lua/plenary.nvim',     lazy = false },
     { 'MunifTanjim/nui.nvim',      lazy = false },
-    { 'HakonHarnes/img-clip.nvim', lazy = false },
+    {
+        -- Paste an image from the clipboard straight into the document: writes
+        -- the file under fig/ next to the doc and inserts the markup. Also an
+        -- avante.nvim dependency (plugins.ai), configured once here.
+        'HakonHarnes/img-clip.nvim',
+        lazy = false,
+        keys = {
+            { "<leader>ip", "<cmd>PasteImage<cr>", desc = "Paste image from clipboard" },
+        },
+        opts = {
+            default = {
+                dir_path = "fig",
+                -- Relative to the doc's own root, not the cwd, so a book built
+                -- from chapters/ still resolves fig/ the same way from anywhere.
+                relative_to_current_file = false,
+                use_absolute_path = false,
+                prompt_for_file_name = true,
+                file_name = "%Y-%m-%d-%H-%M-%S",
+            },
+            filetypes = {
+                -- Defaults to a bare #image(); a book wants the figure wrapper
+                -- so the picture is numbered, captioned and referenceable.
+                typst = {
+                    template = '#figure(\n  image("$FILE_PATH", width: 80%),\n  caption: [$CURSOR],\n)',
+                },
+            },
+        },
+    },
     {
         'laytan/cloak.nvim',
         event = "VeryLazy",

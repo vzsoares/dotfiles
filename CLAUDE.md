@@ -22,6 +22,9 @@ mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   Driven by the `diagram` skill in .claude/skills/
 nvim/         # neovim config (lua)
 tmux/         # tmux config
+typst/        # long-form writing (books, TCC): tinymist LSP in nvim +
+              #   a book template with citations, figures and quotes.
+              #   `cp -r typst/template ~/my-book && just` -- see its README
 zsh/          # zsh aliases, plugins, themes
 .claude/      # Claude Code settings & skills
               #   skills/clawd-status/ — status line sprite plugin (auto-loads

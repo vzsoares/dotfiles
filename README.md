@@ -36,6 +36,7 @@ alacritty/    # terminal emulator config
 i3/           # i3 window manager config
 nvim/         # neovim config (lua)
 tmux/         # tmux config
+typst/        # long-form writing (books, TCC) — template + nvim setup
 zsh/          # zsh aliases, plugins, themes
 .claude/      # Claude Code settings & skills
 scripts/      # utility scripts (release, commit, run, ...)

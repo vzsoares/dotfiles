@@ -50,6 +50,7 @@ require("config.misc")
 require("config.help")
 require("config.expand_type")
 require("config.spell")
+require("config.typst")
 
 -- Setup lazy.nvim
 require("lazy").setup({

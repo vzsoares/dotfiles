@@ -32,6 +32,7 @@ return {
 				"html",
 				"cssls",
 				"marksman",
+				"tinymist", -- Typst LSP (also formats + exports PDF) -- see typst/
 			},
 			automatic_installation = true,
 		},
@@ -243,6 +244,22 @@ return {
 				filetypes = { "yaml.ansible", ".ansible", "ansible.yaml" },
 			})
 
+			-- Typst. tinymist bundles typstyle, so <leader>f formats through the
+			-- LSP fallback (no separate conform formatter needed), and exportPdf
+			-- on save refreshes an open PDF viewer without a `typst watch` loop.
+			-- In a multi-file book, save-export follows the *focused* file, which
+			-- would emit a partial PDF per chapter -- :TypstPin (config.typst)
+			-- pins the entry file so every save rebuilds the whole book instead.
+			-- ltex_plus attaches to .typ as well (LTeX+ parses Typst markup), so
+			-- grammar and spell work here exactly as in markdown.
+			vim.lsp.config("tinymist", {
+				settings = {
+					formatterMode = "typstyle",
+					exportPdf = "onSave",
+					semanticTokens = "disable",
+				},
+			})
+
 			-- Global LSP keymaps
 			vim.keymap.set("n", "gd", vim.lsp.buf.definition, { desc = "Go to Definition" })
 			vim.keymap.set("n", "gr", vim.lsp.buf.references, { desc = "Go to References" })
@@ -286,6 +303,7 @@ return {
 				"html",
 				"cssls",
 				"marksman",
+				"tinymist",
 				"ltex_plus",
 			})
 		end,
