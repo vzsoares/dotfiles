@@ -99,4 +99,4 @@ key "Play / Next / Prev"  "playerctl"
 note "playerctl is NOT installed — the play/next/prev keys are inert"
 
 printf '\n'
-} | less -R -Q
+} | less -R -Q -i

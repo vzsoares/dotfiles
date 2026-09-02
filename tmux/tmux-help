@@ -69,4 +69,4 @@ key "<prefix> t"    "Big clock"
 key "<prefix> r"    "Reload tmux.conf"
 note "config: ~/.config/tmux/tmux.conf  (symlink to dotfiles/tmux)"
 printf '\n'
-} | less -R
+} | less -R -Q -i
