@@ -24,8 +24,9 @@
 - alacritty
 - mise (version manager)
 - uv (python pkg manager)
-- i3
+- i3 (linux only)
     - playerctl
+- AeroSpace (macos only)
 - vpn client (differs per OS)
     - linux: eovp
     - macos: tunnelblick
@@ -36,7 +37,8 @@ See `docs/wiki/manjaroi3/fresh-install.md` for full setup.
 
 ```
 alacritty/    # terminal emulator config
-i3/           # i3 window manager config
+aerospace/    # AeroSpace window manager config (macOS counterpart to i3/)
+i3/           # i3 window manager config (linux)
 nvim/         # neovim config (lua)
 tmux/         # tmux config
 typst/        # long-form writing (books, TCC) — template + nvim setup

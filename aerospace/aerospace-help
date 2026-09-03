@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Personal AeroSpace cheatsheet — opens with alt+shift+h.
+# macOS counterpart to i3/i3-help. Keep in sync when adding/changing
+# keybinds in aerospace.toml.
+
+set -e
+
+BOLD=$'\e[1m'
+DIM=$'\e[2m'
+CYAN=$'\e[36m'
+GREEN=$'\e[32m'
+RESET=$'\e[0m'
+
+section() { printf '\n%s\n' "${BOLD}${CYAN}  $1${RESET}"; }
+key()     { printf '    %s%-22s%s %s\n' "$GREEN" "$1" "$RESET" "$2"; }
+note()    { printf '      %s• %s%s\n' "$DIM" "$1" "$RESET"; }
+
+{
+printf '%s\n' "${BOLD}  AeroSpace cheatsheet${RESET}   ${DIM}(q to close)${RESET}"
+printf '%s\n' "${DIM}  mod = Alt/Option (not Cmd)${RESET}"
+
+section "Launch"
+key "alt+Return"          "Terminal (alacritty)"
+
+section "Windows"
+key "alt+Shift+q"         "Close focused window"
+key "alt+f"               "Fullscreen toggle"
+key "alt+Shift+space"     "Floating toggle"
+key "alt+minus"           "Go to scratchpad workspace (S)"
+key "alt+Shift+minus"     "Send window to scratchpad workspace (S)"
+note "not a real scratchpad — no auto-hide/floating, just workspace S"
+
+section "Focus & move"
+key "alt+j k l ;"         "Focus left / down / up / right"
+key "alt+Shift+j k l ;"   "Move window left / down / up / right"
+note "arrow keys work everywhere the letters do"
+
+section "Layout"
+key "alt+h"               "Split horizontal (next window opens beside)"
+key "alt+v"               "Split vertical (next window opens below)"
+key "alt+s"               "v_accordion layout (i3's 'stacking')"
+key "alt+w"               "h_accordion layout (i3's 'tabbed')"
+key "alt+e"               "Toggle split orientation"
+
+section "Workspaces"
+key "alt+1..8"            "Switch to workspace"
+key "alt+Shift+1..8"      "Move window there and follow"
+key "alt+b"               "Workspace back-and-forth"
+note "assigned apps: Alacritty->1 Chrome->2 Discord->3 Finder->4"
+note "                Bruno->5 WhatsApp->6 Spotify->8"
+
+section "Modes"
+key "alt+r"               "Resize mode — j/k/l/; or arrows, Enter/Esc to exit"
+key "alt+Shift+s"         "Service mode — join-with (j/k/l/;), r reset layout,"
+note "                    f float toggle, backspace close-all-but-current"
+
+section "AeroSpace itself"
+key "alt+Shift+c"         "Reload config"
+key "alt+Shift+h"         "This cheatsheet"
+note "config: ~/.config/aerospace/aerospace.toml  (symlink to dotfiles/aerospace)"
+
+section "Not carried over from i3"
+note "focus parent, sticky toggle, split toggle, focus tiling<->floating,"
+note "moving a window to 'back and forth' — see comments in aerospace.toml"
+
+printf '\n'
+} | less -R -Q -i

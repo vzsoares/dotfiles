@@ -14,8 +14,10 @@ file assuming they're a harmless no-op elsewhere — use the per-OS split
 alacritty/    # terminal emulator config; .alacritty.toml is shared, and
               #   macos.toml / linux.toml hold OS-only keys (linked to
               #   local.toml by ./link). Shell must stay a login shell.
+aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
+              #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
-i3/           # i3 window manager config
+i3/           # i3 window manager config (linux)
 flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+Print
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.
@@ -32,8 +34,8 @@ zsh/          # zsh aliases, plugins, themes
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
 
-Config dirs (alacritty, cava, flameshot, i3, nvim, tmux) each have their own
-`link` script.
+Config dirs (aerospace, alacritty, cava, flameshot, i3, nvim, tmux) each have
+their own `link` script.
 
 ## Linking
 

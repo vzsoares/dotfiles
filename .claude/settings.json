@@ -4,6 +4,7 @@
       "/home/zizmackrok/code"
     ]
   },
+  "model": "sonnet",
   "skillOverrides": {
     "auto-mode-setup": "off"
   },

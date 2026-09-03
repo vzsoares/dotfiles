@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -e
+
+# AeroSpace errors out if it finds a config in both ~/.aerospace.toml and
+# $XDG_CONFIG_HOME/aerospace/aerospace.toml, so link only the XDG path and
+# make sure the legacy one is gone.
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aerospace"
+mkdir -p "$config_dir"
+
+link_one() {
+	local src="$1" target="$2"
+	if [ -e "$target" ] && [ ! -L "$target" ]; then
+		mv "$target" "$target.bak"
+		echo "backed up existing $(basename "$target") to $target.bak"
+	fi
+	rm -f "$target"
+	ln -s "$src" "$target"
+}
+
+link_one "$(pwd)/aerospace.toml" "$config_dir/aerospace.toml"
+link_one "$(pwd)/aerospace-help" "$config_dir/aerospace-help"
+chmod +x "$(pwd)/aerospace-help"
+
+rm -f ~/.aerospace.toml

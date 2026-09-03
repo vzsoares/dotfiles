@@ -1,0 +1,190 @@
+# AeroSpace config — macOS counterpart to i3/config.
+# Translates the i3 setup's habits (custom j/k/l/; focus direction, mod key,
+# resize mode, workspace numbers) rather than following AeroSpace's own
+# defaults. Reference: https://nikitabobko.github.io/AeroSpace/guide
+
+config-version = 2
+
+# i3 has no "normalization" step that silently reshapes the container tree
+# (flattening single-child containers, flipping nested orientations). Turn
+# both off so the tree behaves the way i3 muscle memory expects.
+# See: https://nikitabobko.github.io/AeroSpace/guide#normalization
+enable-normalization-flatten-containers = false
+enable-normalization-opposite-orientation-for-nested-containers = false
+
+# i3's default focus_follows_mouse was left enabled (i3/config only has it
+# commented out) — keep that behavior here.
+focus-follows-mouse.enabled = true
+# Mouse recenters when the *monitor* focus changes (single-monitor no-op today,
+# matches i3's default and is ready if a second display gets added).
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+
+key-mapping.preset = 'qwerty'
+
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+
+# Roughly mirrors i3's `gaps inner 2 / outer -2` intent (visible but tight).
+# Tune to taste — there's no smart-gaps equivalent, gaps always apply.
+gaps.inner.horizontal = 8
+gaps.inner.vertical = 8
+gaps.outer.left = 0
+gaps.outer.right = 0
+gaps.outer.top = 0
+gaps.outer.bottom = 0
+
+# Workspaces 1-8 (mirrors i3/config's $ws1..$ws8) plus "S", used below as a
+# scratchpad stand-in. Kept alive even when empty so they don't disappear.
+persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "S"]
+
+# --- App -> workspace assignment (i3's `assign [class="..."] $wsN`) -------
+# AeroSpace matches on macOS bundle id instead of X11 window class. Add more
+# entries the same way; find a running app's id with `aerospace list-apps`,
+# or a bundle's id with `mdls -name kMDItemCFBundleIdentifier -r /Applications/App.app`.
+# See: https://nikitabobko.github.io/AeroSpace/guide#on-window-detected-callback
+on-window-detected = [
+    { if.app-id = 'org.alacritty', run = 'move-node-to-workspace 1' },
+    { if.app-id = 'com.google.Chrome', run = 'move-node-to-workspace 2' },
+    { if.app-id = 'com.hnc.Discord', run = 'move-node-to-workspace 3' },
+    { if.app-id = 'net.whatsapp.WhatsApp', run = 'move-node-to-workspace 6' },
+    { if.app-id = 'com.usebruno.app', run = 'move-node-to-workspace 5' },
+    # Only moves actual Finder windows — the Desktop/menu-bar process has no
+    # window of its own, so it's unaffected.
+    { if.app-id = 'com.apple.finder', run = 'move-node-to-workspace 4' },
+    { if.app-id = 'com.spotify.client', run = 'move-node-to-workspace 8' },
+    # Dialog/floating heuristics are automatic in AeroSpace (see the guide's
+    # "Dialog heuristics" section) — i3's long `for_window [...] floating
+    # enable` list has no equivalent needed here.
+
+    # Cheatsheet window (i3: for_window [class="i3-help"] floating enable,
+    # resize set 1150 1950, move position center). Matched by window title
+    # since every Alacritty window shares the same app-id.
+    { if.window-title-regex-substring = 'AeroSpace Cheatsheet', run = 'layout floating' },
+]
+
+[mode.main.binding]
+    # start a terminal (i3: mod+Return -> exec alacritty)
+    alt-enter = 'exec-and-forget open -na Alacritty'
+
+    # kill focused window (i3: mod+Shift+q -> kill)
+    alt-shift-q = 'close'
+
+    # reload config (i3: mod+Shift+c -> reload)
+    alt-shift-c = 'reload-config'
+
+    # cheatsheet (i3: mod+Shift+h -> alacritty --class i3-help -e i3-help)
+    alt-shift-h = 'exec-and-forget alacritty --title "AeroSpace Cheatsheet" -e ~/.config/aerospace/aerospace-help'
+
+    # change focus — i3/config's own j/k/l/; -> left/down/up/right mapping,
+    # not AeroSpace's default h/j/k/l
+    alt-j = 'focus --boundaries-action wrap-around-the-workspace left'
+    alt-k = 'focus --boundaries-action wrap-around-the-workspace down'
+    alt-l = 'focus --boundaries-action wrap-around-the-workspace up'
+    alt-semicolon = 'focus --boundaries-action wrap-around-the-workspace right'
+
+    alt-left = 'focus --boundaries-action wrap-around-the-workspace left'
+    alt-down = 'focus --boundaries-action wrap-around-the-workspace down'
+    alt-up = 'focus --boundaries-action wrap-around-the-workspace up'
+    alt-right = 'focus --boundaries-action wrap-around-the-workspace right'
+
+    # move focused window, same direction mapping
+    alt-shift-j = 'move left'
+    alt-shift-k = 'move down'
+    alt-shift-l = 'move up'
+    alt-shift-semicolon = 'move right'
+
+    alt-shift-left = 'move left'
+    alt-shift-down = 'move down'
+    alt-shift-up = 'move up'
+    alt-shift-right = 'move right'
+
+    # workspace back and forth (i3: mod+b -> workspace back_and_forth)
+    alt-b = 'workspace-back-and-forth'
+    # NB: i3's mod+Shift+b (move container to back_and_forth workspace, then
+    # follow it) has no AeroSpace equivalent — move-node-to-workspace needs an
+    # explicit workspace name, there's no "back and forth" target.
+
+    # split orientation (i3: mod+h / mod+v -> split h / split v)
+    alt-h = 'split horizontal'
+    alt-v = 'split vertical'
+    # i3's mod+q ("split toggle") has no direct match; closest is toggling the
+    # whole container's orientation below (alt-e).
+
+    # fullscreen (i3: mod+f)
+    alt-f = 'fullscreen'
+
+    # layout (i3: mod+s stacking / mod+w tabbed / mod+e toggle split)
+    alt-s = 'layout v_accordion'
+    alt-w = 'layout h_accordion'
+    alt-e = 'layout tiles horizontal vertical'
+
+    # floating toggle (i3: mod+Shift+space -> floating toggle)
+    alt-shift-space = 'layout floating tiling'
+    # i3's mod+space ("focus mode_toggle", jump focus to/from floating) has no
+    # AeroSpace equivalent.
+
+    # i3's mod+Shift+s ("sticky toggle") isn't supported by AeroSpace yet
+    # (https://github.com/nikitabobko/AeroSpace/issues/2). That key is
+    # repurposed below to enter service mode instead.
+    alt-shift-s = 'mode service'
+
+    # i3's mod+a ("focus parent") has no equivalent — AeroSpace doesn't expose
+    # tree parent/child focus (https://github.com/nikitabobko/AeroSpace/issues/5).
+
+    # scratchpad stand-in (i3: mod+minus show / mod+Shift+minus send) — not a
+    # real scratchpad (no auto-hide, no floating), just a dedicated workspace.
+    alt-minus = 'workspace S'
+    alt-shift-minus = 'move-node-to-workspace S'
+
+    # switch to workspace (i3: mod+1..8)
+    alt-1 = 'workspace 1'
+    alt-2 = 'workspace 2'
+    alt-3 = 'workspace 3'
+    alt-4 = 'workspace 4'
+    alt-5 = 'workspace 5'
+    alt-6 = 'workspace 6'
+    alt-7 = 'workspace 7'
+    alt-8 = 'workspace 8'
+
+    # move focused window to workspace, then follow it (i3: mod+Shift+1..8)
+    alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
+    alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
+    alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
+    alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
+    alt-shift-5 = ['move-node-to-workspace 5', 'workspace 5']
+    alt-shift-6 = ['move-node-to-workspace 6', 'workspace 6']
+    alt-shift-7 = ['move-node-to-workspace 7', 'workspace 7']
+    alt-shift-8 = ['move-node-to-workspace 8', 'workspace 8']
+
+    # resize mode (i3: mod+r -> mode "resize")
+    alt-r = 'mode resize'
+
+# Resize mode — same j/k/l/; direction mapping as focus/move above.
+# i3 used 5px/10px steps; AeroSpace's resize units aren't pixels, so scaled
+# equivalents (50/100) are used instead.
+[mode.resize.binding]
+    j = 'resize width -50'
+    k = 'resize height +50'
+    l = 'resize height -50'
+    semicolon = 'resize width +50'
+
+    left = 'resize width -100'
+    down = 'resize height +100'
+    up = 'resize height -100'
+    right = 'resize width +100'
+
+    enter = 'mode main'
+    esc = 'mode main'
+
+# Service mode — not from i3, but the closest AeroSpace has to i3's tree
+# manipulation commands (join-with covers what mod+a/"focus parent" can't).
+[mode.service.binding]
+    esc = ['reload-config', 'mode main']
+    r = ['flatten-workspace-tree', 'mode main']
+    f = ['layout floating tiling', 'mode main']
+    backspace = ['close-all-windows-but-current', 'mode main']
+
+    j = ['join-with left', 'mode main']
+    k = ['join-with down', 'mode main']
+    l = ['join-with up', 'mode main']
+    semicolon = ['join-with right', 'mode main']
