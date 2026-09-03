@@ -64,6 +64,12 @@ on-window-detected = [
     # "Dialog heuristics" section) — i3's long `for_window [...] floating
     # enable` list has no equivalent needed here.
 
+    # Touch ID / password auth prompts (e.g. sudo, keychain unlock). Must come
+    # before the catch-all — no move-node-to-workspace here, so the dialog
+    # stays floating on whatever workspace triggered it instead of yanking
+    # focus to 9 mid-auth.
+    { if.app-id = 'com.apple.LocalAuthentication.UIAgent', run = 'layout floating' },
+
     # Catch-all: anything not assigned above lands on 9 instead of wherever
     # it happened to open. Must stay last since it always matches.
     { if = 'true', run = 'move-node-to-workspace 9' },
