@@ -33,9 +33,10 @@ gaps.outer.right = 0
 gaps.outer.top = 0
 gaps.outer.bottom = 0
 
-# Workspaces 1-8 (mirrors i3/config's $ws1..$ws8) plus "S", used below as a
-# scratchpad stand-in. Kept alive even when empty so they don't disappear.
-persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "S"]
+# Workspaces 1-8 (mirrors i3/config's $ws1..$ws8), "9" as a catch-all for
+# unassigned apps, and "S" as a scratchpad stand-in. Kept alive even when
+# empty so they don't disappear.
+persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "S"]
 
 # --- App -> workspace assignment (i3's `assign [class="..."] $wsN`) -------
 # AeroSpace matches on macOS bundle id instead of X11 window class. Add more
@@ -43,6 +44,13 @@ persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "S"]
 # or a bundle's id with `mdls -name kMDItemCFBundleIdentifier -r /Applications/App.app`.
 # See: https://nikitabobko.github.io/AeroSpace/guide#on-window-detected-callback
 on-window-detected = [
+    # Cheatsheet window (i3: for_window [class="i3-help"] floating enable,
+    # resize set 1150 1950, move position center). Matched by window title
+    # since every Alacritty window shares the same app-id — this has to come
+    # before the org.alacritty rule below, or that one wins first and this
+    # never gets a chance to run (the list stops at the first match).
+    { if.window-title-regex-substring = 'AeroSpace Cheatsheet', run = 'layout floating' },
+
     { if.app-id = 'org.alacritty', run = 'move-node-to-workspace 1' },
     { if.app-id = 'com.google.Chrome', run = 'move-node-to-workspace 2' },
     { if.app-id = 'com.hnc.Discord', run = 'move-node-to-workspace 3' },
@@ -56,10 +64,9 @@ on-window-detected = [
     # "Dialog heuristics" section) — i3's long `for_window [...] floating
     # enable` list has no equivalent needed here.
 
-    # Cheatsheet window (i3: for_window [class="i3-help"] floating enable,
-    # resize set 1150 1950, move position center). Matched by window title
-    # since every Alacritty window shares the same app-id.
-    { if.window-title-regex-substring = 'AeroSpace Cheatsheet', run = 'layout floating' },
+    # Catch-all: anything not assigned above lands on 9 instead of wherever
+    # it happened to open. Must stay last since it always matches.
+    { if = 'true', run = 'move-node-to-workspace 9' },
 ]
 
 [mode.main.binding]
@@ -145,6 +152,7 @@ on-window-detected = [
     alt-6 = 'workspace 6'
     alt-7 = 'workspace 7'
     alt-8 = 'workspace 8'
+    alt-9 = 'workspace 9'
 
     # move focused window to workspace, then follow it (i3: mod+Shift+1..8)
     alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
@@ -155,6 +163,7 @@ on-window-detected = [
     alt-shift-6 = ['move-node-to-workspace 6', 'workspace 6']
     alt-shift-7 = ['move-node-to-workspace 7', 'workspace 7']
     alt-shift-8 = ['move-node-to-workspace 8', 'workspace 8']
+    alt-shift-9 = ['move-node-to-workspace 9', 'workspace 9']
 
     # resize mode (i3: mod+r -> mode "resize")
     alt-r = 'mode resize'
