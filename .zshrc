@@ -111,9 +111,24 @@ bindkey -e
 export VISUAL=nvim
 export EDITOR="$VISUAL"
 
-if command -v tmux &> /dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
-    exec tmux
+# AeroSpace's exec-and-forget commands (e.g. alt-enter) can hand new terminals
+# a leaked/stale TMUX var, which would otherwise make this check think it's
+# already attached. Trust TMUX only if this tty is a real registered client.
+in_tmux=false
+if [ -n "$TMUX" ] && tmux list-clients -F '#{client_tty}' 2>/dev/null | grep -qx "$(tty)"; then
+    in_tmux=true
 fi
+if command -v tmux &> /dev/null && [[ $- == *i* ]] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && ! $in_tmux; then
+    # `exec A || exec B` doesn't work here: exec already replaced this shell
+    # once A launches, so if A then exits non-zero, there's nothing left to
+    # run the fallback. Check first, exec exactly once.
+    if tmux has-session 2>/dev/null; then
+        exec tmux attach-session
+    else
+        exec tmux new-session
+    fi
+fi
+unset in_tmux
 
 export PATH=~/.npm-global/bin:$PATH
 
