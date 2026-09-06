@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+config_dir="$HOME/.gnupg"
+mkdir -p "$config_dir"
+chmod 700 "$config_dir"
+
+case "$(uname -s)" in
+	Darwin) os_conf="macos.conf" ;;
+	Linux) os_conf="linux.conf" ;;
+	*) os_conf="" ;;
+esac
+
+if [ -z "$os_conf" ]; then
+	echo "warning: unknown OS $(uname -s); skipping gpg-agent.conf" >&2
+	exit 0
+fi
+
+target="$config_dir/gpg-agent.conf"
+if [ -e "$target" ] && [ ! -L "$target" ]; then
+	mv "$target" "$target.bak"
+	echo "backed up existing gpg-agent.conf to $target.bak"
+fi
+rm -f "$target"
+ln -s "$SCRIPT_DIR/$os_conf" "$target"
+echo "linked $os_conf -> $target"
+
+# gpg-agent caches its config at startup; reload if it's already running.
+gpgconf --kill gpg-agent 2>/dev/null || true

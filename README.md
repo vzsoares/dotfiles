@@ -38,6 +38,7 @@ See `docs/wiki/manjaroi3/fresh-install.md` for full setup.
 ```
 alacritty/    # terminal emulator config
 aerospace/    # AeroSpace window manager config (macOS counterpart to i3/)
+gnupg/        # gpg-agent.conf (per-OS pinentry-program)
 i3/           # i3 window manager config (linux)
 nvim/         # neovim config (lua)
 tmux/         # tmux config

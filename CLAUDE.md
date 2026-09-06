@@ -19,6 +19,9 @@ aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
 i3/           # i3 window manager config (linux)
 flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+Print
+gnupg/        # gpg-agent.conf; macos.conf / linux.conf are full per-OS files
+              #   (gpg-agent.conf has no import directive, unlike alacritty's
+              #   toml), linked to ~/.gnupg/gpg-agent.conf by ./link
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.
               #   Driven by the `diagram` skill in .claude/skills/
@@ -34,8 +37,8 @@ zsh/          # zsh aliases, plugins, themes
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
 
-Config dirs (aerospace, alacritty, cava, flameshot, i3, nvim, tmux) each have
-their own `link` script.
+Config dirs (aerospace, alacritty, cava, flameshot, gnupg, i3, nvim, tmux) each
+have their own `link` script.
 
 ## Linking
 
