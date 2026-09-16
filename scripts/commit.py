@@ -204,7 +204,26 @@ def is_noisy_file(name: str) -> bool:
         base in NOISY_BASENAMES
         or name.endswith(NOISY_SUFFIXES)
         or lower.endswith(BINARY_SUFFIXES)
+        # Encrypted blobs (.env.gpg etc.) are opaque ciphertext — diffing them
+        # is pointless, and being essentially random bytes they don't reliably
+        # trip git's own NUL-byte binary heuristic, so they can't be caught by
+        # is_binary_diff() below either.
+        or lower.endswith(ENV_ENCRYPTED_SUFFIXES)
     )
+
+
+def is_binary_diff(name: str) -> bool:
+    """True if git itself considers the staged change to `name` binary.
+
+    Best-effort catch for binary content under extensions BINARY_SUFFIXES
+    doesn't know about: `git diff` reports "-\t-\t<path>" for numstat on those.
+    Not sufficient on its own — git's heuristic is "does the file contain a
+    NUL byte", which arbitrary binary content (e.g. unarmored ciphertext) can
+    fail to trip — so build_diff()'s git() call also tolerates undecodable
+    bytes rather than relying solely on this.
+    """
+    line = git("diff", "--cached", "--numstat", "--", name).stdout.strip()
+    return line.startswith("-\t-\t")
 
 
 # --------------------------------------------------------------------------- #
@@ -303,7 +322,16 @@ def gum_confirm(prompt: str, default_yes: bool = True) -> bool:
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], text=True, capture_output=True, check=False)
+    # errors="replace": diffing binary/encrypted content (which is_noisy_file
+    # is meant to keep out of here, but heuristics can miss) must never crash
+    # the whole command — a few U+FFFD in a Claude prompt is harmless.
+    return subprocess.run(
+        ["git", *args],
+        text=True,
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
 
 
 def staged_files() -> list[str]:
@@ -344,8 +372,8 @@ SYSTEM_PROMPT = (
 def build_diff() -> str:
     """Staged diff for the prompt: normal files in full, noisy files by name only."""
     files = staged_files()
-    normal = [f for f in files if not is_noisy_file(f)]
-    noisy = [f for f in files if is_noisy_file(f)]
+    normal = [f for f in files if not is_noisy_file(f) and not is_binary_diff(f)]
+    noisy = [f for f in files if is_noisy_file(f) or is_binary_diff(f)]
     parts: list[str] = []
     if normal:
         parts.append(git("diff", "--cached", "--", *normal).stdout)

@@ -194,12 +194,51 @@ def test_looks_encrypted_false(data: bytes) -> None:
         ("docs/manual.pdf", True),
         ("photos/IMG_1234.JPEG", True),
         ("icons/favicon.svg", True),
+        (".env.gpg", True),
+        ("secrets/prod.env.age", True),
         ("src/main.py", False),
         ("README.md", False),
     ],
 )
 def test_is_noisy_file(name: str, noisy: bool) -> None:
     assert commit.is_noisy_file(name) is noisy
+
+
+# --------------------------------------------------------------------------- #
+# build_diff with real binary content                                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_build_diff_handles_binary_under_unknown_extension(git_repo: Path) -> None:
+    """A binary file whose extension isn't in BINARY_SUFFIXES and does contain
+    a NUL byte (so git's own binary heuristic catches it via is_binary_diff)
+    must not crash the diff — it should be listed by name instead."""
+    (git_repo / "data.blob").write_bytes(bytes(range(256)))
+    _git("add", "data.blob", cwd=git_repo)
+
+    diff = commit.build_diff()
+
+    assert "data.blob" in diff
+    assert "Lock/generated/binary files changed" in diff
+
+
+def test_build_diff_tolerates_undecodable_bytes_git_calls_text(
+    git_repo: Path,
+) -> None:
+    """Real GPG/ciphertext output is essentially random bytes and can go a
+    long stretch with no NUL byte — git's own binary heuristic (and thus
+    is_binary_diff) can miss it and hand it to `git diff` as "text". That text
+    still isn't valid UTF-8, so the underlying git() subprocess call must
+    tolerate undecodable bytes (errors="replace") instead of crashing with a
+    UnicodeDecodeError, whatever bucket the file lands in."""
+    no_nul_binary = bytes(b for b in range(1, 256)) * 4
+    assert 0 not in no_nul_binary
+    (git_repo / "data.unknownext").write_bytes(no_nul_binary)
+    _git("add", "data.unknownext", cwd=git_repo)
+
+    diff = commit.build_diff()  # must not raise UnicodeDecodeError
+
+    assert "data.unknownext" in diff
 
 
 # --------------------------------------------------------------------------- #

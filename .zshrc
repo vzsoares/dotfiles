@@ -111,6 +111,11 @@ bindkey -e
 export VISUAL=nvim
 export EDITOR="$VISUAL"
 
+# gpg-agent binds pinentry to whichever tty last told it about itself; without
+# this, switching terminals/tmux panes leaves it prompting on a stale tty and
+# input silently goes nowhere.
+export GPG_TTY=$(tty)
+
 # AeroSpace's exec-and-forget commands (e.g. alt-enter) can hand new terminals
 # a leaked/stale TMUX var, which would otherwise make this check think it's
 # already attached. Trust TMUX only if this tty is a real registered client.
