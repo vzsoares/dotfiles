@@ -34,6 +34,8 @@ zsh/          # zsh aliases, plugins, themes
 .claude/      # Claude Code settings & skills
               #   skills/clawd-status/ — status line sprite plugin (auto-loads
               #   as clawd-status@skills-dir; see its README)
+              #   output-styles/adhd.md — commands + why, numbered
+              #   decisions; select with /output-style adhd
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
 
@@ -47,7 +49,7 @@ Root-level link scripts:
 
 - `./link` — symlinks `.zshrc`, `.gitconfig`, `biome.json` to `~`
 - `./link-claude` — symlinks `.claude/` contents to `~/.claude/`: `CLAUDE.md`,
-  `settings.json`, `skills/`, `statusline-command.sh`
+  `settings.json`, `skills/`, `output-styles/`, `statusline-command.sh`
 - `./link-bin` — symlinks the `zen-*` commands into `~/.local/bin`. The `LINKS`
   table at the top of that script is the authoritative list — read it there
   rather than duplicating it. `./link-bin --check` reports drift (missing,

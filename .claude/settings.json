@@ -4,7 +4,7 @@
       "/home/zizmackrok/code"
     ]
   },
-  "model": "sonnet",
+  "model": "opus[1m]",
   "skillOverrides": {
     "auto-mode-setup": "off"
   },
@@ -71,5 +71,6 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
-  }
+  },
+  "outputStyle": "adhd"
 }

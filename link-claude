@@ -21,6 +21,11 @@ rm -rf "$TARGET_DIR/skills"
 ln -s "$DOTFILES_CLAUDE/skills" "$TARGET_DIR/skills"
 echo "linked skills/"
 
+# Output styles
+rm -rf "$TARGET_DIR/output-styles"
+ln -s "$DOTFILES_CLAUDE/output-styles" "$TARGET_DIR/output-styles"
+echo "linked output-styles/"
+
 # Statusline command
 rm -f "$TARGET_DIR/statusline-command.sh"
 ln -s "$DOTFILES_CLAUDE/statusline-command.sh" "$TARGET_DIR/statusline-command.sh"
