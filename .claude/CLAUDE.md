@@ -12,6 +12,16 @@
 - Use the Playwright MCP to visually test frontend changes in the browser before delivering
 - Avoid type coercions (`as`) and the `any` type — use proper typing instead
 
+# Code comments
+
+- Comments are objective and minimal: state only what the code cannot show
+  (a non-obvious constraint, invariant, or gotcha), in one or two lines
+- Never narrate change history in comments ("previously this did X",
+  "changed to fix Y") — that belongs in git, not the code
+- No essays justifying that code exists or explaining what the next line does
+- When editing commented code, trim stale or prolix comments instead of
+  appending to them
+
 # Workflow tooling
 
 Two personal CLI commands are on PATH in my environments. Prefer them over
