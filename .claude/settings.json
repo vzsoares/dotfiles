@@ -41,6 +41,7 @@
     "refreshInterval": 1
   },
   "enabledPlugins": {},
+  "outputStyle": "adhd",
   "autoCompactWindow": 800000,
   "tui": "default",
   "skipDangerousModePermissionPrompt": false,
@@ -71,6 +72,5 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
-  },
-  "outputStyle": "adhd"
+  }
 }

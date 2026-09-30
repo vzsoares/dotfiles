@@ -37,6 +37,35 @@ hand-rolling commits / releases.
 Both are gum-driven; without the headless flags they prompt, so run those forms
 in a real terminal.
 
+# Task workflow — `/zen-flow` (always use)
+
+All my tasks (Approva work and personal) live on the Notion **Main Board**. The
+`zen-flow` skill holds its IDs, statuses, and operations — invoke it before any
+board read or write; never guess IDs or status names.
+
+Use it proactively, without being asked:
+
+- **Session start / "what now?"** — when I ask what to do, plan the day, or start
+  work without a clear target, run `next` and recommend one task.
+- **Starting work** — when I begin something that matches a board task, set it to
+  `In Progress`. If it matches nothing, offer to `add` it.
+- **Finishing work** — after a commit or release (`zen-commit`, `zen-release`) that
+  completes a task, mark it `✅ Done` with Conclusion Date.
+- **New ideas mid-session** — when I mention a follow-up, bug, or "we should also…",
+  offer to `add` it instead of letting it get lost in the chat.
+- **Scope creep** — if I drift to something unrelated, name the current In Progress
+  task and ask whether to park it or switch.
+
+Keep the board truthful: nothing I finished should stay open. The skill grows with my routine — when a new habit or
+tool becomes part of how I work, add a section to it rather than to this file.
+
+# Public dotfiles
+
+This file, `~/.claude/skills/`, and `~/.claude/output-styles/` are symlinks into a
+**public** repo (`~/code/personal/dotfiles`). Never write secrets, private resource IDs,
+or personal details into them — store those in the private vault
+(`<vault>/config/*.json`) and reference it. See the dotfiles `CLAUDE.md` for the full list.
+
 # Package managers
 
 - Python: use `uv`

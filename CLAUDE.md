@@ -58,6 +58,20 @@ Root-level link scripts:
 
 Run from the repo root.
 
+## Public repo — no sensitive info
+
+This repo is public on GitHub. Before writing to any tracked file here (including
+`.claude/CLAUDE.md` and `.claude/skills/`), check it contains none of:
+
+- secrets, tokens, keys, or credentials
+- IDs of private resources (Notion pages/databases, AWS accounts, tenant/app IDs)
+- personal details: job search, health, finances, family, private project names
+- employer internals beyond what's already public (hostnames, customer data, prices)
+
+Put that data in the private vault instead — config in
+`<vault>/config/<name>.json`, knowledge in `<vault>/wiki/` — and have the public file
+point to it. Untracked `~/.zshrc.local` is the place for machine-local secrets.
+
 ## Conventions
 
 - Shell scripts use `bash` with `set -e`
