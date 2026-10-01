@@ -955,9 +955,17 @@ def phase_merge(state: State) -> None:
     if len(chain) < 2:
         return
     if (git_dir() / "MERGE_HEAD").exists():
-        info(
-            "Merge already in progress — leaving it for you to resolve, then --resume."
-        )
+        unresolved = git("diff", "--name-only", "--diff-filter=U").stdout.split()
+        if unresolved and not resolve_version_only_conflicts():
+            fail(
+                "Merge in progress with unresolved conflicts: " + ", ".join(unresolved)
+            )
+            fail("Resolve them, then re-run with --resume.")
+            raise typer.Exit(1)
+        if not unresolved and git("commit", "--no-edit").returncode != 0:
+            fail("Could not commit the in-progress merge.")
+            raise typer.Exit(1)
+        info("Finished the in-progress merge.")
         return
     for i in range(1, len(chain)):
         frm, into = chain[i - 1], chain[i]
@@ -974,10 +982,94 @@ def phase_merge(state: State) -> None:
             title=f"Merging {frm} into {into}...",
         )
         if merge.returncode != 0:
+            if resolve_version_only_conflicts():
+                info(
+                    f"Merged {frm} into {into} (version-only conflicts auto-resolved)."
+                )
+                continue
             fail(
                 "Merge failed (conflicts?). Resolve, commit, then re-run with --resume."
             )
             raise typer.Exit(1)
+
+
+# Lines a version bump touches. Both sides of a conflict hunk made only of these
+# are safe to settle either way: phase_write_version rewrites them right after.
+_VERSION_LINE_RES = (
+    re.compile(r'^\s*"version"\s*:\s*"[^"]*",?\s*$'),
+    re.compile(r'^\s*version\s*=\s*"[^"]*"\s*$'),
+    re.compile(r'^\s*(?:VERSION|VERSAO|__version__)(?:\s*:\s*\w+)?\s*=\s*"[^"]*"\s*$'),
+)
+# npm rewrites the lockfile's root "name" from package.json; it drifts with it.
+_LOCKFILE_NAME_RE = re.compile(r'^\s*"name"\s*:\s*"[^"]*",?\s*$')
+
+
+def _is_version_line(line: str, path: str) -> bool:
+    if not line.strip():
+        return True
+    if any(r.match(line) for r in _VERSION_LINE_RES):
+        return True
+    return Path(path).name == "package-lock.json" and bool(
+        _LOCKFILE_NAME_RE.match(line)
+    )
+
+
+def _take_theirs_if_version_only(text: str, path: str) -> str | None:
+    """Resolve every conflict hunk to the incoming side, or None if any hunk
+    touches something other than version lines (or the file has no hunks)."""
+    out: list[str] = []
+    ours: list[str] = []
+    theirs: list[str] = []
+    section = None  # None | "ours" | "base" | "theirs"
+    hunks = 0
+    for line in text.splitlines(keepends=True):
+        if line.startswith("<<<<<<< ") and section is None:
+            section, ours, theirs = "ours", [], []
+        elif line.startswith("||||||| ") and section == "ours":
+            section = "base"  # diff3 style: the base side is dropped
+        elif line.rstrip("\n") == "=======" and section in ("ours", "base"):
+            section = "theirs"
+        elif line.startswith(">>>>>>> ") and section == "theirs":
+            if not all(_is_version_line(x, path) for x in ours + theirs):
+                return None
+            out.extend(theirs)
+            hunks += 1
+            section = None
+        elif section == "ours":
+            ours.append(line)
+        elif section == "theirs":
+            theirs.append(line)
+        elif section is None:
+            out.append(line)
+    if section is not None or hunks == 0:
+        return None
+    return "".join(out)
+
+
+def resolve_version_only_conflicts() -> bool:
+    """Finish a failed merge whose conflicts are all version bumps.
+
+    Happens when the target was bumped outside this tool (another release
+    script, a hotfix) so both sides edited the same version lines. Anything else
+    conflicting leaves the merge untouched for a human.
+    """
+    conflicted = git("diff", "--name-only", "--diff-filter=U").stdout.split()
+    if not conflicted:
+        return False
+    resolved: dict[str, str] = {}
+    for path in conflicted:
+        try:
+            text = Path(path).read_text()
+        except (OSError, UnicodeDecodeError):
+            return False
+        fixed = _take_theirs_if_version_only(text, path)
+        if fixed is None:
+            return False
+        resolved[path] = fixed
+    for path, text in resolved.items():
+        Path(path).write_text(text)
+    git("add", *resolved)
+    return git("commit", "--no-edit").returncode == 0
 
 
 def find_config_version_files() -> list[Path]:

@@ -1166,6 +1166,160 @@ def test_e2e_release_with_merge(
     assert "feat: add feature" in log
 
 
+def _diverged_version_repo(git_repo: Path, *, extra_prod_change: bool) -> None:
+    """prod bumped outside the tool (2.17.1), dev bumped by a dev release; dev
+    also carries a feature. Optionally prod changes a non-version line too."""
+    (git_repo / "package.json").write_text(
+        '{\n  "version": "2.17.0",\n  "private": true\n}\n'
+    )
+    (git_repo / "package-lock.json").write_text(
+        '{\n  "name": "app",\n  "version": "2.17.0",\n  "lockfileVersion": 3\n}\n'
+    )
+    (git_repo / "settings.py").write_text(
+        'NOME = "app"\nVERSAO = "2.17.0"\nDEBUG = False\n'
+    )
+    _git("add", ".")
+    _git("commit", "-q", "-m", "chore: 2.17.0")
+    _git("branch", "prod")
+
+    _git("checkout", "-q", "-b", "dev")
+    (git_repo / "feature.txt").write_text("feature\n")
+    (git_repo / "package.json").write_text(
+        '{\n  "version": "2.18.0-dev.1",\n  "private": true\n}\n'
+    )
+    (git_repo / "package-lock.json").write_text(
+        '{\n  "name": "App",\n  "version": "2.18.0-dev.1",\n  "lockfileVersion": 3\n}\n'
+    )
+    (git_repo / "settings.py").write_text(
+        'NOME = "app"\nVERSAO = "2.18.0-dev.1"\nDEBUG = False\n'
+    )
+    _git("add", ".")
+    _git("commit", "-q", "-m", "feat: feature + dev bump")
+
+    _git("checkout", "-q", "prod")
+    (git_repo / "package.json").write_text(
+        '{\n  "version": "2.17.1",\n  "private": true\n}\n'
+    )
+    (git_repo / "package-lock.json").write_text(
+        '{\n  "name": "app-old",\n  "version": "2.17.1",\n  "lockfileVersion": 3\n}\n'
+    )
+    settings = 'NOME = "app"\nVERSAO = "2.17.1"\nDEBUG = False\n'
+    if extra_prod_change:
+        settings = 'NOME = "app"\nVERSAO = "2.17.1"\nDEBUG = True\n'
+    (git_repo / "settings.py").write_text(settings)
+    (git_repo / "hotfix.txt").write_text("hotfix\n")
+    _git("add", ".")
+    _git("commit", "-q", "-m", "fix: hotfix released by another tool")
+    _git("checkout", "-q", "dev")
+
+
+def test_merge_auto_resolves_version_only_conflicts(
+    git_repo: Path, xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config()
+    _diverged_version_repo(git_repo, extra_prod_change=False)
+    write_repo_config(source="dev", target="prod")
+    monkeypatch.setattr(release, "gum_choose", lambda header, options: options[0])
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
+
+    release.do_release(
+        resume=False, restart=False, dry_run=False, no_scan=False, no_changelog=False
+    )
+
+    assert _git("branch", "--show-current").strip() == "prod"
+    assert not (git_repo / ".git" / "MERGE_HEAD").exists()
+    version = release.detect_version()
+    assert f'"version": "{version}"' in (git_repo / "package.json").read_text()
+    assert f'VERSAO = "{version}"' in (git_repo / "settings.py").read_text()
+    assert (
+        '"name": "App"' in (git_repo / "package-lock.json").read_text()
+    )  # incoming side
+    assert (git_repo / "feature.txt").exists()  # dev's work landed
+    assert (git_repo / "hotfix.txt").exists()  # prod's own work kept
+    assert "<<<<<<<" not in _git("grep", "-n", "", "--", "*.py", "*.json")
+
+
+def test_merge_with_a_real_conflict_still_stops(
+    git_repo: Path, xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config()
+    _diverged_version_repo(git_repo, extra_prod_change=True)
+    # dev touches the same non-version line so the hunk mixes VERSAO and DEBUG.
+    (git_repo / "settings.py").write_text(
+        'NOME = "app"\nVERSAO = "2.18.0-dev.1"\nDEBUG = "x"\n'
+    )
+    _git("commit", "-q", "-am", "dev changes DEBUG")
+    write_repo_config(source="dev", target="prod")
+    monkeypatch.setattr(release, "gum_choose", lambda header, options: options[0])
+    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
+
+    with pytest.raises(typer.Exit):
+        release.do_release(
+            resume=False,
+            restart=False,
+            dry_run=False,
+            no_scan=False,
+            no_changelog=False,
+        )
+
+    assert (git_repo / ".git" / "MERGE_HEAD").exists()  # left for a human
+    assert "<<<<<<<" in (git_repo / "settings.py").read_text()
+
+
+def test_take_theirs_handles_diff3_and_rejects_mixed_hunks() -> None:
+    diff3 = (
+        "{\n<<<<<<< HEAD\n"
+        '  "version": "2.17.1",\n'
+        "||||||| base\n"
+        '  "version": "2.17.0",\n'
+        "=======\n"
+        '  "version": "2.18.0-dev.1",\n'
+        ">>>>>>> dev\n"
+        '  "private": true\n}\n'
+    )
+    assert release._take_theirs_if_version_only(diff3, "package.json") == (
+        '{\n  "version": "2.18.0-dev.1",\n  "private": true\n}\n'
+    )
+    mixed = (
+        '<<<<<<< HEAD\nVERSAO = "1"\nDEBUG = True\n=======\nVERSAO = "2"\n>>>>>>> dev\n'
+    )
+    assert release._take_theirs_if_version_only(mixed, "settings.py") is None
+    # "name" is only a version-like line inside the lockfile.
+    name = '<<<<<<< HEAD\n  "name": "a",\n=======\n  "name": "b",\n>>>>>>> dev\n'
+    assert release._take_theirs_if_version_only(name, "package.json") is None
+    assert (
+        release._take_theirs_if_version_only(name, "package-lock.json")
+        == '  "name": "b",\n'
+    )
+    assert release._take_theirs_if_version_only("no conflicts\n", "x.py") is None
+
+
+def test_resume_commits_a_merge_resolved_by_hand(
+    git_repo: Path, offline_gum: None
+) -> None:
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "dev")
+    (git_repo / "README.md").write_text("dev\n")
+    _git("commit", "-q", "-am", "dev edit")
+    _git("checkout", "-q", "prod")
+    (git_repo / "README.md").write_text("prod\n")
+    _git("commit", "-q", "-am", "prod edit")
+    subprocess.run(
+        ["git", "merge", "dev", "--no-ff", "-m", "Release version 1.0.0"],
+        capture_output=True,
+        check=False,
+    )
+    (git_repo / "README.md").write_text("resolved\n")
+    _git("add", "README.md")
+
+    state = release.State(version="1.0.0", source_branch="dev", target_branch="prod")
+    state.no_merge = False
+    release.phase_merge(state)
+
+    assert not (git_repo / ".git" / "MERGE_HEAD").exists()
+    assert _git("log", "-1", "--pretty=%s").strip() == "Release version 1.0.0"
+
+
 def test_e2e_headless_feature_branch_chain(
     git_repo: Path, xdg_home: Path, offline_gum: None
 ) -> None:
