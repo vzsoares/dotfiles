@@ -476,12 +476,18 @@ def load_state() -> State | None:
     return state
 
 
+# A dry run neither writes nor deletes the state file: a write would leave a
+# "release in progress" for the next real run, a delete would drop a real one.
 def save_state(state: State) -> None:
     state.updated_at = time.time()
+    if DRY_RUN:
+        return
     state_path().write_text(json.dumps(asdict(state), indent=2) + "\n")
 
 
 def clear_state() -> None:
+    if DRY_RUN:
+        return
     state_path().unlink(missing_ok=True)
 
 
@@ -1629,8 +1635,7 @@ def do_release(
     if skipped:
         summary.append(f"(skipped/incomplete: {', '.join(skipped)})")
     banner("\n".join(summary), color="82")
-    if not DRY_RUN:
-        clear_state()
+    clear_state()
 
 
 def do_dev_release(dry_run: bool, yes: bool = False, bump: str = "") -> None:

@@ -826,6 +826,50 @@ def test_headless_release_no_prompts(
     )
 
 
+def test_dry_run_leaves_no_resume_state(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    """A dry run must not leave `.git/release-state.json` behind — the next real
+    run would otherwise stop at "A previous release is in progress"."""
+    write_config()
+    _add_bare_remote(git_repo)
+    release.do_release(
+        resume=False,
+        restart=False,
+        dry_run=True,
+        no_scan=False,
+        no_changelog=False,
+        yes=True,
+        bump="patch",
+        source="",
+    )
+    assert not release.state_path().exists()
+    assert "v0.0.1" not in _git("tag").split()
+
+
+def test_dry_run_restart_keeps_real_state(
+    git_repo: Path, xdg_home: Path, offline_gum: None
+) -> None:
+    """`--dry-run --restart` previews a restart; it must not discard a real resume point."""
+    write_config()
+    _add_bare_remote(git_repo)
+    saved = release.State(version="9.9.9", phases={"merge": "done"})
+    release.save_state(saved)
+    release.do_release(
+        resume=False,
+        restart=True,
+        dry_run=True,
+        no_scan=False,
+        no_changelog=False,
+        yes=True,
+        bump="patch",
+        source="",
+    )
+    kept = release.load_state()
+    assert kept is not None and kept.version == "9.9.9"
+    assert kept.phases == {"merge": "done"}
+
+
 def test_headless_requires_bump(
     git_repo: Path, xdg_home: Path, offline_gum: None
 ) -> None:
