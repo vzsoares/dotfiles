@@ -72,6 +72,10 @@ ZSH_CUSTOM="$HOME/code/personal/dotfiles/zsh"
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-vi-mode)
 fpath=(~/.zsh/completions ~/.oh-my-zsh/completions $fpath)
+# Docker Desktop (macOS) drops CLI completions in ~/.docker/completions; the
+# Linux package installs into the system fpath instead, so the guard makes
+# this a no-op there. Must precede oh-my-zsh, which runs compinit.
+[ -d "$HOME/.docker/completions" ] && fpath=("$HOME/.docker/completions" $fpath)
 
 source $ZSH/oh-my-zsh.sh
 

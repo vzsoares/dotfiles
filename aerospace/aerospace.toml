@@ -5,6 +5,11 @@
 
 config-version = 2
 
+# Launch AeroSpace at login (registers AeroSpace.app as a macOS login item
+# the first time the app starts with this set). Linux's i3 is started by
+# the display manager instead, so there's no counterpart in i3/config.
+start-at-login = true
+
 # i3 has no "normalization" step that silently reshapes the container tree
 # (flattening single-child containers, flipping nested orientations). Turn
 # both off so the tree behaves the way i3 muscle memory expects.
