@@ -12,6 +12,21 @@
 - Use the Playwright MCP to visually test frontend changes in the browser before delivering
 - Avoid type coercions (`as`) and the `any` type — use proper typing instead
 
+# Terminal commands I will paste (zsh)
+
+Commands you hand me are run by pasting into an interactive zsh prompt. They
+must work on the first try:
+
+- No nested-quote tricks (`'"'"'`, `tr -d \"\'`, `"$(... '...' ...)"`). If
+  stripping quotes is needed, use `sed -n 's/^KEY=//p'` or a separate step.
+- Never `source` a `.env`: values are often unquoted (`&`, `?`, spaces) and
+  zsh aborts the whole file. Extract one var:
+  `export KEY=$(sed -n 's/^KEY=//p' path/.env)`.
+- Add a verification step with the expected output (`echo "${#KEY} chars"`,
+  `curl -w "%{http_code}"`) so a silent empty variable is caught immediately.
+- Secrets never pass through chat: have me export them in my terminal and
+  reference `$VAR` in later commands.
+
 # Code comments
 
 - Comments are objective and minimal: state only what the code cannot show
