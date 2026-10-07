@@ -4,7 +4,7 @@
       "/home/zizmackrok/code"
     ]
   },
-  "model": "opus[1m]",
+  "model": "fable",
   "skillOverrides": {
     "auto-mode-setup": "off"
   },
