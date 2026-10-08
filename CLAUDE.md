@@ -50,6 +50,11 @@ Root-level link scripts:
 - `./link` — symlinks `.zshrc`, `.gitconfig`, `biome.json` to `~`
 - `./link-claude` — symlinks `.claude/` contents to `~/.claude/`: `CLAUDE.md`,
   `settings.json`, `skills/`, `output-styles/`, `statusline-command.sh`
+- `scripts/claude-cloud-setup.sh` — Claude Code **web** setup script (paste into the
+  cloud environment). Fetches `.claude/CLAUDE.cloud.md` (cloud-safe variant of
+  `CLAUDE.md`: no zen-* tools, vault, or Playwright) and `output-styles/adhd.md`
+  via raw.githubusercontent. Skills reach the cloud via claude.ai account sync,
+  not this repo. Keep `CLAUDE.cloud.md` in step with `CLAUDE.md`.
 - `./link-bin` — symlinks the `zen-*` commands into `~/.local/bin`. The `LINKS`
   table at the top of that script is the authoritative list — read it there
   rather than duplicating it. `./link-bin --check` reports drift (missing,
