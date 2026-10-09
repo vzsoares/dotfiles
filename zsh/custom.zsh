@@ -58,3 +58,31 @@ if (( $+commands[zen-bell] )); then
   # error tone. Other plugins only ever append, so index 1 stays ours.
   precmd_functions=(_zen_bell_precmd ${precmd_functions:#_zen_bell_precmd})
 fi
+
+# ---------------------------------------------------------------------------
+# Background fetch: keeps origin/* fresh so the prompt's ↑/↓ arrows are truthful
+# ---------------------------------------------------------------------------
+# Runs at prompt time in the repo you are in, at most once per interval.
+# Fetch is quiet, non-interactive (no credential/ssh prompts) and detached.
+#
+# Tunables (override in ~/.zshrc.local):
+#   ZEN_FETCH_INTERVAL  minutes between fetches per repo (0 disables)
+
+: ${ZEN_FETCH_INTERVAL:=10}
+
+_zen_fetch_precmd() {
+  (( ZEN_FETCH_INTERVAL > 0 )) || return
+  local dir stamp
+  dir=$(git rev-parse --git-dir 2>/dev/null) || return 0
+  stamp=$dir/zen-fetch-stamp
+  # Stamp (not FETCH_HEAD) so offline / no-remote failures are throttled too
+  if [[ -e $stamp ]] && [[ -z $(find "$stamp" -mmin +$ZEN_FETCH_INTERVAL 2>/dev/null) ]]; then
+    return
+  fi
+  touch "$stamp"
+  ( GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' \
+      git fetch -q >/dev/null 2>&1 & )
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _zen_fetch_precmd

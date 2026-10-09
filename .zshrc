@@ -210,3 +210,7 @@ eval "$(mise activate zsh)"
 # shells source. Re-applying it here (guarded, so it's a silent no-op on Linux)
 # keeps PATH sane even if something spawns a non-login interactive shell.
 [ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+# macOS: Apple ships GNU Make 3.81, which can't parse `.RECIPEPREFIX` (used by
+# task-flow's Makefile). Homebrew's make installs as `gmake`; its gnubin dir
+# exposes it as `make`. Must come after brew shellenv to win the PATH race.
+[ -d /opt/homebrew/opt/make/libexec/gnubin ] && export PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
