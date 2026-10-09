@@ -11,7 +11,7 @@ FG_GOLD="%{%F{#f6c177}%}"
 
 # Prompt configuration
 PROMPT="${BOLD}${FG_CYAN}%c${RESET}"
-PROMPT+=' $(git_prompt_info)'
+PROMPT+=' $(git_prompt_info)$(git_remote_status)'
 
 # Git prompt configuration
 ZSH_THEME_GIT_PROMPT_PREFIX="${BOLD}${FG_BLUE}git:${BOLD}${FG_RED}"
@@ -19,3 +19,7 @@ ZSH_THEME_GIT_PROMPT_SUFFIX="${RESET} "
 ZSH_THEME_GIT_PROMPT_DIRTY="${BOLD}${FG_BLUE} ${BOLD}${FG_GOLD}%1{✗%}"
 ZSH_THEME_GIT_PROMPT_CLEAN="${BOLD}${FG_BLUE}"
 
+# Remote status: arrow after git:branch when ahead / behind / diverged from upstream
+ZSH_THEME_GIT_PROMPT_AHEAD_REMOTE="${BOLD}${FG_GOLD}%1{↑%}${RESET} "
+ZSH_THEME_GIT_PROMPT_BEHIND_REMOTE="${BOLD}${FG_GOLD}%1{↓%}${RESET} "
+ZSH_THEME_GIT_PROMPT_DIVERGED_REMOTE="${BOLD}${FG_GOLD}%1{↕%}${RESET} "
