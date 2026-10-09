@@ -17,6 +17,14 @@ declare -A ALIASES=(
     ["release-dev"]="release.py --dev"
 )
 
+# Scripts you reach for most. They sit at the top of the list in this order,
+# regardless of alphabetical sorting or any scripts added later.
+PINNED=(
+    "commit.py"
+    "release-dev"
+    "release.py"
+)
+
 # Helpers that other things call rather than ones you pick by hand. They stay
 # selectable (and fuzzy-matchable) but sort to the bottom, so the scripts you
 # actually reach for keep the top of the list.
@@ -33,21 +41,27 @@ if [ -z "$SCRIPTS" ]; then
     exit 1
 fi
 
-# Combined, selectable list: alias names + script files, sorted together, with
-# anything in DEMOTED moved to the end.
+# Combined, selectable list: PINNED first (in that order), then alias names +
+# script files sorted together, with anything in DEMOTED moved to the end.
 ALL=$(printf '%s\n' "${!ALIASES[@]}" "$SCRIPTS" | sort)
-if [ ${#DEMOTED[@]} -gt 0 ]; then
-    DEMOTED_RE=$(printf '%s|' "${DEMOTED[@]}")
-    DEMOTED_RE="^(${DEMOTED_RE%|})$"
-    CHOICES=$(
-        {
-            printf '%s\n' "$ALL" | grep -vE "$DEMOTED_RE" || true
-            printf '%s\n' "$ALL" | grep -E "$DEMOTED_RE" || true
-        } | grep -v '^[[:space:]]*$' || true
-    )
-else
-    CHOICES="$ALL"
-fi
+in_list() {
+    local needle="$1" item
+    shift
+    for item in "$@"; do [ "$item" = "$needle" ] && return 0; done
+    return 1
+}
+CHOICES=$(
+    for name in "${PINNED[@]}"; do
+        grep -qxF "$name" <<<"$ALL" && echo "$name"
+    done
+    while IFS= read -r name; do
+        [ -z "$name" ] && continue
+        in_list "$name" "${PINNED[@]}" "${DEMOTED[@]}" || echo "$name"
+    done <<<"$ALL"
+    for name in "${DEMOTED[@]}"; do
+        grep -qxF "$name" <<<"$ALL" && echo "$name"
+    done
+)
 
 # If the first arg isn't a flag, use it to fuzzy-match a choice; rest forwarded.
 CANDIDATES="$CHOICES"
