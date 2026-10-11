@@ -61,6 +61,7 @@ on-window-detected = [
     { if.app-id = 'com.hnc.Discord', run = 'move-node-to-workspace 3' },
     { if.app-id = 'net.whatsapp.WhatsApp', run = 'move-node-to-workspace 6' },
     { if.app-id = 'com.usebruno.app', run = 'move-node-to-workspace 5' },
+    { if.app-id = 'com.brave.Browser', run = 'move-node-to-workspace 7' },
     # Only moves actual Finder windows — the Desktop/menu-bar process has no
     # window of its own, so it's unaffected.
     { if.app-id = 'com.apple.finder', run = 'move-node-to-workspace 4' },
