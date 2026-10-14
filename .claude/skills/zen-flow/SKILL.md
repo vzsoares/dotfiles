@@ -75,3 +75,16 @@ Never write project names or Notion IDs into this file or any other public repo 
 - Approva tasks usually map to a repo under `~/code/approva/` — check the second brain
   (`/second-brain`) index for which repo owns the feature before starting.
 - When a task is finished and committed (`zen-commit`), run **done** on the board task.
+
+## Commit → dev release routine (every repo)
+
+Each batch of work on a dev branch ends the same way, in every repo touched (core,
+landing, task-flow, approva-node), not just the one the session started in:
+
+1. `zen-commit --all -m "<type>(<scope>): …"` — one commit per logical change.
+2. `zen-release --dev --yes --bump patch` — bumps the version to `-dev.N`, tags and
+   pushes. Skipping this leaves the dev branch on the prod version number (happened on the
+   landing on 2026-10-14).
+3. Board: **done** (or a status note) on the task, with the release tag in the note.
+
+Prod releases and deploys are never run here — the user does them (`~/.claude/CLAUDE.md`).
