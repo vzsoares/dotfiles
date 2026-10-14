@@ -45,6 +45,14 @@ Never write project names or Notion IDs into this file or any other public repo 
 | `💥Urgent` | Drop-everything priority |
 | `✅ Done` | Finished — always set `Conclusion Date` = today |
 | `🗑️ Won't Do` | Dropped |
+| `🔬 Staging` | Shipped to a dev/staging environment, awaiting the user's check |
+
+### Tags (labels)
+
+- `Human Only` — a step only the user can do (deploys, visual review, messages to
+  colleagues, CMS edits, pushes of the public dotfiles). When a session leaves such steps
+  behind, create one task per step with this tag so the board says what to do next.
+- `Has Data` — the task page carries data/notes worth reading before starting.
 
 ### Operations
 
