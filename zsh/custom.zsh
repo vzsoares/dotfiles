@@ -64,6 +64,8 @@ fi
 # ---------------------------------------------------------------------------
 # Runs at prompt time in the repo you are in, at most once per interval.
 # Fetch is quiet, non-interactive (no credential/ssh prompts) and detached.
+# --no-write-fetch-head: a concurrent `git pull` also writes FETCH_HEAD (no
+# lock); a doubled for-merge line makes its rebase fail.
 #
 # Tunables (override in ~/.zshrc.local):
 #   ZEN_FETCH_INTERVAL  minutes between fetches per repo (0 disables)
@@ -81,7 +83,7 @@ _zen_fetch_precmd() {
   fi
   touch "$stamp"
   ( GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' \
-      git fetch -q >/dev/null 2>&1 & )
+      git fetch -q --no-write-fetch-head >/dev/null 2>&1 & )
 }
 
 autoload -Uz add-zsh-hook
