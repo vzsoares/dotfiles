@@ -16,8 +16,9 @@ dotfiles — this file omits those. Full version: `.claude/CLAUDE.md` in the sam
 
 # Terminal commands I will paste (zsh)
 
-Commands you hand me are run by pasting into an interactive zsh prompt. They
-must work on the first try:
+Run commands yourself; hand me one only when it needs my terminal (interactive
+login, a secret, a TTY prompt). Those are pasted into an interactive zsh prompt
+and must work on the first try:
 
 - No nested-quote tricks (`'"'"'`, `tr -d \"\'`, `"$(... '...' ...)"`). If
   stripping quotes is needed, use `sed -n 's/^KEY=//p'` or a separate step.
