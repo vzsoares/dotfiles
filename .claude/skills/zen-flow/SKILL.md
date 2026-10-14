@@ -45,7 +45,7 @@ Never write project names or Notion IDs into this file or any other public repo 
 | `💥Urgent` | Drop-everything priority |
 | `✅ Done` | Finished — always set `Conclusion Date` = today |
 | `🗑️ Won't Do` | Dropped |
-| `🔬 Staging` | Shipped to a dev/staging environment, awaiting the user's check |
+| `🔬 Staging` | **Blocked on someone else** (a colleague, a partner, an external approval). The task page says who and since when. Not the user's own pending steps — those are `🧱 To Do` + `Human Only`. |
 
 ### Tags (labels)
 
@@ -60,12 +60,16 @@ Never write project names or Notion IDs into this file or any other public repo 
   ```sql
   SELECT "Write a task", Status, "☢️ Projeto", "date:Due Date:start" AS due, "Last Edited", url
   FROM "<board.tasks_data_source>"
-  WHERE Status IN ('💥Urgent','🧱 To Do','In Progress') OR Status IS NULL
+  WHERE Status IN ('💥Urgent','🧱 To Do','In Progress','🔬 Staging') OR Status IS NULL
   ORDER BY "Last Edited" DESC
   ```
-  Map project URLs to names via `projects[].page_id`. Present Urgent → In Progress → To Do → Inbox.
+  Map project URLs to names via `projects[].page_id`. Present Urgent → In Progress → To Do →
+  Staging (blocked, with who) → Inbox.
 - **next** — recommend one task: Urgent first, then an existing In Progress (finish before
-  starting), then To Do with nearest due date. Give one reason.
+  starting), then To Do with nearest due date. Give one reason. Staging tasks are listed
+  separately ("waiting on …") and never recommended; nudge if blocked for more than a week.
+- **block** — set `Status` = `🔬 Staging` and append "Aguardando <quem> desde <data>" to the
+  page. When the user says the blocker cleared, move it back to `In Progress`.
 - **start** — set `Status` = `In Progress`.
 - **done** — set `Status` = `✅ Done` and `date:Conclusion Date:start` = today (ISO date).
 - **add** — create a page in the Tasks data source with title, `☢️ Projeto` (ask if
