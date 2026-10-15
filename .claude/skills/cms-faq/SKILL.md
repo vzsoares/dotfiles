@@ -11,22 +11,29 @@ The landing's FAQ lives in task-flow's CMS (app `cms`, wiki `docs/wiki/cms_conte
 This skill edits it through `/cms/api/faq`, the same draft → publish cycle the backoffice
 uses. **Only FAQ** is editable by API; heroes and journeys are backoffice-only.
 
-## Config — private, read from the vault
+## Config — private, token in SSM
 
-Base URLs and tokens live in the private vault: read `config/cms-faq.json` under the
-`vault` path in `~/.claude/second-brain.json`. Shape:
+Base URL and the SSM parameter name live in the private vault: read `config/cms-faq.json`
+under the `vault` path in `~/.claude/second-brain.json`. Shape:
 
 ```json
-{ "dev": { "base_url": "https://…", "token": "<key_id>.<secret>" }, "prod": { … } }
+{ "dev":  { "base_url": "https://…", "aws_profile": "…", "token_ssm": "/dev/…" },
+  "prod": { "base_url": "https://…", "aws_profile": "…", "token_ssm": "/prod/…" } }
 ```
 
-Never print the token, never paste it into chat, never write it anywhere outside the
-vault. Resolve it inside the same shell command that uses it:
+The token itself is a SecureString in SSM (a task-flow `ChaveApi` with scope `cms.editar`,
+minted by `uv run manage.py criar_chave_api --nome llm-cms --escopos cms.editar --aplicar`).
+Never print it, never paste it into chat, never write it to disk. Resolve it inside the
+same shell command that uses it:
 
 ```bash
 VAULT=$(sed -n 's/.*"vault": *"\([^"]*\)".*/\1/p' ~/.claude/second-brain.json)
-BASE=$(jq -r .dev.base_url "$VAULT/config/cms-faq.json")
-TOKEN=$(jq -r .dev.token "$VAULT/config/cms-faq.json")
+CFG="$VAULT/config/cms-faq.json"; STAGE=dev
+BASE=$(jq -r ".$STAGE.base_url" "$CFG")
+TOKEN=$(AWS_PROFILE=$(jq -r ".$STAGE.aws_profile" "$CFG") aws ssm get-parameter \
+  --name "$(jq -r ".$STAGE.token_ssm" "$CFG")" --with-decryption \
+  --query Parameter.Value --output text)
+echo "${#TOKEN} chars"   # 52 expected; 0 means the SSO session expired
 curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/cms/api/faq?produto=marketplace"
 ```
 
