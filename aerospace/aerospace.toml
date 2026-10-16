@@ -17,9 +17,11 @@ start-at-login = true
 enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = false
 
-# i3's default focus_follows_mouse was left enabled (i3/config only has it
-# commented out) — keep that behavior here.
-focus-follows-mouse.enabled = true
+# Off despite i3's focus_follows_mouse: AeroSpace's implementation refocuses
+# the window under the cursor even when a transient popup (Steam/CEF
+# dropdowns, Control Center) is on top, which dismisses the popup on blur.
+# Re-enable once nikitabobko/AeroSpace#2245 lands.
+focus-follows-mouse.enabled = false
 # Mouse recenters when the *monitor* focus changes (single-monitor no-op today,
 # matches i3's default and is ready if a second display gets added).
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
@@ -75,12 +77,6 @@ on-window-detected = [
     # stays floating on whatever workspace triggered it instead of yanking
     # focus to 9 mid-auth.
     { if.app-id = 'com.apple.LocalAuthentication.UIAgent', run = 'layout floating' },
-
-    # CEF/Electron-style apps draw dropdowns and context menus as separate
-    # windows; tiling those resizes them away before they can be seen. Float
-    # the whole app (and its helper process, which owns some popups).
-    { if.app-id = 'com.valvesoftware.steam', run = 'layout floating' },
-    { if.app-id = 'com.valvesoftware.steam.helper', run = 'layout floating' },
 
     # Catch-all: anything not assigned above lands on 9 instead of wherever
     # it happened to open. Must stay last since it always matches.
