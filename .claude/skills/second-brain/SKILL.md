@@ -1,7 +1,7 @@
 ---
 name: second-brain
 description: Personal second brain — an LLM-maintained knowledge base across personal life, projects, and work. Use when the user wants to ingest sources, query accumulated knowledge, document personal topics, or connect a project to their second brain. Triggered by mentions of "second brain", "brain", or requests to remember/file personal or cross-project knowledge.
-argument-hint: <setup|ingest|query|lint|connect|status> [topic, question, or source path]
+argument-hint: <setup|add|notebook|ingest|query|lint|connect|status> [topic, question, or source path]
 allowed-tools: Read Edit Write Grep Glob Bash Agent
 ---
 
@@ -13,7 +13,7 @@ The user curates sources and asks questions. You do all the writing, cross-refer
 
 ## Three Layers
 
-1. **Raw sources** (`raw/`) — immutable source documents. Articles, notes, clippings, transcripts, journal entries. You read from these but never modify them.
+1. **Raw sources** (`raw/`) — immutable source documents. Articles, notes, clippings, transcripts, journal entries. You read from these but never modify them. Binary documents (PDF, DOCX, ...) live in `raw/docs/<notebook>/` beside a converted `.md` twin.
 2. **Wiki** (`wiki/`) — LLM-generated markdown pages. Summaries, entity pages, concept pages, syntheses. You own this layer entirely.
 3. **Schema** (`SCHEMA.md` at vault root) — conventions and structure. Co-evolved by user and LLM over time.
 
@@ -28,7 +28,8 @@ The user works across multiple companies/orgs simultaneously. Projects, work top
 ├── log.md                # Chronological operations log
 ├── companies.json        # Registry of companies/orgs the user works with
 ├── raw/                  # Source documents (immutable)
-│   └── assets/           # Downloaded images, attachments
+│   ├── assets/           # Downloaded images, attachments
+│   └── docs/<notebook>/  # PDFs/docs + converted .md twins (zen-doc)
 ├── wiki/                 # LLM-maintained pages
 │   ├── personal/         # Goals, health, habits, self-improvement (NOT projects)
 │   ├── projects/         # Company-scoped project pages
@@ -70,6 +71,23 @@ The vault path is stored in `~/.claude/second-brain.json`:
 ```
 
 Read this file at the start of every operation to locate the vault. If it doesn't exist, prompt the user to run `/second-brain setup`.
+
+## Search (qmd)
+
+The vault is indexed by [qmd](https://github.com/tobi/qmd) as collection `valt` (all `**/*.md`): BM25 + local embeddings + rerank, index in `~/.cache/qmd/` (per machine, rebuildable). Prefer the `qmd` MCP tools when connected; otherwise the CLI:
+
+| Need | Command | Cost |
+|---|---|---|
+| Exact terms, names, IDs | `qmd search "<terms>" -n 10` | instant |
+| Meaning, paraphrase | `qmd vsearch "<question>" -n 10` | ~5s |
+| Hard question, best ranking | `qmd query $'lex: <terms>\nvec: <question>' -n 5` | ~20s |
+| Read a hit | `qmd get qmd://valt/<path>:<line>:<count>` | instant |
+
+Write typed `lex:`/`vec:` lines yourself — a bare `qmd query "<text>"` runs a slow local query-expansion model. Grep still works for literal strings.
+
+After any vault write, run `zen-doc reindex` (`qmd update && qmd embed`) so search sees it.
+
+**Per-machine setup** (once): `bun install -g @tobilu/qmd`, then `cd ~/.bun/install/global && bun pm trust node-llama-cpp`, `cd <vault> && qmd collection add . --name valt --mask '**/*.md'`, `qmd embed` (downloads ~2GB of models), `claude mcp add -s user qmd -- qmd mcp`.
 
 ## Operations
 
@@ -113,6 +131,24 @@ When completing significant features or making architectural decisions, suggest 
 
 4. Log the connection in `log.md`
 
+### `/second-brain add <file...> [notebook]`
+
+Store documents as notebook sources (NotebookLM-style).
+
+1. Run `zen-doc add <file...> --notebook <notebook>` (default notebook: `inbox`). It copies the original to `raw/docs/<notebook>/`, converts it to `<name>.md` (markitdown), and reindexes.
+2. Spot-check the `.md`: garbled tables, merged columns, or empty output on a scan → rerun with `--docling`.
+3. Log `## [date] add | <notebook>` with the files to `log.md`.
+4. Offer `/second-brain ingest` to distill the source into wiki pages — optional; a notebook source is searchable without it.
+
+### `/second-brain notebook <name> [question]`
+
+Answer from one notebook's sources only, with citations.
+
+1. List sources: `ls <vault>/raw/docs/<name>/*.md`. No question → summarize each source in one line and suggest 3 questions.
+2. Retrieve: `qmd search` / `qmd vsearch` scoped to the notebook (filter hits on `raw/docs/<name>/`); small notebooks (< ~5 sources) can just be read whole.
+3. Answer only from retrieved text. Cite every claim as `(source.md:line)`. Say plainly when the sources don't cover it.
+4. Offer to file the answer as a wiki page (`sources:` frontmatter lists the notebook files).
+
 ### `/second-brain ingest <source>`
 
 Process a source into the wiki. The source can be:
@@ -142,7 +178,7 @@ Search the wiki and synthesize an answer.
 
 1. Read `~/.claude/second-brain.json` for vault path
 2. Read `index.md` to find relevant pages
-3. Use Grep to search across wiki pages for relevant content
+3. Search with qmd (see **Search**) across wiki and raw sources; Grep for literal strings
 4. Read the most relevant pages
 5. Synthesize an answer with `[[wiki-links]]` citations
 6. Ask the user if the answer should be filed as a new wiki page (good answers compound)
@@ -167,10 +203,11 @@ Show brain stats.
 1. Read `~/.claude/second-brain.json` for vault path
 2. Read `companies.json` for company list
 3. Count pages by category, broken down by company
-4. Count raw sources
-5. Show last 5 log entries
-6. Show total page count and last updated date
-7. Identify coverage gaps (categories/companies with few or no pages)
+4. Count raw sources and notebooks (`raw/docs/*/`)
+5. Run `qmd status` — flag docs pending embedding
+6. Show last 5 log entries
+7. Show total page count and last updated date
+8. Identify coverage gaps (categories/companies with few or no pages)
 
 ## Page Format
 

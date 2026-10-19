@@ -21,6 +21,7 @@ LINKS=(
     "zen-ytdl:scripts/ytdl.py"
     "zen-bell:scripts/bell.sh"
     "zen-cava:scripts/cava.sh"
+    "zen-doc:scripts/doc.sh"
     "zen-diagram:mermaid/src/cli.ts"
 )
 
