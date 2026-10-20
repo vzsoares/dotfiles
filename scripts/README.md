@@ -20,6 +20,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `hash.sh` | `zen-hash` | `sha256sum` helper: hashes files given as args, or gum-picks them. |
 | `ytdl.py` | `zen-ytdl` | Interactive `yt-dlp` downloader with WhatsApp-safe re-encode. |
 | `doc.sh` | `zen-doc` | Adds PDFs/docs to the second-brain vault as Markdown (markitdown/docling) and refreshes the qmd index. |
+| `wrapup.sh` | `zen-wrapup` | SessionEnd hook: digests the transcript and runs the `wrapup` skill headless (memories, vault session log, consolidation). |
 | `bell.sh` | `zen-bell` | Plays a feedback sound / desktop notification, unless the terminal is focused. |
 | `run.sh` | — | Fuzzy picker that lists & runs the scripts in this dir (and aliases). |
 | `screenkey.sh` | — | Loops `screenkey` for on-screen keystroke display (demos/screencasts). |

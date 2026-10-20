@@ -22,6 +22,7 @@ LINKS=(
     "zen-bell:scripts/bell.sh"
     "zen-cava:scripts/cava.sh"
     "zen-doc:scripts/doc.sh"
+    "zen-wrapup:scripts/wrapup.sh"
     "zen-diagram:mermaid/src/cli.ts"
 )
 
