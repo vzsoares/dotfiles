@@ -43,6 +43,18 @@ Extract, concretely:
   Attribute each to the skill, memory, CLAUDE.md rule or tool involved
   (`skill:zen-flow`, `memory:<name>`, `rule:claude-md`, `tool:Bash`, `none`).
 
+## Step 2b: Verify before writing
+
+Every **Done** item must be backed by evidence, or it moves to **Open threads**:
+
+- In the digest, a `[tool]` line followed by a `[tool error]` did **not** happen —
+  denied or failed calls change nothing.
+- File changes: confirm with `git -C <cwd> status --short` and
+  `git -C <cwd> log --since=<session date> --name-only --oneline`. A file claimed as
+  changed must appear in one of them (or be outside a repo and exist on disk).
+- Claims the assistant made in prose ("it's registered", "tests pass") count only
+  with a matching successful tool call.
+
 ## Step 3: Save memories
 
 Memory dir: `~/.claude/projects/<cwd with every / replaced by ->/memory/`

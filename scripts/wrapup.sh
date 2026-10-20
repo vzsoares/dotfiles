@@ -76,7 +76,7 @@ run() {
         --model "$MODEL" \
         --permission-mode acceptEdits \
         --add-dir "$vault" --add-dir "$memory_root" --add-dir "$STATE_DIR" \
-        --allowedTools "Skill Read Write Edit Glob Grep Bash(zen-doc reindex) Bash(git -C $vault *) Bash(ls *) Bash(date *)"
+        --allowedTools "Skill Read Write Edit Glob Grep Bash(zen-doc reindex) Bash(git -C $vault *) Bash(git -C $cwd status *) Bash(git -C $cwd log *) Bash(ls *) Bash(date *)"
 }
 
 hook() {
