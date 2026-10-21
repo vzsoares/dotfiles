@@ -1,78 +1,79 @@
 {
-  "permissions": {
-    "additionalDirectories": [
-      "/home/zizmackrok/code"
-    ]
-  },
-  "model": "fable",
-  "skillOverrides": {
-    "auto-mode-setup": "off"
-  },
-  "hooks": {
-    "Notification": [
-      {
-        "matcher": "^(?!idle_prompt$)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "p=$(jq -r \".cwd // empty\" 2>/dev/null); p=${p:-$PWD}; n=$(git -C \"$p\" rev-parse --show-toplevel 2>/dev/null || echo \"$p\"); zen-bell window-attention -N -t 0 -n \"Claude Code — ${n##*/}\" -b \"Needs your attention\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "p=$(jq -r \".cwd // empty\" 2>/dev/null); p=${p:-$PWD}; n=$(git -C \"$p\" rev-parse --show-toplevel 2>/dev/null || echo \"$p\"); zen-bell complete -t 0 -n \"Claude Code — ${n##*/}\" -b \"Turn finished\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "SessionStart": []
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "$HOME/.claude/skills/clawd-status/scripts/statusline.sh",
-    "refreshInterval": 1
-  },
-  "enabledPlugins": {
-    "figma@claude-plugins-official": true
-  },
-  "outputStyle": "adhd",
-  "autoCompactWindow": 800000,
-  "tui": "default",
-  "skipDangerousModePermissionPrompt": false,
-  "skipWorkflowUsageWarning": true,
-  "editorMode": "vim",
-  "agentPushNotifEnabled": true,
-  "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--output-dir",
-        "/tmp/playwright-mcp"
-      ]
+    "permissions": {
+        "additionalDirectories": ["/home/zizmackrok/code"]
     },
-    "docs-mcp-server": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@arabold/docs-mcp-server@latest"
-      ],
-      "env": {
-        "OPENAI_API_KEY": "ollama",
-        "OPENAI_API_BASE": "http://localhost:11434/v1",
-        "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
-      }
+    "model": "opus",
+    "skillOverrides": {
+        "auto-mode-setup": "off"
+    },
+    "hooks": {
+        "Notification": [
+            {
+                "matcher": "^(?!idle_prompt$)",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "p=$(jq -r \".cwd // empty\" 2>/dev/null); p=${p:-$PWD}; n=$(git -C \"$p\" rev-parse --show-toplevel 2>/dev/null || echo \"$p\"); zen-bell window-attention -N -t 0 -n \"Claude Code — ${n##*/}\" -b \"Needs your attention\"",
+                        "async": true
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "p=$(jq -r \".cwd // empty\" 2>/dev/null); p=${p:-$PWD}; n=$(git -C \"$p\" rev-parse --show-toplevel 2>/dev/null || echo \"$p\"); zen-bell complete -t 0 -n \"Claude Code — ${n##*/}\" -b \"Turn finished\"",
+                        "async": true
+                    }
+                ]
+            }
+        ],
+        "SessionStart": [],
+        "SessionEnd": [
+            {
+                "matcher": "",
+                "hooks": [{ "type": "command", "command": "zen-wrapup hook" }]
+            }
+        ]
+    },
+    "statusLine": {
+        "type": "command",
+        "command": "$HOME/.claude/skills/clawd-status/scripts/statusline.sh",
+        "refreshInterval": 1
+    },
+    "enabledPlugins": {
+        "figma@claude-plugins-official": true
+    },
+    "outputStyle": "adhd",
+    "autoCompactWindow": 800000,
+    "tui": "default",
+    "skipDangerousModePermissionPrompt": false,
+    "skipWorkflowUsageWarning": true,
+    "editorMode": "vim",
+    "agentPushNotifEnabled": true,
+    "mcpServers": {
+        "playwright": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "@playwright/mcp@latest",
+                "--output-dir",
+                "/tmp/playwright-mcp"
+            ]
+        },
+        "docs-mcp-server": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@arabold/docs-mcp-server@latest"],
+            "env": {
+                "OPENAI_API_KEY": "ollama",
+                "OPENAI_API_BASE": "http://localhost:11434/v1",
+                "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
+            }
+        }
     }
-  }
 }
