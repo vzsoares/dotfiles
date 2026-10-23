@@ -80,8 +80,8 @@ on-window-detected = [
 
     # Steam (CEF) draws dropdowns and menus as separate windows; tiling them
     # resizes them away. Float the app and its helper, which owns some popups.
-    { if.app-id = 'com.valvesoftware.steam', run = 'layout floating' },
-    { if.app-id = 'com.valvesoftware.steam.helper', run = 'layout floating' },
+    { if.app-id = 'com.valvesoftware.steam', run = ['layout floating', 'move-node-to-workspace 9'] },
+    { if.app-id = 'com.valvesoftware.steam.helper', run = ['layout floating', 'move-node-to-workspace 9'] },
 
     # Catch-all: anything not assigned above lands on 9 instead of wherever
     # it happened to open. Must stay last since it always matches.
