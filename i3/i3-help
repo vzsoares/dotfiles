@@ -57,9 +57,9 @@ key "mod+u / y / n"       "Border: none / 1px / normal"
 key "mod+m"               "Hide/show the i3 bar"
 
 section "Workspaces"
-key "mod+1..8"            "Switch to workspace"
-key "mod+Shift+1..8"      "Move window there and follow"
-key "mod+Ctrl+1..8"       "Move window there, stay put"
+key "mod+1..9"            "Switch to workspace"
+key "mod+Shift+1..9"      "Move window there and follow"
+key "mod+Ctrl+1..9"       "Move window there, stay put"
 key "mod+Ctrl+Left/Right" "Previous / next workspace"
 key "mod+b"               "Back-and-forth  ·  Shift+b takes the window along"
 

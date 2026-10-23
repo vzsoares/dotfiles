@@ -40,7 +40,7 @@ gaps.outer.right = 0
 gaps.outer.top = 0
 gaps.outer.bottom = 0
 
-# Workspaces 1-8 (mirrors i3/config's $ws1..$ws8), "9" as a catch-all for
+# Workspaces 1-9 (mirrors i3/config's $ws1..$ws9), "9" also a catch-all for
 # unassigned apps, and "S" as a scratchpad stand-in. Kept alive even when
 # empty so they don't disappear.
 persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "S"]
@@ -162,7 +162,7 @@ on-window-detected = [
     alt-minus = 'workspace S'
     alt-shift-minus = 'move-node-to-workspace S'
 
-    # switch to workspace (i3: mod+1..8)
+    # switch to workspace (i3: mod+1..9)
     alt-1 = 'workspace 1'
     alt-2 = 'workspace 2'
     alt-3 = 'workspace 3'
@@ -173,7 +173,7 @@ on-window-detected = [
     alt-8 = 'workspace 8'
     alt-9 = 'workspace 9'
 
-    # move focused window to workspace, then follow it (i3: mod+Shift+1..8)
+    # move focused window to workspace, then follow it (i3: mod+Shift+1..9)
     alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
     alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
     alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3']

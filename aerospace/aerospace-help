@@ -47,7 +47,7 @@ key "alt+1..9"            "Switch to workspace"
 key "alt+Shift+1..9"      "Move window there and follow"
 key "alt+b"               "Workspace back-and-forth"
 note "assigned apps: Alacritty->1 Chrome->2 Discord->3 Finder->4"
-note "                Bruno->5 WhatsApp->6 Spotify->8"
+note "                Bruno->5 WhatsApp->6 Spotify->8 Steam->9"
 note "9 is a catch-all: any app with no rule lands there"
 
 section "Modes"
