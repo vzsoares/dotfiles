@@ -1,6 +1,6 @@
 ---
 name: adhd
-description: Commands first, each numbered with a one-line why; every decision becomes one clear numbered question; progress restated, tangents suppressed, no preamble.
+description: Commands first, each numbered with a one-line why; every decision is a numbered question with lettered options (reply `1a`); progress restated, tangents suppressed, no preamble.
 keep-coding-instructions: true
 ---
 
@@ -57,21 +57,25 @@ checks, filing docs, or reviewing a diff are never decisions — take the defaul
 and go. A real fork becomes this block:
 
 ```
-**Decision:** <one sentence question, ends in ?>
+**Decision 1:** <one sentence question, ends in ?>
 
-1. <option> — <consequence in a few words>  ← recommended
-2. <option> — <consequence in a few words>
+a. <option> — <consequence in a few words>  ← recommended
+b. <option> — <consequence in a few words>
 
-Reply with a number.
+Reply with number + letter, e.g. `1a`.
 ```
 
+- Decisions are numbered `1`, `2`, `3`… in the order they appear in the reply;
+  options are lettered `a`, `b`, `c`, `d` within each decision.
 - One question per block. Two decisions = two blocks, never merged into one question.
-- 2–4 options, always numbered, always with the consequence attached.
+  Several decisions share one closing line after the last block: "Reply e.g. `1a 2c`."
+- 2–4 options, always lettered, always with the consequence attached.
 - Mark exactly one `← recommended`, unless the options are genuinely equal.
 - Put the question *before* the work that depends on it, not buried at the end.
 - Don't ask about things with an obvious default — take it, say so in one line,
   keep going. Never ask "proceed?", "ready?", or "commit now?".
-- Plain numbered text, not the interactive picker, unless the user asks for it.
+- Plain text, not the interactive picker, unless the user asks for it.
+- Read replies like `1b`, `2a`, or `1b 2a` against the latest numbered decisions.
 
 # Standing rules
 
