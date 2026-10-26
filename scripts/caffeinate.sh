@@ -20,18 +20,18 @@ fi
 SECONDS_TOTAL=$(awk "BEGIN{printf \"%d\", $HOURS * 3600}")
 
 OPTIONS=(
-    "-d  display  keep the screen on"
-    "-i  idle     prevent idle sleep"
-    "-s  system   prevent system sleep (AC power only)"
-    "-m  disk     prevent disk idle sleep"
-    "-u  user     declare user active (wakes the display)"
+    "display  -d  keep the screen on"
+    "idle     -i  prevent idle sleep"
+    "system   -s  prevent system sleep (AC power only)"
+    "disk     -m  prevent disk idle sleep"
+    "user     -u  declare user active (wakes the display)"
 )
-PICKED=$(printf '%s\n' "${OPTIONS[@]}" | gum choose --no-limit --header "Keep awake (space to toggle):" --selected "${OPTIONS[0]}")
+PICKED=$(printf '%s\n' "${OPTIONS[@]}" | gum choose --no-limit --header "Keep awake (space to toggle):" --selected="${OPTIONS[0]}")
 if [ -z "$PICKED" ]; then
     gum style --foreground 196 "No option picked"
     exit 1
 fi
-read -ra FLAGS <<<"$(awk '{print $1}' <<<"$PICKED" | tr '\n' ' ')"
+read -ra FLAGS <<<"$(awk '{print $2}' <<<"$PICKED" | tr '\n' ' ')"
 
 if date -v+1S &>/dev/null; then
     UNTIL=$(date -v+"${SECONDS_TOTAL}"S +%H:%M)
