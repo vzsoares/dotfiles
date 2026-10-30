@@ -214,3 +214,7 @@ eval "$(mise activate zsh)"
 # task-flow's Makefile). Homebrew's make installs as `gmake`; its gnubin dir
 # exposes it as `make`. Must come after brew shellenv to win the PATH race.
 [ -d /opt/homebrew/opt/make/libexec/gnubin ] && export PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
+# Python comes from uv only: its `python`/`python3` in ~/.local/bin must beat
+# Homebrew's (kept as fontforge/yt-dlp deps), and uv must ignore system ones.
+export PATH="$HOME/.local/bin:$PATH"
+export UV_PYTHON_PREFERENCE=only-managed
