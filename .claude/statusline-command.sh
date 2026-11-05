@@ -4,7 +4,7 @@
 
 input=$(cat)
 
-JQ=$(which jq 2>/dev/null || echo /home/zizmackrok/.local/share/mise/installs/jq/latest/jq)
+JQ=$(which jq 2>/dev/null || echo "$HOME"/.local/share/mise/installs/jq/latest/jq)
 
 # Directory (basename, like %c)
 cwd=$(echo "$input" | "$JQ" -r '.cwd // .workspace.current_dir')

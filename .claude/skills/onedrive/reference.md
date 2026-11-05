@@ -136,7 +136,7 @@ Replace `Files.ReadWrite.AppFolder` with `Files.ReadWrite` (admin consent typica
 This is the right path if you want a true team KB.
 1. Add scope `Sites.ReadWrite.All` with admin consent.
 2. Replace `DRIVE_ROOT` with `/sites/{site-id}/drive/root` for a specific Teams/SharePoint site library, or `/sites/{site-id}/lists/{list-id}/items` for list-based content.
-3. Site IDs come from `GET /sites/{hostname}:/sites/{site-path}` — e.g. `GET /sites/approva.sharepoint.com:/sites/kb`.
+3. Site IDs come from `GET /sites/{hostname}:/sites/{site-path}` — e.g. `GET /sites/contoso.sharepoint.com:/sites/kb`.
 4. The CLI structure (commands, auth, token cache) stays the same; only the constant changes.
 
 ### Other users' drives / shared-with-me items

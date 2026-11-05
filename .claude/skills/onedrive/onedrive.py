@@ -358,7 +358,7 @@ def cmd_mv(args: argparse.Namespace) -> None:
     """Move or rename an item anywhere inside the AppFolder.
 
     Both same-parent renames and cross-parent moves work at any depth on
-    SPO-backed OneDrive (verified 2026-05-11 on the Approva tenant). An
+    SPO-backed OneDrive (verified 2026-05-11 on a work tenant). An
     earlier version of this CLI refused nested sources because Graph used
     to reject nested PATCH in AppFolder scope; that restriction appears to
     have been lifted server-side. If you ever see `403 accessDenied` on a

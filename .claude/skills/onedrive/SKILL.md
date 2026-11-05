@@ -14,7 +14,7 @@ The script runs with `uv run` (PEP 723 inline metadata — deps fetched on first
 ## Files in this skill
 
 - `SKILL.md` — this file.
-- `onedrive.py` — the CLI. Run via `uv run /home/zizmackrok/.claude/skills/onedrive/onedrive.py <cmd>`.
+- `onedrive.py` — the CLI. Run via `uv run ~/.claude/skills/onedrive/onedrive.py <cmd>`.
 - `reference.md` — Entra setup checklist, Graph endpoints, AppFolder mechanics, error decoding.
 
 ## When to use proactively
@@ -48,11 +48,11 @@ Required Entra app config (entra.microsoft.com → App registrations → your ap
 Then run, in order:
 
 ```bash
-uv run /home/zizmackrok/.claude/skills/onedrive/onedrive.py setup
+uv run ~/.claude/skills/onedrive/onedrive.py setup
 # prompts for tenant_id, client_id, default sub-folder (blank = AppFolder root)
 # writes ~/.config/onedrive-cli/config.json (chmod 600)
 
-uv run /home/zizmackrok/.claude/skills/onedrive/onedrive.py auth
+uv run ~/.claude/skills/onedrive/onedrive.py auth
 # prints a URL + 9-char code; user opens URL, pastes code, signs in
 # refresh token cached at ~/.cache/onedrive-cli/token.json (chmod 600)
 # the AppFolder is auto-created on the first write (or first ls of root, in some tenants)
