@@ -20,10 +20,12 @@ join_lines() {
     | grep -v '^$' | paste -s -d ' ' - | tr -d '\n'
 }
 
-# Never overwrite the clipboard with nothing (e.g. Y with an empty selection).
+# Never overwrite the clipboard with nothing: tmux still runs copy-pipe with
+# empty stdin when there is no selection. Sentinel keeps trailing newlines.
 copy_if_nonempty() {
   local text
-  text=$(cat)
+  text=$(cat; printf x)
+  text=${text%x}
   [ -n "$text" ] && printf '%s' "$text" | to_clipboard
   return 0
 }
@@ -31,5 +33,5 @@ copy_if_nonempty() {
 case "$1" in
   --join) join_lines | copy_if_nonempty ;;
   --rejoin) from_clipboard | join_lines | copy_if_nonempty ;;
-  *) to_clipboard ;;
+  *) copy_if_nonempty ;;
 esac
