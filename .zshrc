@@ -114,6 +114,8 @@ bindkey -e
 # Configs
 export VISUAL=nvim
 export EDITOR="$VISUAL"
+# ~/.aws/config holds account details and stays out of this public repo
+export AWS_PAGER=""
 
 # gpg-agent binds pinentry to whichever tty last told it about itself; without
 # this, switching terminals/tmux panes leaves it prompting on a stale tty and
