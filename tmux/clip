@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# stdin -> system clipboard (pbcopy on macOS, xclip on Linux).
+# --join: one line out. TUIs like Claude Code wrap with hard newlines + indent,
+#   so a copied long command arrives broken; this trims each line, drops ` \`
+#   continuations and joins with single spaces.
+
+set -e
+
+if [ "$(uname)" = Darwin ]; then
+  to_clipboard() { pbcopy; }
+else
+  to_clipboard() { xclip -i -f -selection primary | xclip -i -selection clipboard >/dev/null; }
+fi
+
+if [ "$1" = --join ]; then
+  sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/[[:space:]]*\\$//' \
+    | grep -v '^$' | paste -s -d ' ' - | tr -d '\n' | to_clipboard
+else
+  to_clipboard
+fi

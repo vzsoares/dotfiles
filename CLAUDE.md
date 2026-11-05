@@ -88,6 +88,6 @@ point to it. Untracked `~/.zshrc.local` is the place for machine-local secrets.
 
 # Second Brain
 
-This project is connected to the personal second brain at `/home/zizmackrok/code/personal/valt`.
+This project is connected to the personal second brain at `~/code/personal/valt`.
 Use the `/second-brain` skill to file project knowledge, query cross-project context, or ingest sources.
 When completing significant features or making architectural decisions, suggest filing them in the second brain if they have cross-project value.

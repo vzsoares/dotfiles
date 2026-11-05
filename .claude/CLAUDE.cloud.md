@@ -29,6 +29,9 @@ and must work on the first try:
   `curl -w "%{http_code}"`) so a silent empty variable is caught immediately.
 - Secrets never pass through chat: have me export them in my terminal and
   reference `$VAR` in later commands.
+- Long commands go in a fenced block with every line under ~70 chars, broken
+  with ` \` continuations (one flag or pipe stage per line). The terminal
+  hard-wraps longer lines and the copy pastes broken.
 
 # Code comments
 

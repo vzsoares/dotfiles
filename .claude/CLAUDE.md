@@ -27,6 +27,9 @@ and must work on the first try:
   `curl -w "%{http_code}"`) so a silent empty variable is caught immediately.
 - Secrets never pass through chat: have me export them in my terminal and
   reference `$VAR` in later commands.
+- Long commands go in a fenced block with every line under ~70 chars, broken
+  with ` \` continuations (one flag or pipe stage per line). The terminal
+  hard-wraps longer lines and the copy pastes broken.
 
 # Code comments
 
@@ -80,12 +83,23 @@ Use it proactively, without being asked:
 Keep the board truthful: nothing I finished should stay open. The skill grows with my routine — when a new habit or
 tool becomes part of how I work, add a section to it rather than to this file.
 
-# Public dotfiles
+# Where my config lives
 
-This file, `~/.claude/skills/`, and `~/.claude/output-styles/` are symlinks into a
-**public** repo (`~/code/personal/dotfiles`). Never write secrets, private resource IDs,
-or personal details into them — store those in the private vault
-(`<vault>/config/*.json`) and reference it. See the dotfiles `CLAUDE.md` for the full list.
+Same paths on both machines:
+
+- **`~/code/personal/dotfiles`** — **public** repo; home of all environment
+  config (zsh, tmux, nvim, alacritty, i3/aerospace, git, Claude settings and
+  skills). Live config in `~` is symlinked from it. To change my local env,
+  edit the file there and run its `link` script — never edit or create config
+  in `~` directly. Machine-local secrets go in untracked `~/.zshrc.local`.
+- **`~/code/personal/valt`** — **private** vault (path also in
+  `~/.claude/second-brain.json`). Anything private lives here: tool config with
+  resource IDs in `config/<name>.json`, knowledge in `wiki/`.
+
+This file, `~/.claude/skills/`, and `~/.claude/output-styles/` are symlinks into
+the public dotfiles. Never write secrets, private resource IDs, or personal
+details into them — put those in the vault and reference the vault file. See the
+dotfiles `CLAUDE.md` for the full list.
 
 # Package managers
 
