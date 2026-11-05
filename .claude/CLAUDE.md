@@ -57,8 +57,8 @@ Both are gum-driven; without the headless flags they prompt, so run those forms
 in a real terminal.
 
 **Prod is mine alone.** Never run a prod release or deploy (`zen-release` without
-`--dev`, `STAGE=prod just deploy`, pipelines, tags on `prod`/`main`), never merge into
-a prod branch, and never suggest a prod command for me to paste. Dev releases
+`--dev`, `STAGE=prod just deploy`, pipelines, tags on `prod`/`main`) and never merge
+into a prod branch. Handing me prod commands to run myself is fine. Dev releases
 (`zen-release --dev --yes --bump patch`) and dev deploys are fine when I ask.
 
 # Task workflow — `/zen-flow` (always use)
