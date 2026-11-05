@@ -1,20 +1,35 @@
 #!/usr/bin/env bash
 # stdin -> system clipboard (pbcopy on macOS, xclip on Linux).
-# --join: one line out. TUIs like Claude Code wrap with hard newlines + indent,
-#   so a copied long command arrives broken; this trims each line, drops ` \`
-#   continuations and joins with single spaces.
+# --join:   one line out. TUIs like Claude Code wrap with hard newlines + indent,
+#           so a copied long command arrives broken; this trims each line, drops
+#           ` \` continuations and joins with single spaces.
+# --rejoin: --join applied to the current clipboard instead of stdin.
 
 set -e
 
 if [ "$(uname)" = Darwin ]; then
   to_clipboard() { pbcopy; }
+  from_clipboard() { pbpaste; }
 else
   to_clipboard() { xclip -i -f -selection primary | xclip -i -selection clipboard >/dev/null; }
+  from_clipboard() { xclip -o -selection clipboard; }
 fi
 
-if [ "$1" = --join ]; then
+join_lines() {
   sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/[[:space:]]*\\$//' \
-    | grep -v '^$' | paste -s -d ' ' - | tr -d '\n' | to_clipboard
-else
-  to_clipboard
-fi
+    | grep -v '^$' | paste -s -d ' ' - | tr -d '\n'
+}
+
+# Never overwrite the clipboard with nothing (e.g. Y with an empty selection).
+copy_if_nonempty() {
+  local text
+  text=$(cat)
+  [ -n "$text" ] && printf '%s' "$text" | to_clipboard
+  return 0
+}
+
+case "$1" in
+  --join) join_lines | copy_if_nonempty ;;
+  --rejoin) from_clipboard | join_lines | copy_if_nonempty ;;
+  *) to_clipboard ;;
+esac
