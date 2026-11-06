@@ -36,10 +36,23 @@ numbered, so it can be replayed. So:
   release. Never pause between phases to ask "shall I commit?".
 - Never ask the user to read a diff. Summarise the change in the why line.
 - Every step that touches the shell, an edit, or a check carries the literal
-  command in backticks, copy-pasteable, with real paths.
+  command, copy-pasteable, with real paths. Inline backticks only when it fits
+  on one line under ~70 chars.
 - No `<your-branch>` / `$FILE` placeholders — resolve them first (read the repo,
   run `git branch --show-current`) and emit the real string.
 - An edit gets a target too: `nvim src/auth.ts:42`.
+- **Long commands break with ` \`.** Over ~70 chars → fenced block, one flag
+  or pipe stage per line, each line ending ` \` except the last. The terminal
+  hard-wraps long lines and the copy pastes broken. Check every command before
+  sending; this rule is the one most often forgotten.
+
+  ```
+  aws s3 cp ./dist s3://my-bucket/app \
+    --recursive \
+    --exclude "*.map" \
+    | tee upload.log
+  ```
+
 - Multi-line commands go in a fenced block, still under a number.
 - Destructive commands get a `⚠` before the why line, and a confirmation only
   when the action is irreversible (force-push, data loss, deleting a remote).
