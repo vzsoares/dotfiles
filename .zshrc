@@ -116,6 +116,8 @@ export VISUAL=nvim
 export EDITOR="$VISUAL"
 # ~/.aws/config holds account details and stays out of this public repo
 export AWS_PAGER=""
+# Shared provider cache; .terraform dirs symlink into it instead of copying
+export TF_PLUGIN_CACHE_DIR="$HOME/.terraform.d/plugin-cache"
 
 # gpg-agent binds pinentry to whichever tty last told it about itself; without
 # this, switching terminals/tmux panes leaves it prompting on a stale tty and
