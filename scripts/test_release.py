@@ -266,6 +266,46 @@ def test_detect_version_package_json(git_repo: Path) -> None:
     assert release.detect_version() == "3.1.4"
 
 
+def test_detect_version_pubspec_in_subdir(git_repo: Path) -> None:
+    (git_repo / "app").mkdir()
+    (git_repo / "app" / "pubspec.yaml").write_text("name: x\nversion: 0.7.0+7\n")
+    subprocess.run(["git", "tag", "-a", "v0.4.0", "-m", "x"], check=True)
+    assert release.detect_version() == "0.7.0"
+
+
+def test_write_version_pubspec_bumps_build(git_repo: Path) -> None:
+    (git_repo / "app").mkdir()
+    pubspec = git_repo / "app" / "pubspec.yaml"
+    pubspec.write_text("name: x\nversion: 0.7.0+7 # app\nenvironment: {}\n")
+    state = release.State(version="0.7.1-dev.1", no_merge=True, target_branch="main")
+    release.phase_write_version(state)
+    assert pubspec.read_text() == (
+        "name: x\nversion: 0.7.1-dev.1+8 # app\nenvironment: {}\n"
+    )
+    # A resumed run keeps the build number it already wrote.
+    release.phase_write_version(state)
+    assert "version: 0.7.1-dev.1+8" in pubspec.read_text()
+
+
+def test_fetch_tags_sees_tags_made_on_origin(git_repo: Path, tmp_path: Path) -> None:
+    origin = tmp_path / "origin.git"
+    _git("clone", "-q", "--bare", str(git_repo), str(origin))
+    _git("remote", "add", "origin", str(origin))
+    _git("tag", "-a", "v0.5.0", "-m", "ci", cwd=origin)
+    assert release.detect_version() == "0.0.0"
+    release.fetch_tags()
+    assert release.detect_version() == "0.5.0"
+
+
+def test_ci_owned_releases_turn_off_github_release(git_repo: Path) -> None:
+    state = release.State(is_github=True)
+    assert release.detected_phase_defaults(state, _empty_config())["github_release"]
+    workflows = git_repo / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "release.yml").write_text("run: gh release create v1\n")
+    assert not release.detected_phase_defaults(state, _empty_config())["github_release"]
+
+
 # --------------------------------------------------------------------------- #
 # Capability detection                                                          #
 # --------------------------------------------------------------------------- #

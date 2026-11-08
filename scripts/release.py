@@ -554,7 +554,8 @@ def detected_phase_defaults(state: State, config: Config) -> dict[str, bool]:
         "secret_scan": config.enabled("gitleaks"),
         "changelog": True,
         "publish": state.publishable,
-        "github_release": state.is_github,
+        # CI would then find the release taken and fail.
+        "github_release": state.is_github and not ci_creates_releases(),
     }
 
 
@@ -711,6 +712,18 @@ def detect_is_github(config: Config) -> bool:
     return auth.returncode == 0
 
 
+def ci_creates_releases() -> bool:
+    """A GitHub workflow publishes releases itself (e.g. on a push to prod)."""
+    workflows = Path(".github/workflows")
+    if not workflows.is_dir():
+        return False
+    for path in [*workflows.glob("*.yml"), *workflows.glob("*.yaml")]:
+        text = path.read_text()
+        if "gh release create" in text or "action-gh-release" in text:
+            return True
+    return False
+
+
 def detect_hook_manager() -> str:
     if Path(".pre-commit-config.yaml").exists():
         return "pre-commit"
@@ -739,6 +752,30 @@ class Semver:
     dev: int | None
 
 
+PUBSPEC_VERSION_RE = re.compile(r"^version:\s*([^\s+#]+)(?:\+(\d+))?", re.MULTILINE)
+
+
+def pubspec_path() -> Path | None:
+    """The Flutter/Dart pubspec.yaml at the root, else the only one a level down."""
+    if Path("pubspec.yaml").exists():
+        return Path("pubspec.yaml")
+    found = [
+        path
+        for path in sorted(Path(".").glob("*/pubspec.yaml"))
+        if not path.parts[0].startswith(".")
+        and PUBSPEC_VERSION_RE.search(path.read_text())
+    ]
+    return found[0] if len(found) == 1 else None
+
+
+def fetch_tags() -> None:
+    """Tags made elsewhere (CI releases) must count when picking a version."""
+    if git("remote", "get-url", "origin").returncode != 0:
+        return
+    if git("fetch", "--tags", "--quiet", "origin").returncode != 0:
+        warn("Could not fetch tags from origin; using local tags.")
+
+
 def detect_version() -> str:
     if Path("pyproject.toml").exists():
         import tomlkit
@@ -755,6 +792,11 @@ def detect_version() -> str:
             ver = raw.get("version")
             if isinstance(ver, str) and ver:
                 return ver
+    pubspec = pubspec_path()
+    if pubspec is not None:
+        match = PUBSPEC_VERSION_RE.search(pubspec.read_text())
+        if match:
+            return match.group(1)
     tags = git("tag", "--list", "v*", "--sort=-v:refname")
     if tags.returncode == 0 and tags.stdout.strip():
         first = tags.stdout.strip().splitlines()[0]
@@ -869,6 +911,7 @@ def _semantic_release_version() -> str:
 
 def decide_version(state: State, config: Config, bump: str = "") -> None:
     """P4b — version detection + bump menu (parity + auto). `bump` skips the menu."""
+    fetch_tags()
     current = detect_version()
     sv = parse_semver(current)
     info(f"Current version: {current}")
@@ -910,6 +953,7 @@ def decide_version(state: State, config: Config, bump: str = "") -> None:
 
 def decide_version_dev(state: State, bump: str = "") -> None:
     """Dev bump menu (-dev.N, plus continue/custom). `bump` skips the menu."""
+    fetch_tags()
     current = detect_version()
     sv = parse_semver(current)
     info(f"Current version: {current}")
@@ -1137,6 +1181,20 @@ def phase_write_version(state: State) -> None:
             if not DRY_RUN:
                 Path("pyproject.toml").write_text(tomlkit.dumps(doc))
             updated.append("pyproject.toml")
+
+    # Flutter's build number (+N) must grow with every version for the stores.
+    pubspec = pubspec_path()
+    if pubspec is not None:
+        text = pubspec.read_text()
+        match = PUBSPEC_VERSION_RE.search(text)
+        if match:
+            build = int(match.group(2) or 0) + 1
+            if match.group(1) == version and match.group(2):
+                build -= 1  # already written on a resumed run
+            new = PUBSPEC_VERSION_RE.sub(f"version: {version}+{build}", text, count=1)
+            if not DRY_RUN:
+                pubspec.write_text(new)
+            updated.append(str(pubspec))
 
     # Match common version constants (VERSION, VERSAO, __version__) with or
     # without a type annotation, preserving the name/annotation and only
