@@ -19,8 +19,9 @@ case "${1:-import}" in
   import)
     agent-manager import config.json
     echo "imported settings + prompts from agent-manager/config.json"
+    # Group paths are stored with a literal $HOME: macOS and Linux homes differ.
     if [ -f "$groups" ]; then
-      agent-manager import --groups "$groups"
+      sed "s|\\\$HOME|$HOME|g" "$groups" | agent-manager import --groups -
       echo "imported groups from $groups"
     fi
     ;;
@@ -29,8 +30,8 @@ case "${1:-import}" in
     agent-manager export --settings --presets config.json 2>/dev/null
     echo "exported settings + prompts to agent-manager/config.json"
     if [ -n "$vault" ]; then
-      rm -f "$groups"
-      agent-manager export --groups "$groups" 2>/dev/null
+      agent-manager export --groups 2>/dev/null |
+        sed "s|$HOME|\$HOME|g" >"$groups"
       echo "exported groups to $groups"
     fi
     ;;

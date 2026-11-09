@@ -91,7 +91,7 @@ Adopt agent-manager. It covers what I want:
 | Workspaces      | Groups: a nested tree with default path, worktree toggle and base ref. Worktrees at `<repo>-worktrees/<name>`, branch `am/<name>` |
 | Agent           | A session: one CLI in its own tmux session (`-L agentmgr`), live status                                                           |
 | Sub-agent       | `create_session` over its MCP server; the child is a normal row                                                                   |
-| Master agent    | `list/read/send/wait_for_session` + a shared `task` list. Saved prompt `lead` sets it up                                          |
+| Master agent    | `list/read/send/wait_for_session` + a shared `task` list. Saved prompt `chief` (zen-flow aware, spans all groups) runs it         |
 | Config as files | Not native (`state.db`, SQLite). `agent-manager/link` imports/exports JSON instead                                                |
 
 Master agent limits: it can't answer another agent's permission prompts, and
