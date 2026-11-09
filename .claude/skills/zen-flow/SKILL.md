@@ -89,6 +89,25 @@ Never write project names or Notion IDs into this file or any other public repo 
   before starting.
 - When a task is finished and committed (`zen-commit`), run **done** on the board task.
 
+## Chief and workers
+
+Chief is the orchestrator session: it reads the board, spawns one worker per task
+with agent-manager `create_session` (`worktree: true` for code repos), and never
+writes code.
+
+- Pass `saved: worker-rules` on every `create_session`; the prompt only adds the goal,
+  done-criteria, file scope and the board task ID (workers commit it with
+  `zen-commit --task <id>`, which adds a `Task: #<id>` trailer).
+- Model per task: Opus for design-heavy or cross-cutting work, Sonnet for work that
+  follows an existing pattern or a written spec.
+- Max 3 workers at once.
+- Before a second worker starts in the same repo, run `list_reservations` and give each
+  worker its file scope in the prompt; workers `reserve_files` before editing.
+- The user reviews each diff (ctrl+r) and merges. After the merge, chief runs **done**,
+  archives the session (`archive_session`) and removes the worktree. Archiving only
+  hides the session row, it keeps the worktree: run
+  `git worktree remove <path>` from the repo, then `git branch -d <branch>`.
+
 ## Commit → dev release routine (every repo)
 
 Each batch of work on a dev branch ends the same way, in every repo touched
