@@ -131,7 +131,7 @@ in_tmux=false
 if [ -n "$TMUX" ] && tmux list-clients -F '#{client_tty}' 2>/dev/null | grep -qx "$(tty)"; then
     in_tmux=true
 fi
-if command -v tmux &> /dev/null && [[ $- == *i* ]] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && ! $in_tmux; then
+if [[ -z "$NO_TMUX" ]] && command -v tmux &> /dev/null && [[ $- == *i* ]] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && ! $in_tmux; then
     # `exec A || exec B` doesn't work here: exec already replaced this shell
     # once A launches, so if A then exits non-zero, there's nothing left to
     # run the fallback. Check first, exec exactly once.

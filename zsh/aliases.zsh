@@ -27,6 +27,8 @@ alias ts="tsx"
 alias n="nvim"
 alias tf="terraform"
 alias yayu="yay --sudoloop --save --noconfirm -Syu"
+# New Alacritty window that skips the tmux auto-start in .zshrc
+alias notmux="NO_TMUX=1 alacritty >/dev/null 2>&1 &!"
 
 # Python
 alias sourcepy="source .venv/bin/activate"
