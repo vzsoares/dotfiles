@@ -14,6 +14,9 @@ file assuming they're a harmless no-op elsewhere — use the per-OS split
 alacritty/    # terminal emulator config; .alacritty.toml is shared, and
               #   macos.toml / linux.toml hold OS-only keys (linked to
               #   local.toml by ./link). Shell must stay a login shell.
+agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
+              #   saved prompts as JSON; ./link imports (or `export`s back)
+              #   since it stores config in SQLite. Groups live in the vault
 aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
               #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
@@ -39,8 +42,8 @@ zsh/          # zsh aliases, plugins, themes
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
 ```
 
-Config dirs (aerospace, alacritty, cava, flameshot, gnupg, i3, nvim, tmux) each
-have their own `link` script.
+Config dirs (agent-manager, aerospace, alacritty, cava, flameshot, gnupg, i3,
+nvim, tmux) each have their own `link` script.
 
 ## Linking
 

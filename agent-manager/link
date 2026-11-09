@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+# agent-manager keeps config in SQLite, so files here are imported, not linked.
+# Groups hold private repo paths: they live in the vault, not this public repo.
+# Restart a running agent-manager afterwards to load the import.
+
+set -e
+
+if ! command -v agent-manager >/dev/null; then
+  echo "agent-manager not installed: brew install agent-manager" >&2
+  exit 1
+fi
+
+cd "$(dirname "$0")"
+vault=$(sed -n 's/.*"vault": *"\(.*\)".*/\1/p' ~/.claude/second-brain.json 2>/dev/null)
+groups="$vault/config/agent-manager-groups.json"
+
+case "${1:-import}" in
+  import)
+    agent-manager import config.json
+    echo "imported settings + prompts from agent-manager/config.json"
+    if [ -f "$groups" ]; then
+      agent-manager import --groups "$groups"
+      echo "imported groups from $groups"
+    fi
+    ;;
+  export)
+    rm -f config.json
+    agent-manager export --settings --presets config.json 2>/dev/null
+    echo "exported settings + prompts to agent-manager/config.json"
+    if [ -n "$vault" ]; then
+      rm -f "$groups"
+      agent-manager export --groups "$groups" 2>/dev/null
+      echo "exported groups to $groups"
+    fi
+    ;;
+  *)
+    echo "usage: ./link [import|export]" >&2
+    exit 1
+    ;;
+esac

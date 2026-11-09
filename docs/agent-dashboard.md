@@ -1,6 +1,8 @@
 # Agent dashboard on tmux
 
-**Status:** idea, not built. Two decisions open (see the end).
+**Status:** adopted [agent-manager](https://github.com/wainmann/agent-manager)
+instead of building this (see [Decision](#decision)). Config lives in
+`agent-manager/`. The design below is kept as the fallback if it falls short.
 
 Run several coding agents in parallel, each in its own git worktree, and keep
 one tmux window as a live dashboard where every agent is visible _and_
@@ -80,12 +82,22 @@ this design.
 | [agent-manager](https://github.com/wainmann/agent-manager) | Go TUI over tmux (Apache-2.0). Each agent in a persistent tmux session, one list with live status for ~13 CLIs, `space` sends a prompt without attaching, `ctrl+r` full-file diff where line comments go back as one review prompt, forks, agents can spawn and message each other over MCP | Closest to the list-view option. The diff → agent comment loop already exists                      |
 | [herdr](https://github.com/herdrdev/herdr)                 | Rust terminal multiplexer built for agents (Apache-2.0). Background server survives detach, restores layout and resumes sessions, each pane marked working/blocked/idle, agents drive it through a CLI and socket API, multi-machine over SSH, plugins                                      | Replaces tmux rather than extending it. Same status-per-pane idea, and it handles other agents too |
 
-## Open decisions
+## Decision
 
-1. **Worktree location:** `<repo>.wt/<name>` next to the repo (leaning this
-   way: nvim and LSP see a normal project) vs `<repo>/.worktrees/<name>`
-   (needs a gitignore entry, and tools may index it twice).
-2. **Dashboard:** live grid (leaning this way) vs list and preview vs both,
-   toggled with one key.
-3. **Build or adopt:** try agent-manager on top of the existing tmux setup
-   for a week before writing `zen-wt`. Build only what it lacks.
+Adopt agent-manager. It covers what I want:
+
+| Want            | agent-manager                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Workspaces      | Groups: a nested tree with default path, worktree toggle and base ref. Worktrees at `<repo>-worktrees/<name>`, branch `am/<name>` |
+| Agent           | A session: one CLI in its own tmux session (`-L agentmgr`), live status                                                           |
+| Sub-agent       | `create_session` over its MCP server; the child is a normal row                                                                   |
+| Master agent    | `list/read/send/wait_for_session` + a shared `task` list. Saved prompt `lead` sets it up                                          |
+| Config as files | Not native (`state.db`, SQLite). `agent-manager/link` imports/exports JSON instead                                                |
+
+Master agent limits: it can't answer another agent's permission prompts, and
+it can't commit, push or merge for one. `send_session` delivers only when the
+target is idle.
+
+Config sync: `./link` imports `config.json` (settings + saved prompts) and the
+vault's `config/agent-manager-groups.json` (groups hold private repo paths).
+`./link export` writes changes made in the app back to both.

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "settings": {
+    "background": "terminal",
+    "default_tool": "claude",
+    "editor": "nvim",
+    "hidden_tools": "opencode,grok,gemini,pi,antigravity,command-code,cursor,hermes,kiro,muse,omp",
+    "notify_finished": "on",
+    "theme": "rosé pine",
+    "worktree_default": "on"
+  },
+  "presets": [
+    {
+      "name": "lead",
+      "instructions": "You are the lead agent for this group. Do not write code yourself. Break my request into independent workstreams, put each on the shared task list, and spawn one worker per stream with create_session (worktree: true, named after the work). Use wait_for_session instead of polling, read_session to check on a worker, and send_session to steer it. When a worker is stuck on a permission prompt, tell me which session. When all are done, summarise each branch and what is left for me to review or merge."
+    }
+  ]
+}
