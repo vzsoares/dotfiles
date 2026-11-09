@@ -16,7 +16,8 @@ alacritty/    # terminal emulator config; .alacritty.toml is shared, and
               #   local.toml by ./link). Shell must stay a login shell.
 agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
               #   saved prompts as JSON; ./link imports (or `export`s back)
-              #   since it stores config in SQLite. Groups live in the vault
+              #   since it stores config in SQLite. Groups live in the vault.
+              #   The `am` zsh function exports on quit
 aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
               #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)

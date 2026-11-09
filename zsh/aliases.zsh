@@ -37,5 +37,16 @@ alias run="$HOME/code/personal/dotfiles/scripts/run.sh"
 # Claude
 alias claude-yolo='ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions --allowedTools "*"'
 alias c='claude'
-alias am="agent-manager"
 alias cy='claude-yolo'
+
+# agent-manager keeps config in SQLite; export it to tracked JSON on quit
+am() {
+  agent-manager "$@"
+  local rc=$?
+  if [ $# -eq 0 ]; then
+    (cd "$HOME/code/personal/dotfiles/agent-manager" && ./link export >/dev/null)
+    git -C "$HOME/code/personal/dotfiles" diff --quiet -- agent-manager ||
+      echo "am: settings changed, review with git diff in dotfiles"
+  fi
+  return $rc
+}
