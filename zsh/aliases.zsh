@@ -37,3 +37,4 @@ alias run="$HOME/code/personal/dotfiles/scripts/run.sh"
 # Claude
 alias claude-yolo='ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions --allowedTools "*"'
 alias c='claude'
+alias cy='claude-yolo'

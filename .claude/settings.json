@@ -55,9 +55,14 @@
     "figma@claude-plugins-official": true
   },
   "outputStyle": "adhd",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
   "autoCompactWindow": 800000,
   "tui": "default",
-  "skipDangerousModePermissionPrompt": false,
+  "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "vim",
   "agentPushNotifEnabled": true,
@@ -84,11 +89,6 @@
         "OPENAI_API_BASE": "http://localhost:11434/v1",
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
-    }
-  },
-  "modelSettings": {
-    "claude-opus-5-5": {
-      "effortLevel": "high"
     }
   }
 }
