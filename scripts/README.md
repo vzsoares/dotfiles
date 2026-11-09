@@ -30,6 +30,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 zen-commit                 # interactive: pick files, AI message, confirm
 zen-commit --all --yes     # headless: stage everything, accept AI message
 zen-commit --all -m "..."  # headless: verbatim message, skip AI
+zen-commit --all --yes --task 42  # appends a "Task: #42" trailer
 ```
 Stages files, scans the staged diff for secrets/sensitive files, generates a
 Conventional Commit message, then lets you commit / edit / regenerate. Runs

@@ -27,6 +27,7 @@
 #      -m, --message MSG  Use MSG verbatim (skips AI generation).
 #      -y, --yes          Headless: accept the generated message, no prompts.
 #          --force        Headless: commit even if the secret guardrail fires.
+#          --task ID      Append a `Task: #ID` trailer to the commit message.
 #
 #  DESCRIPTION
 #      Stages files (interactive picker, or --all), scans the staged diff for
@@ -424,7 +425,17 @@ def _show_and_validate(message: str) -> None:
     )
 
 
-def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
+def add_task_trailer(message: str, task: str) -> str:
+    """Append a `Task: #<id>` trailer; no-op when `task` is empty."""
+    task = task.strip().lstrip("#")
+    if not task:
+        return message
+    return f"{message.rstrip()}\n\nTask: #{task}"
+
+
+def do_commit(
+    stage_all: bool, message: str, yes: bool, force: bool, task: str = ""
+) -> None:
     headless = (
         (not sys.stdin.isatty()) or (not sys.stdout.isatty()) or yes or bool(message)
     )
@@ -515,7 +526,7 @@ def do_commit(stage_all: bool, message: str, yes: bool, force: bool) -> None:
     else:
         final = _interactive_message_loop()
 
-    result = git("commit", "-m", final)
+    result = git("commit", "-m", add_task_trailer(final, task))
     if result.returncode != 0:
         # git() captures output, so a failing pre-commit hook (husky, gitleaks,
         # lint-staged) would otherwise be swallowed and we'd report success on a
@@ -569,6 +580,9 @@ def main(
     force: bool = typer.Option(
         False, "--force", help="Headless: commit even if the guardrail fires."
     ),
+    task: str = typer.Option(
+        "", "--task", help="Append a 'Task: #<id>' trailer to the message."
+    ),
 ) -> None:
     """Interactive Conventional-Commit helper."""
     if shutil.which("gum") is None:
@@ -593,7 +607,7 @@ def main(
     if not message and shutil.which("claude") is None:
         fail("Error: claude CLI is required (or pass -m).")
         raise typer.Exit(1)
-    do_commit(stage_all, message, yes, force)
+    do_commit(stage_all, message, yes, force, task)
 
 
 if __name__ == "__main__":

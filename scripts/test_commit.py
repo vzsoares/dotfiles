@@ -371,3 +371,26 @@ def test_headless_clean_run_count(git_repo: Path, quiet_gum: None) -> None:
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_task_trailer_with_message(git_repo: Path, quiet_gum: None) -> None:
+    (git_repo / "f.txt").write_text("x\n")
+    commit.do_commit(
+        stage_all=True, message="feat: add f", yes=True, force=False, task="#42"
+    )
+    assert _git("log", "-1", "--pretty=%B").strip() == "feat: add f\n\nTask: #42"
+
+
+def test_task_trailer_with_generated_message(
+    git_repo: Path, quiet_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (git_repo / "f.txt").write_text("x\n")
+    monkeypatch.setattr(commit, "run_claude", lambda diff, prompt: "feat: gen\n")
+    commit.do_commit(stage_all=True, message="", yes=True, force=False, task="abc")
+    assert _git("log", "-1", "--pretty=%B").strip() == "feat: gen\n\nTask: #abc"
+
+
+def test_no_task_leaves_message_unchanged(git_repo: Path, quiet_gum: None) -> None:
+    (git_repo / "f.txt").write_text("x\n")
+    commit.do_commit(stage_all=True, message="feat: add f", yes=True, force=False)
+    assert _git("log", "-1", "--pretty=%B").strip() == "feat: add f"
