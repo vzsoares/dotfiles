@@ -3,6 +3,7 @@
 ## Architecture
 - [[overview]] — Project purpose, repo layout, linking model, key components
 - [[release-tooling]] — zen-release design: orchestrator phases, config tiers, resumable state
+- [[decision-inbox]] — zen-inbox: SQLite decision inbox, batched delivery, gum watcher with tmux talk
 
 ## Manjaro i3
 - [[fresh-install]] — Step-by-step bring-up on a new Manjaro i3 machine

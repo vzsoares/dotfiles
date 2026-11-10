@@ -121,18 +121,21 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
 
 - **chief** reads the board, gets the user's approval, spawns a spec-writer per task
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
-  (task ID, page URL, repo, model tier) and sets them In Progress. It relays decision
-  gates as numbered decisions and lists Human Only work. It never waits on sessions,
-  merges or releases. After an agent-manager restart it revives the orchestrator.
+  (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
+  decisions (see Decision inbox), keeps the `decisions` watcher running, records answers
+  the user gives in chat with `zen-inbox answer`, and lists Human Only work. It never
+  waits on sessions, merges or releases. After an agent-manager restart it revives the
+  orchestrator and the watcher.
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
   scope, required tests, expected load, settled decisions, out of scope, Human Only
-  steps. Open decisions go to chief as numbered questions. Its only board write is that
+  steps. Open decisions go to the inbox, one `zen-inbox ask` each; the answers arrive
+  together in one message. Its only board write is that
   page body. Ends with `SPEC_READY <id>`.
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
   cross-cutting work, Sonnet for pattern or spec work; max 3; `list_reservations`
   before a second worker in one repo) and waits on them. A stuck Sonnet worker gets one
-  relaunch on Opus on the same branch; anything else goes to chief as a decision gate
-  (`failing · tried · cause · needs`).
+  relaunch on Opus on the same branch; anything else becomes a gate in the inbox
+  (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
   trailer), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
@@ -152,6 +155,26 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
   archive, worktree and branch cleanup; 2 gate, 3 not ff, 4 dirty, 5 release.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
   trees, unpushed work, stashes, orphan branches and worktrees.
+- `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
+
+### Decision inbox
+
+Agents never message chief with decisions. They run `zen-inbox ask <task> -q ... -o ...
+--rec <letter>` (gates: `--gate`) and end the turn. A terminal named `decisions` in group
+`chief` runs `zen-inbox watch`: open decisions appear live (zen-bell rings), and the
+user answers by pick, free text, or talk (a tmux popup attached to `am_<session>`;
+after detaching, `resolved?` closes it with an optional note and sends nothing).
+Answers are held until the asking session has no open decision, then go out as one
+`agent-manager send <session> ... --from zen-inbox` message. A failed delivery stays
+listed until `zen-inbox retry <session>`.
+
+- IDs `<task>.<n>` and gates `<task>.g`, `.g2`, never reused; `amend`/`withdraw` are
+  the asker's (`--force` for chief).
+- Storage: `<vault>/config/zen-flow.db` (SQLite, gitignored in the vault).
+- Chief keeps the watcher up: `agent-manager terminal list --json` shows a running
+  `decisions` terminal in `chief`, else `agent-manager terminal create --name decisions
+  --group chief --nest=false --json` and `agent-manager terminal send <id> --command
+  "zen-inbox watch"`.
 
 The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
 orchestrator:

@@ -19,6 +19,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
+| `inbox.py` | `zen-inbox` | Decision inbox: agents `ask`, a gum watcher answers by pick, free text or talk; batched delivery. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
 | `env-build.py` | `zen-env` | Resolves `.env.example` parameters from AWS SSM Parameter Store. |
 | `hash.sh` | `zen-hash` | `sha256sum` helper: hashes files given as args, or gum-picks them. |
@@ -92,6 +93,25 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 - **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
   `~/code/personal/*`, and every worktree of each.
 
+### zen-inbox
+```
+zen-inbox ask <task> -q "<question>" -o a -o b --rec a   # prints 580.1 (--gate: 580.g)
+zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
+zen-inbox list [--all] | show <id>                      # --json on both
+zen-inbox answer <id> (<letter> | --text "...") [--note "..."]
+zen-inbox resolve <id> [--note "..."]                   # settled in talk; nothing sent
+zen-inbox retry <session>                               # resend a failed delivery
+zen-inbox watch                                         # live gum view
+```
+SQLite at `<vault>/config/zen-flow.db` (`ZEN_FLOW_DB` overrides). Answers are held
+until the asking session has no open decision, then sent as one
+`agent-manager send … --from zen-inbox` message (without `--from` when run inside an
+agent pane, where agent-manager refuses it). Exit codes: 0 ok · 1 not found or wrong
+state · 2 usage · 3 recorded, delivery failed · 4 vault or db unavailable. `watch` polls
+every 2 s and redraws only when the inbox changed, never inside a decision's menu; talk
+opens `tmux display-popup` attached to `am_<session>`. See
+`docs/wiki/architecture/decision-inbox.md`.
+
 ### zen-pgp
 ```
 zen-pgp                    # interactive menu
@@ -141,6 +161,7 @@ uv run scripts/test_await.py
 uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_sweep.py
+uv run scripts/test_inbox.py
 ```
 
 ### zen-config
