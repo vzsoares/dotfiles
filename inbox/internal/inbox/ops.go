@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
@@ -354,6 +355,9 @@ func (ib *Inbox) claim(ids []string) error {
 }
 
 func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
+	if ib.Self != "" && sid == ib.Self {
+		return ib.handBack(sid, ids)
+	}
 	ib.mu.Lock()
 	batch := make([]Decision, 0, len(ids))
 	for _, id := range ids {
@@ -371,7 +375,6 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 		state = "sent"
 	}
 	ib.mu.Lock()
-	defer ib.mu.Unlock()
 	err := ib.immediate(func() error {
 		now := stamp()
 		for _, id := range ids {
@@ -382,10 +385,15 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 		}
 		return nil
 	})
+	ib.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	return &Delivery{SessionID: sid, IDs: ids, OK: ok, MessageID: mid, Error: errText}, nil
+	res := &Delivery{SessionID: sid, IDs: ids, OK: ok, MessageID: mid, Error: errText}
+	if ok {
+		res.Followup = ib.AM.Followup(sid)
+	}
+	return res, nil
 }
 
 // Flush sends a session's held answers once none of its decisions are open.
@@ -523,7 +531,17 @@ func (ib *Inbox) Describe(res *Delivery, sid, name string) (string, error) {
 		if name == "" {
 			name = sid
 		}
-		return fmt.Sprintf("sent %s to %s", strings.Join(res.IDs, ", "), name), nil
+		if res.Message != "" {
+			return fmt.Sprintf("recorded %s; nothing sent to your own session", strings.Join(res.IDs, ", ")), nil
+		}
+		line := fmt.Sprintf("sent %s to %s", strings.Join(res.IDs, ", "), name)
+		switch res.Followup {
+		case am.Submitted:
+			line += " (submitted a stuck paste)"
+		case am.StillStuck:
+			line += "; the paste is still stuck, attach: " + am.AttachCommand(sid)
+		}
+		return line, nil
 	}
 	return fmt.Sprintf("delivery failed: %s; zen-inbox retry %s", res.Error, sid), nil
 }

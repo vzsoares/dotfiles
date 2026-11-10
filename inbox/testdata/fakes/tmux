@@ -1,4 +1,27 @@
 #!/usr/bin/env bash
-printf '%s\0' "$@" >"$FAKE_AM/tmux.argv"
-[ -f "$FAKE_AM/tmux_rc" ] && exit "$(cat "$FAKE_AM/tmux_rc")"
+# Fake tmux. capture-pane prints $FAKE_AM/screens/N for the Nth call (the last
+# screen repeats), after copying $FAKE_AM/sessions.N over sessions.json when
+# present; send-keys argv is saved NUL-separated under $FAKE_AM/keys. Any
+# other call saves its argv to $FAKE_AM/tmux.argv.
+case "$3" in
+capture-pane)
+    [ -f "$FAKE_AM/capture_rc" ] && exit "$(cat "$FAKE_AM/capture_rc")"
+    mkdir -p "$FAKE_AM/screens"
+    n=$(cat "$FAKE_AM/capture.n" 2>/dev/null || echo 0)
+    echo $((n + 1)) >"$FAKE_AM/capture.n"
+    [ -f "$FAKE_AM/sessions.$n" ] && cp "$FAKE_AM/sessions.$n" "$FAKE_AM/sessions.json"
+    last=$(find "$FAKE_AM/screens" -type f | wc -l | tr -d ' ')
+    [ "$n" -ge "$last" ] && n=$((last - 1))
+    cat "$FAKE_AM/screens/$n"
+    ;;
+send-keys)
+    mkdir -p "$FAKE_AM/keys"
+    n=$(find "$FAKE_AM/keys" -type f | wc -l | tr -d ' ')
+    printf '%s\0' "$@" >"$FAKE_AM/keys/$(printf %06d "$n")"
+    ;;
+*)
+    printf '%s\0' "$@" >"$FAKE_AM/tmux.argv"
+    [ -f "$FAKE_AM/tmux_rc" ] && exit "$(cat "$FAKE_AM/tmux_rc")"
+    ;;
+esac
 exit 0

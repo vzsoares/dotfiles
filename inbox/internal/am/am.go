@@ -36,6 +36,8 @@ type Client interface {
 	Send(sessionID, message string) (ok bool, messageID, errText string)
 	Popup(sessionID string) bool
 	Bell(message string)
+	// Followup runs after a successful Send and returns "", Submitted or StillStuck.
+	Followup(sessionID string) string
 }
 
 // Exec is the real Client.

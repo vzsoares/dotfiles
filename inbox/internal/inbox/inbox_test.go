@@ -17,11 +17,21 @@ type fakeAM struct {
 	mu    sync.Mutex
 	sends [][2]string
 	fail  string
+	// followup is what Followup reports, and followed counts its calls.
+	followup string
+	followed int
 }
 
 func (f *fakeAM) Sessions() am.Sessions { return nil }
 func (f *fakeAM) Popup(string) bool     { return true }
 func (f *fakeAM) Bell(string)           {}
+
+func (f *fakeAM) Followup(string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.followed++
+	return f.followup
+}
 
 func (f *fakeAM) Send(sid, msg string) (bool, string, string) {
 	f.mu.Lock()
@@ -423,6 +433,53 @@ func TestMessageIDsInNumericOrder(t *testing.T) {
 	msg := BuildMessage(held(t, ib, "7.10", "7.2"), SendLimit)
 	if strings.Index(msg, "7.2 ") > strings.Index(msg, "7.10 ") {
 		t.Fatal(msg)
+	}
+}
+
+func TestFollowupKeepsDeliverySentAndDescribes(t *testing.T) {
+	for outcome, want := range map[string]string{
+		"":            "sent 7.1 to spec-s1",
+		am.Submitted:  "sent 7.1 to spec-s1 (submitted a stuck paste)",
+		am.StillStuck: "sent 7.1 to spec-s1; the paste is still stuck, attach: tmux -L agentmgr attach -t am_s1",
+	} {
+		ib, fake, _ := open(t)
+		fake.followup = outcome
+		ask(t, ib, "7", "s1", false, "Q?")
+		res, err := ib.Answer("7.1", p("a"), nil, "", nil)
+		if err != nil || !res.OK || res.Followup != outcome || fake.followed != 1 {
+			t.Fatal(outcome, res, err, fake.followed)
+		}
+		if d := get(t, ib, "7.1"); d.Delivery != "sent" || d.DeliveryError != "" {
+			t.Fatalf("%q: %+v", outcome, d)
+		}
+		if got, err := ib.Describe(res, "s1", "spec-s1"); err != nil || got != want {
+			t.Fatalf("%q: %q %v", outcome, got, err)
+		}
+	}
+}
+
+func TestFailedSendSkipsFollowup(t *testing.T) {
+	ib, fake, _ := open(t)
+	ask(t, ib, "7", "s1", false, "Q?")
+	fake.fail = "send refused"
+	if _, err := ib.Answer("7.1", p("a"), nil, "", nil); err != nil || fake.followed != 0 {
+		t.Fatal(err, fake.followed)
+	}
+}
+
+func TestAnswerInsideAskingSessionSendsNothing(t *testing.T) {
+	ib, fake, _ := open(t)
+	ib.Self = "s1"
+	ask(t, ib, "7", "s1", false, "Q?")
+	res, err := ib.Answer("7.1", p("a"), nil, "", nil)
+	if err != nil || !res.OK || res.Message == "" || len(fake.sends) != 0 || fake.followed != 0 {
+		t.Fatal(res, err, fake.sends)
+	}
+	if d := get(t, ib, "7.1"); d.Delivery != "sent" || d.DeliveryError != "" {
+		t.Fatalf("%+v", d)
+	}
+	if got, _ := ib.Describe(res, "s1", ""); !strings.HasPrefix(got, "recorded 7.1") {
+		t.Fatal(got)
 	}
 }
 

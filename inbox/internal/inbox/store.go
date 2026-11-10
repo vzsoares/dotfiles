@@ -207,6 +207,8 @@ type Delivery struct {
 	Error     string
 	// Message is set when the answers were handed back to print, not sent.
 	Message string
+	// Followup is am.Submitted or am.StillStuck when the pane needed a nudge.
+	Followup string
 }
 
 // Inbox is one open db. Its mutex serialises the single connection, so a
@@ -217,6 +219,8 @@ type Inbox struct {
 	conn *sql.Conn
 	AM   am.Client
 	Path string
+	// Self is the calling agent session; answers for it are recorded, never sent.
+	Self string
 }
 
 var ctx = context.Background()

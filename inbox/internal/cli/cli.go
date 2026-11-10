@@ -92,7 +92,11 @@ func (a *App) open() (*inbox.Inbox, error) {
 	if err != nil {
 		return nil, err
 	}
-	return inbox.Open(path, a.AM)
+	ib, err := inbox.Open(path, a.AM)
+	if ib != nil {
+		ib.Self = caller()
+	}
+	return ib, err
 }
 
 // report prints a close's outcome and returns its exit code.

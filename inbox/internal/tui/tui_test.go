@@ -59,6 +59,8 @@ func (f *fakeAM) Bell(msg string) {
 	f.bells = append(f.bells, msg)
 }
 
+func (f *fakeAM) Followup(string) string { return "" }
+
 func sess(id string) am.Session {
 	return am.Session{"id": id, "name": "spec-" + id, "status": "idle", "running": true}
 }

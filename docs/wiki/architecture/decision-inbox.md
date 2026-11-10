@@ -35,10 +35,10 @@ message.
    one / Cancel. The open session updates live (2 s poll): an amended question shows
    its new text, a staged answer to it goes stale and is asked again before the
    review, one answered elsewhere shows `answered elsewhere: <answer>` and leaves the
-   walk, and new questions join its end. (The spec said `answered by <who>`; the db records no
-   answerer and schema changes were out of scope, so it names the answer instead.) At Send the `rev` check stays the backstop:
-   one closed elsewhere is reported and skipped, one amended is shown again. Talk opens `tmux display-popup` on
-   the agent's session, then a multi-select resolves the decisions it settled (as
+   walk (the db records no answerer, so it names the answer), and new questions join
+   its end. At Send the `rev` check stays the backstop: one closed elsewhere is
+   reported and skipped, one amended is shown again. Talk opens `tmux display-popup`
+   on the agent's session, then a multi-select resolves the decisions it settled (as
    `talk`, optional note); the rest stay open.
 5. **flush** — when the session's last open decision closes (answer, resolve or
    withdraw), its held answers are sent as one message:
@@ -52,6 +52,32 @@ message.
 
    Talk-resolved and withdrawn decisions are left out. Questions are clipped, then
    dropped, when the message nears agent-manager's 8000-byte send limit.
+6. **delivery check** — see Stuck paste below.
+
+## Panel
+
+- **Busy loader.** A send, retry, resolve or talk runs in a `tea.Cmd`; while it runs
+  the panel shows a spinner screen (`m.busy`, MiniDot spinner) instead of freezing,
+  and polls keep running.
+- **Status line.** The last row is one status line, as agent-manager shows a
+  terminal's last output: `» <busy text> ⠋` while busy, `✕ delivery failed · name ·
+  r retry` when answers are undelivered, `◆ n open · names` otherwise, `○ inbox
+  empty` / `○ loading…`. A success flash (`» sent …`) tops the list for a few
+  seconds; polls clear it.
+- **`r` retry.** On the list, `r` retries the first failed delivery; `enter` on a
+  `retry <session>: n answer(s)` row retries that one. It runs `zen-inbox retry`'s
+  path, including the delivery check.
+- **Markdown (#611).** Question, context, option and brief text render through
+  glamour (`internal/md`) with a cut-down style on ANSI-16 colour indexes, so the
+  terminal's own palette applies; no margins, and under `NO_COLOR` (Ascii profile)
+  no escape bytes at all. Lines are hard-wrapped (`ansi.Hardwrap`, escapes carried
+  across breaks) so none exceeds the pane. Renders are cached per decision id, `rev`,
+  field and width, and the cache is bounded.
+- **Scrolling on every screen.** When a body outruns the pane it scrolls by half a
+  page: `pgup`/`pgdn` everywhere, `ctrl+u`/`ctrl+b` and `ctrl+d`/`ctrl+f` except in
+  the text inputs, `j`/`k` or the arrows one line on View full, and the mouse wheel
+  (3 lines a notch). Elsewhere `j`/`k` move the menu cursor. The walk keeps its
+  scroll position across View full.
 
 ## IDs
 
@@ -80,6 +106,30 @@ and stays listed in the watcher until `zen-inbox retry <session>`.
 time out at 30 s) and `held` answers whose session has nothing left open (closed but
 never flushed).
 
+### Stuck paste (#610)
+
+Claude Code collapses a long multi-line message into `[Pasted text #1 +12 lines]`,
+and the Enter agent-manager types right after can be swallowed, leaving the answers
+unsent while `send` reported ok. After a successful `send`, `am.Exec.Followup` checks
+the asker's pane in the same command (the CLI blocks for it; the panel runs it inside
+the send's `tea.Cmd`), outside the inbox mutex:
+
+- Only for sessions whose `tool` is `claude` and that are not gone. It captures
+  `tmux -L agentmgr capture-pane -p -t am_<sid>` every 1 s for up to 15 s and stops
+  early when the session is `working` or gone, the prompt clears, or a capture fails.
+- Stuck means the `❯` input line holds only placeholders (`StuckPaste`) and sits
+  between two ─ rules; typed text, dialogs (`❯ 1. Yes`), an empty prompt or
+  placeholders in scrollback never match.
+- After two consecutive matching captures it presses `Enter` once. A fresh capture
+  then says `submitted` (clear) or `still stuck` (zen-bell rings once; no second
+  press).
+- It never touches delivery state: rows stay `sent`. `Describe` adds the suffix
+  `(submitted a stuck paste)` or `; the paste is still stuck, attach: tmux -L
+  agentmgr attach -t am_<sid>`. A message agent-manager held because the session was
+  busy is not covered.
+- Timing is `am.Interval` / `am.Window`, so tests run in milliseconds against the
+  fake tmux (scripted `capture-pane` screens, recorded `send-keys`).
+
 ## Gotchas
 
 - **`--from` is refused inside an agent pane.** agent-manager identifies the caller
@@ -93,7 +143,12 @@ never flushed).
   would run in that agent's process tree, where `--from` is refused and the fallback
   messages the agent itself. So `withdraw` prints the held-answers message on stdout,
   marks them `sent` with no message id and exits 0; a `--force` withdraw by another
-  session still sends. This is the one deliberate difference from `inbox.py`.
+  session still sends. This is one deliberate difference from `inbox.py`.
+- **Answering inside the asking session sends nothing.** `Inbox.Self` is the CLI's
+  `$AGENT_MANAGER_SESSION_ID`; any delivery to that session (answer, resolve, retry,
+  withdraw) is handed back instead of sent, because agent-manager refuses a session
+  messaging itself. The rows close as `sent` and `answer` prints `recorded <ids>;
+  nothing sent to your own session`.
 - **Watcher refresh.** The panel reads the db every 2 s and `agent-manager sessions`
   every 10 s, all inside `tea.Cmd`s, so `Update` never blocks; Bubble Tea redraws
   only what changed. Sends, popups and bells run in commands too.
