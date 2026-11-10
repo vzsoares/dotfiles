@@ -17,6 +17,8 @@ import importlib.util
 import json
 import os
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -281,27 +283,127 @@ def test_await_refusal_from_live_session_keeps_waiting(
     assert ev.state == "timeout"
 
 
-def test_find_session_prefers_live_name() -> None:
-    old = {**_session("/a", sid="old"), "name": "w", "archived": True}
-    live = {**_session("/b", sid="new"), "name": "w"}
-    assert zen_await.find_session("w", [old, live]) is live
-    assert zen_await.find_session("old", [old, live]) is old
+def _reached(fake_am: Path, session: dict[str, object] | None) -> None:
+    body: dict[str, object] = {"reached": True}
+    if session is not None:
+        body["session"] = session
+    (fake_am / "wait.json").write_text(json.dumps(body))
 
 
-def test_cli_summary_and_unknown(
-    fake_am: Path, monkeypatch: pytest.MonkeyPatch, projects: Path
+def test_fresh_worker_keeps_waiting_until_reply(
+    projects: Path, fake_am: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    s = _session("/repo")
-    _write_transcript(projects, s, [_assistant("SPEC_READY 5")])
-    (fake_am / "sessions.json").write_text(json.dumps([s]))
+    s = _session("/repo", status="idle")
+    monkeypatch.setattr(zen_await, "STARTUP_GRACE", 30)
+    _reached(fake_am, s)
+    timer = threading.Timer(
+        0.4, _write_transcript, (projects, s, [_assistant("ok\nWORKER_DONE 571")])
+    )
+    timer.start()
+    started = time.monotonic()
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    timer.join()
+    assert (ev.state, ev.task_id, ev.exit_code) == ("done", "571", 0)
+    assert time.monotonic() - started >= 0.4
+
+
+def test_fresh_worker_without_reply_goes_idle_after_grace(
+    projects: Path, fake_am: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _session("/repo", status="idle")
+    monkeypatch.setattr(zen_await, "STARTUP_GRACE", 0.3)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+    assert ev.summary.startswith("no reply yet after")
+
+
+def test_fresh_worker_waiting_is_idle_at_once(
+    projects: Path, fake_am: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _session("/repo", status="waiting")
+    monkeypatch.setattr(zen_await, "STARTUP_GRACE", 30)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+    assert ev.summary.startswith("waiting for input")
+
+
+def test_fresh_worker_dead_returns_at_once(
+    projects: Path, fake_am: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _session("/repo", status="errored")
+    monkeypatch.setattr(zen_await, "STARTUP_GRACE", 30)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert ev.exit_code == 20
+
+
+@pytest.mark.parametrize(
+    "current",
+    [
+        {"status": "dead"},
+        {"status": "errored"},
+        {"running": False},
+        {"archived": True},
+        None,
+    ],
+    ids=["dead", "errored", "not-running", "archived", "absent"],
+)
+def test_wait_without_session_rereads_dead(
+    projects: Path, fake_am: Path, current: dict[str, object] | None
+) -> None:
+    s = _session("/repo", status="working")
+    _write_transcript(projects, s, [_assistant("half way")])
+    _reached(fake_am, None)
+    listed = [] if current is None else [{**s, **current}]
+    (fake_am / "sessions.json").write_text(json.dumps(listed))
+    ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("dead", 20)
+
+
+def test_wait_without_session_dead_with_marker_is_done(
+    projects: Path, fake_am: Path
+) -> None:
+    s = _session("/repo", status="working")
+    _write_transcript(projects, s, [_assistant("WORKER_DONE 571")])
+    _reached(fake_am, None)
+    (fake_am / "sessions.json").write_text(json.dumps([{**s, "archived": True}]))
+    ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("done", 0)
+
+
+def test_wait_without_session_uses_fresh_status(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="working")
+    _write_transcript(projects, s, [_assistant("stopped, no marker")])
+    _reached(fake_am, None)
+    (fake_am / "sessions.json").write_text(json.dumps([{**s, "status": "idle"}]))
+    ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+
+
+@pytest.fixture
+def summary_env(
+    fake_am: Path, monkeypatch: pytest.MonkeyPatch, projects: Path
+) -> list[dict[str, object]]:
+    done = _session("/a", sid="aaa")
+    dead = _session("/b", status="errored", sid="bbb")
+    idle = _session("/c", sid="ccc")
+    _write_transcript(projects, done, [_assistant("SPEC_READY 5")])
+    _write_transcript(projects, dead, [_assistant("half way")])
+    _write_transcript(projects, idle, [_assistant("stopped")])
+    (fake_am / "sessions.json").write_text(json.dumps([done, dead, idle]))
     real = zen_await.event_for
     monkeypatch.setattr(zen_await, "event_for", lambda sess: real(sess, projects))
-    runner = CliRunner()
+    return [done, dead, idle]
 
-    ok = runner.invoke(zen_await.app, ["--summary", "worker-abc123", "--json"])
+
+def test_cli_summary_and_unknown(summary_env: list[dict[str, object]]) -> None:
+    runner = CliRunner()
+    ok = runner.invoke(zen_await.app, ["--summary", "worker-aaa", "--json"])
     assert ok.exit_code == 0
     assert json.loads(ok.stdout) == {
-        "session": "worker-abc123",
+        "session": "worker-aaa",
         "task_id": "5",
         "state": "done",
         "summary": "SPEC_READY 5",
@@ -309,6 +411,33 @@ def test_cli_summary_and_unknown(
 
     missing = runner.invoke(zen_await.app, ["--summary", "ghost"])
     assert missing.exit_code == 2
+
+
+def test_cli_summary_reports_every_session(
+    summary_env: list[dict[str, object]],
+) -> None:
+    runner = CliRunner()
+    out = runner.invoke(
+        zen_await.app, ["--summary", "worker-ccc", "worker-aaa", "worker-bbb", "--json"]
+    )
+    states = [json.loads(line)["state"] for line in out.stdout.splitlines()]
+    assert states == ["idle", "done", "dead"]
+    assert out.exit_code == 20
+
+    text = runner.invoke(zen_await.app, ["--summary", "worker-aaa", "worker-ccc"])
+    assert [line.split(" · ")[0] for line in text.stdout.splitlines()] == [
+        "worker-aaa",
+        "worker-ccc",
+    ]
+    assert text.exit_code == 11
+
+
+def test_cli_summary_unknown_among_several(
+    summary_env: list[dict[str, object]],
+) -> None:
+    out = CliRunner().invoke(zen_await.app, ["--summary", "worker-aaa", "ghost"])
+    assert out.exit_code == 2
+    assert out.stdout == ""
 
 
 if __name__ == "__main__":

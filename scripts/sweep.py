@@ -33,7 +33,10 @@
 #        orphan-branch   am/* branch with no worktree
 #        orphan-worktree linked worktree with no live agent-manager session
 #        merged          branch already merged into its base (dev, else main/master)
-#      It never changes anything.
+#      A linked worktree with a live session (lib/sessions.py is_live) is a
+#      running worker: it and its branch yield no findings and are listed once
+#      as a `live worker: <path> (<branch>)` note. The main checkout is always
+#      checked. It never changes anything.
 #
 #  EXIT CODES
 #      0  clean      1  findings
@@ -46,15 +49,31 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from types import ModuleType
 
 import typer
 
 LONG_LIVED = ("dev", "main", "master", "prod")
+
+
+def load_sessions() -> ModuleType:
+    path = Path(__file__).resolve().parent / "lib" / "sessions.py"
+    spec = importlib.util.spec_from_file_location("zen_sessions", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["zen_sessions"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_sessions = load_sessions()
 
 
 @dataclass
@@ -178,12 +197,14 @@ def base_branch(repo: Path) -> str:
     return ""
 
 
-def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
+def sweep_repo(repo: Path, live_dirs: set[str] | None) -> Sweep:
     """Findings for one repo. live_dirs=None skips the session check."""
     name = str(repo)
-    found: list[Finding] = []
+    result = Sweep()
+    found = result.findings
     trees = worktrees(repo)
     has_remote = bool(git(repo, "remote").stdout.strip())
+    live_branches: set[str] = set()
 
     for wt in trees:
         if not Path(wt.path).exists():
@@ -191,11 +212,15 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
                 Finding(name, "orphan-worktree", f"{wt.path} (missing on disk)")
             )
             continue
+        live = live_dirs is not None and str(Path(wt.path).resolve()) in live_dirs
+        if live and not wt.main:
+            live_branches.add(wt.branch)
+            result.notes.append(f"live worker: {wt.path} ({wt.branch or 'detached'})")
+            continue
         status = git(wt.path, "status", "--porcelain").stdout.splitlines()
         if status:
             found.append(Finding(name, "dirty", f"{wt.path} ({len(status)} changed)"))
-        live = live_dirs is None or str(Path(wt.path).resolve()) in live_dirs
-        if not wt.main and not live:
+        if not wt.main and live_dirs is not None and not live:
             found.append(Finding(name, "orphan-worktree", wt.path))
 
     refs = git(
@@ -207,6 +232,8 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
     checked_out = {wt.branch for wt in trees if wt.branch}
     for row in refs:
         branch, upstream, track = (row.split("\t") + ["", ""])[:3]
+        if branch in live_branches:
+            continue
         if has_remote and not upstream:
             found.append(Finding(name, "no-upstream", branch))
         elif "ahead" in track:
@@ -220,7 +247,11 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
             repo, "branch", "--merged", base, "--format=%(refname:short)"
         ).stdout.split()
         for branch in merged:
-            if branch != base and branch not in LONG_LIVED:
+            if (
+                branch != base
+                and branch not in LONG_LIVED
+                and branch not in live_branches
+            ):
                 found.append(Finding(name, "merged", f"{branch} (into {base})"))
 
     stashes = git(repo, "stash", "list").stdout.splitlines()
@@ -232,41 +263,30 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
                 f"{len(stashes)} entr{'y' if len(stashes) == 1 else 'ies'}",
             )
         )
-    return found
+    return result
 
 
 def live_session_dirs() -> set[str] | None:
-    try:
-        result = subprocess.run(
-            ["agent-manager", "sessions", "--json"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        return None
-    if result.returncode != 0:
-        return None
-    data = json.loads(result.stdout or "[]")
-    if not isinstance(data, list):
+    sessions = _sessions.list_sessions()
+    if sessions is None:
         return None
     return {
         str(Path(s["directory"]).resolve())
-        for s in data
-        if isinstance(s, dict)
-        and isinstance(s.get("directory"), str)
-        and s.get("running")
-        and not s.get("archived")
-        and s.get("status") not in ("dead", "errored")
+        for s in sessions
+        if isinstance(s.get("directory"), str) and _sessions.is_live(s)
     }
 
 
 def run_sweep(repos: list[Path], live_dirs: set[str] | None) -> Sweep:
     result = Sweep()
     if live_dirs is None:
-        result.notes.append("agent-manager unavailable: orphan-worktree check skipped")
+        result.notes.append(
+            "agent-manager unavailable: live-worker and orphan-worktree checks skipped"
+        )
     for repo in repos:
-        result.findings += sweep_repo(repo, live_dirs)
+        swept = sweep_repo(repo, live_dirs)
+        result.findings += swept.findings
+        result.notes += swept.notes
     return result
 
 

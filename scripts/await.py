@@ -20,14 +20,16 @@
 #
 #  SYNOPSIS
 #      zen-await <session>... [--timeout 4h] [--new] [--json]
-#      zen-await --summary <session> [--json]
+#      zen-await --summary <session>... [--json]
 #
 #  OPTIONS
 #      --timeout DUR  Give up after DUR (e.g. 90s, 30m, 4h, 1h30m). Default 4h.
 #      --new          Ignore a final message already there when the wait starts
 #                     (use right after `agent-manager send`).
-#      --summary      Classify the session's last message now, without waiting.
-#      --json         Print {session, task_id, state, summary} as JSON.
+#      --summary      Classify each session's last message now, without waiting.
+#                     One line per session, in argument order.
+#      --json         Print {session, task_id, state, summary} as JSON
+#                     (JSON Lines with several sessions).
 #
 #  DESCRIPTION
 #      Loops `agent-manager wait --timeout 5m` on every watched session and
@@ -35,12 +37,20 @@
 #      ~/.claude/projects/<slug>/<agent_session_id>.jsonl and the last end_turn
 #      text is classified. Meant for agents: run it from Bash with
 #      run_in_background, so the wait costs no turns.
+#      A live session that is not waiting and has no end_turn yet (a worker
+#      still reading its spec) keeps being waited on; after 10m without a reply
+#      it returns idle. A session that is archived, not running, dead or errored
+#      is dead unless its last message carries a done marker. Session parsing
+#      lives in lib/sessions.py. A background run dies with the shell that
+#      started it (e.g. on an agent-manager restart); re-run it.
 #
 #  EXIT CODES
 #      0    done: `WORKER_DONE <id>` or `SPEC_READY <id>`
 #      10   escalation: `failing · tried · cause · needs`
 #      11   idle: stopped without a marker, or waiting on a prompt
 #      20   dead or errored session
+#      With --summary and several sessions: the most severe code,
+#      20 > 11 > 10 > 0.
 #      124  timeout
 #      2    usage error (unknown session)
 #
@@ -52,6 +62,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
@@ -59,6 +70,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Annotated
 
 import typer
@@ -78,13 +90,34 @@ STATE_EXIT = {
     "timeout": EXIT_TIMEOUT,
 }
 
-DEAD_STATUSES = ("dead", "errored")
 WAIT_SLICE = "5m"
+STARTUP_GRACE = 600
 SUMMARY_MAX = 1500
 
 MARKER_RE = re.compile(r"\b(WORKER_DONE|SPEC_READY)\s+#?(\d+)\b")
 TASK_RE = re.compile(r"(?:\btask\s*|#)(\d+)\b", re.IGNORECASE)
 ESCALATION_WORDS = ("failing", "tried", "cause", "needs")
+
+SEVERITY = {"done": 0, "escalation": 1, "idle": 2, "dead": 3}
+
+
+def load_sessions() -> ModuleType:
+    path = Path(__file__).resolve().parent / "lib" / "sessions.py"
+    spec = importlib.util.spec_from_file_location("zen_sessions", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    # @dataclass-style lookups resolve the module through sys.modules.
+    sys.modules["zen_sessions"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_sessions = load_sessions()
+DEAD_STATUSES = _sessions.DEAD_STATUSES
+list_sessions = _sessions.list_sessions
+find_session = _sessions.find_session
+is_live = _sessions.is_live
 
 
 @dataclass
@@ -222,46 +255,13 @@ def last_end_turn(path: Path) -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 
 
-def agent_manager(*args: str) -> tuple[int, str]:
-    result = subprocess.run(
-        ["agent-manager", *args], capture_output=True, text=True, check=False
-    )
-    return result.returncode, result.stdout
-
-
-def list_sessions_from(out: str) -> list[dict[str, object]]:
-    try:
-        data = json.loads(out or "[]")
-    except json.JSONDecodeError:
-        return []
-    return [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
-
-
-def list_sessions() -> list[dict[str, object]]:
-    code, out = agent_manager("sessions", "--json")
-    return list_sessions_from(out) if code == 0 else []
-
-
-def find_session(
-    key: str, sessions: list[dict[str, object]]
-) -> dict[str, object] | None:
-    for s in sessions:
-        if s.get("id") == key:
-            return s
-    named = [s for s in sessions if s.get("name") == key]
-    # Archived sessions keep their names, so a reused name must pick the live one.
-    return next((s for s in named if not s.get("archived")), None) or next(
-        iter(named), None
-    )
-
-
 def event_for(session: dict[str, object], root: Path | None = None) -> Event:
     name = str(session.get("name") or session.get("id"))
     status = str(session.get("status", ""))
     path = transcript_path(session, root)
     _, text = last_end_turn(path) if path else ("", "")
     state, task_id = classify(text)
-    if status in DEAD_STATUSES and state != "done":
+    if not is_live(session) and state != "done":
         state = "dead"
     elif status == "waiting":
         # A pending prompt outranks whatever the previous final message said.
@@ -271,15 +271,15 @@ def event_for(session: dict[str, object], root: Path | None = None) -> Event:
 
 def session_alive(session_id: str) -> bool:
     """True if the manager still lists the session as live (or is unreachable)."""
-    code, out = agent_manager("sessions", "--json")
-    if code != 0:
+    known = list_sessions()
+    if known is None:
         return True
-    found = find_session(session_id, list_sessions_from(out))
-    return (
-        found is not None
-        and not found.get("archived")
-        and found.get("status") not in DEAD_STATUSES
-    )
+    found = find_session(session_id, known)
+    return found is not None and is_live(found)
+
+
+def fmt_duration(seconds: float) -> str:
+    return f"{seconds / 60:g}m" if seconds >= 60 else f"{seconds:g}s"
 
 
 def _spawn_wait(session_id: str) -> subprocess.Popen[str]:
@@ -301,6 +301,7 @@ def await_sessions(
     """Block until one watched session stops with a (new) event."""
     deadline = time.monotonic() + timeout
     seen: dict[str, str] = {}
+    silent: dict[str, float] = {}
     if new_only:
         for s in sessions:
             path = transcript_path(s, root)
@@ -335,14 +336,29 @@ def await_sessions(
                 result = json.loads(out)
                 if not isinstance(result, dict) or not result.get("reached"):
                     continue
-                fresh = result.get("session")
-                current = fresh if isinstance(fresh, dict) else s
+                current = result.get("session")
+                if not isinstance(current, dict):
+                    # The startup snapshot cannot tell dead from idle.
+                    known = list_sessions()
+                    found = find_session(sid, known) if known is not None else s
+                    current = found if found is not None else {**s, "running": False}
                 path = transcript_path(current, root)
                 uuid = last_end_turn(path)[0] if path else ""
-                stale = current.get("status") not in (*DEAD_STATUSES, "waiting")
+                stale = is_live(current) and current.get("status") != "waiting"
                 if new_only and stale and uuid == seen.get(sid, ""):
                     time.sleep(poll * 5)
                     continue
+                if stale and not uuid:
+                    first_silent = silent.setdefault(sid, time.monotonic())
+                    if time.monotonic() - first_silent < STARTUP_GRACE:
+                        time.sleep(poll * 5)
+                        continue
+                    return Event(
+                        session=str(current.get("name") or sid),
+                        task_id=None,
+                        state="idle",
+                        summary=f"no reply yet after {fmt_duration(STARTUP_GRACE)}",
+                    )
                 return event_for(current, root)
             time.sleep(poll)
     finally:
@@ -392,9 +408,12 @@ def main(
         watched.append(found)
 
     if summary:
-        event = event_for(watched[0])
-    else:
-        event = await_sessions(watched, parse_duration(timeout), new_only=new)
+        events = [event_for(s) for s in watched]
+        for event in events:
+            emit(event, as_json)
+        worst = max(events, key=lambda e: SEVERITY[e.state])
+        raise typer.Exit(worst.exit_code)
+    event = await_sessions(watched, parse_duration(timeout), new_only=new)
     emit(event, as_json)
     raise typer.Exit(event.exit_code)
 

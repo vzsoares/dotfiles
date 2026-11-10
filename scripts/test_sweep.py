@@ -71,7 +71,7 @@ def remote_repo(tmp_path: Path) -> Path:
 
 
 def test_clean_repo(remote_repo: Path) -> None:
-    assert sweep.sweep_repo(remote_repo, live_dirs=set()) == []
+    assert sweep.sweep_repo(remote_repo, live_dirs=set()).findings == []
 
 
 def test_dirty_unpushed_and_stash(remote_repo: Path) -> None:
@@ -81,7 +81,7 @@ def test_dirty_unpushed_and_stash(remote_repo: Path) -> None:
     _git("add", ".", cwd=remote_repo)
     _git("commit", "-q", "-m", "local", cwd=remote_repo)
     (remote_repo / "a.txt").write_text("c\n")
-    kinds = _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()))
+    kinds = _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()).findings)
     assert kinds == [
         ("dirty", f"{remote_repo} (1 changed)"),
         ("stash", "1 entry"),
@@ -91,7 +91,7 @@ def test_dirty_unpushed_and_stash(remote_repo: Path) -> None:
 
 def test_no_upstream_and_merged(remote_repo: Path) -> None:
     _git("branch", "feature", cwd=remote_repo)
-    kinds = _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()))
+    kinds = _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()).findings)
     assert kinds == [("merged", "feature (into dev)"), ("no-upstream", "feature")]
 
 
@@ -102,7 +102,7 @@ def test_no_remote_skips_upstream_check(tmp_path: Path) -> None:
     (repo / "t.txt").write_text("t\n")
     _git("add", ".", cwd=repo)
     _git("commit", "-q", "-m", "t", cwd=repo)
-    assert sweep.sweep_repo(repo, live_dirs=set()) == []
+    assert sweep.sweep_repo(repo, live_dirs=set()).findings == []
 
 
 def test_worktrees_and_am_branches(tmp_path: Path) -> None:
@@ -119,14 +119,66 @@ def test_worktrees_and_am_branches(tmp_path: Path) -> None:
     trees = sweep.worktrees(repo)
     assert (trees[0].branch, trees[0].main) == ("master", True)
     assert sorted(w.branch for w in trees[1:]) == ["am/dead", "am/live"]
-    findings = sweep.sweep_repo(repo, live_dirs={str(live.resolve())})
+    findings = sweep.sweep_repo(repo, live_dirs={str(live.resolve())}).findings
     assert _kinds(findings) == [
         ("orphan-branch", "am/orphan"),
         ("orphan-worktree", str(dead)),
     ]
 
-    skipped = sweep.sweep_repo(repo, live_dirs=None)
+    skipped = sweep.sweep_repo(repo, live_dirs=None).findings
     assert _kinds(skipped) == [("orphan-branch", "am/orphan")]
+
+
+@pytest.fixture
+def live_worker(remote_repo: Path, tmp_path: Path) -> tuple[Path, Path]:
+    """remote_repo plus a dirty, upstream-less, already-merged am/* worktree."""
+    wt = tmp_path / "wt-live"
+    _git("worktree", "add", "-q", "-b", "am/live", str(wt), cwd=remote_repo)
+    (wt / "a.txt").write_text("dirty\n")
+    return remote_repo, wt
+
+
+def test_live_worker_worktree_is_skipped(live_worker: tuple[Path, Path]) -> None:
+    repo, wt = live_worker
+    result = sweep.sweep_repo(repo, live_dirs={str(wt.resolve())})
+    assert result.findings == []
+    assert result.notes == [f"live worker: {wt} (am/live)"]
+
+
+def test_live_worker_checked_when_agent_manager_unavailable(
+    live_worker: tuple[Path, Path],
+) -> None:
+    repo, wt = live_worker
+    result = sweep.sweep_repo(repo, live_dirs=None)
+    assert result.notes == []
+    assert _kinds(result.findings) == [
+        ("dirty", f"{wt} (1 changed)"),
+        ("merged", "am/live (into dev)"),
+        ("no-upstream", "am/live"),
+    ]
+
+
+def test_dead_worktree_still_orphan(live_worker: tuple[Path, Path]) -> None:
+    repo, wt = live_worker
+    result = sweep.sweep_repo(repo, live_dirs=set())
+    assert ("orphan-worktree", str(wt)) in _kinds(result.findings)
+    assert result.notes == []
+
+
+def test_live_session_in_main_checkout_does_not_hide_dirty(
+    remote_repo: Path,
+) -> None:
+    (remote_repo / "a.txt").write_text("dirty\n")
+    result = sweep.sweep_repo(remote_repo, live_dirs={str(remote_repo.resolve())})
+    assert _kinds(result.findings) == [("dirty", f"{remote_repo} (1 changed)")]
+    assert result.notes == []
+
+
+def test_run_sweep_live_workers_only_is_clean(live_worker: tuple[Path, Path]) -> None:
+    repo, wt = live_worker
+    result = sweep.run_sweep([repo], {str(wt.resolve())})
+    assert result.findings == []
+    assert result.notes == [f"live worker: {wt} (am/live)"]
 
 
 def test_collect_repos_dedupes_and_walks(tmp_path: Path) -> None:

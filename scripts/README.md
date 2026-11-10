@@ -77,7 +77,7 @@ All take `--json`; the header of each script is the full reference.
 
 ```
 zen-await <session>... [--timeout 4h] [--new]   # 0 done · 10 escalation · 11 idle · 20 dead · 124 timeout
-zen-await --summary <session>                   # classify the last message now
+zen-await --summary <session>...                # classify each last message now; worst code wins
 zen-gate [--base dev]                           # 0 clean · 1 hits (file:line rule)
 zen-merge <session> [--base dev] [--dry-run]    # 0 landed · 2 gate · 3 not ff · 4 dirty · 5 release · 6 refused · 7 board
 zen-sweep                                       # 0 clean · 1 findings; never changes anything
@@ -87,6 +87,9 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   `~/.claude/projects/<slug>/<agent_session_id>.jsonl`. `WORKER_DONE <id>` /
   `SPEC_READY <id>` = done; `failing · tried · cause · needs` = escalation. Agents run
   it from Bash with `run_in_background`; `--new` ignores a message already there.
+  A live worker with no reply yet is waited on for up to 10m, then reported idle; an
+  archived, stopped, dead or errored session is dead (20) unless it ended with a done
+  marker. Re-run it after an agent-manager restart, which kills background runs.
 - **zen-gate** scans only added lines (docs skipped). `shortcut:` markers print as
   follow-ups, not failures. `.zen-gate-allow` takes `<path glob> [rule]` per line.
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
@@ -96,7 +99,9 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
   branch's `Task:` trailer (skipped without one); exit 7 = that step failed.
 - **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
-  `~/code/personal/*`, and every worktree of each.
+  `~/code/personal/*`, and every worktree of each. A linked worktree with a live
+  session is skipped and noted as `live worker: <path> (<branch>)`; the main checkout
+  is always checked. Session parsing is shared in `scripts/lib/sessions.py`.
 
 ### zen-inbox
 ```
@@ -205,8 +210,12 @@ uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_board.py
 uv run scripts/test_sweep.py
+<<<<<<< HEAD
 uv run scripts/test_inbox.py
 (cd scripts/telemetry && gofmt -l . && go vet ./... && go test ./...)
+=======
+uv run scripts/lib/test_sessions.py
+>>>>>>> 178b0bb (feat(scripts): skip live workers in zen-sweep, wait out fresh workers in zen-await, share session parsing)
 ```
 
 ### zen-config
