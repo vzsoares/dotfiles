@@ -1,0 +1,7 @@
+step 087 out-ask-id-only
+args: ["ask" "16" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+16.1
+-- stderr --
+-- sends --

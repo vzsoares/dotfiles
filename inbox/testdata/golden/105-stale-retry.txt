@@ -1,0 +1,8 @@
+step 105 stale-retry
+args: ["retry" "s7"]
+exit: 0
+-- stdout --
+sent 30.1 to s7
+-- stderr --
+-- sends --
+["send" "s7" "[zen-inbox] Answers to your decisions:\n30.1 Stale? → free text: x" "--from" "zen-inbox" "--json"]

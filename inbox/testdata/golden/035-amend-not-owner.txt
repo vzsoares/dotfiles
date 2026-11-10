@@ -1,0 +1,7 @@
+step 035 amend-not-owner
+args: ["amend" "7.1" "-q" "New?"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 7.1 belongs to session s1; --force overrides
+-- sends --

@@ -1,0 +1,7 @@
+step 054 answer-again
+args: ["answer" "7.1" "a"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 7.1 is answered
+-- sends --

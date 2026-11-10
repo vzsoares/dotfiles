@@ -1,0 +1,7 @@
+step 144 vault-no-config
+args: ["list"]
+exit: 4
+-- stdout --
+-- stderr --
+zen-inbox: vault config dir missing: $ROOT/v3/config
+-- sends --

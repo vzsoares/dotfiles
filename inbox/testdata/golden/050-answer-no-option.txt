@@ -1,0 +1,7 @@
+step 050 answer-no-option
+args: ["answer" "7.1" "z"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: 7.1 has no option 'z'
+-- sends --

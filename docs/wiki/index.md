@@ -3,7 +3,7 @@
 ## Architecture
 - [[overview]] — Project purpose, repo layout, linking model, key components
 - [[release-tooling]] — zen-release design: orchestrator phases, config tiers, resumable state
-- [[decision-inbox]] — zen-inbox: SQLite decision inbox, batched delivery, gum watcher with tmux talk
+- [[decision-inbox]] — zen-inbox (Go): SQLite decision inbox, batched delivery, Bubble Tea watcher with tmux talk
 - [[agent-telemetry]] — zen-telemetry: Go hook logging agent tool calls to zen-flow.db, transcript import, weekly time-sink report
 
 ## Manjaro i3

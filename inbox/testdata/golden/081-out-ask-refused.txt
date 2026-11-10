@@ -1,0 +1,7 @@
+step 081 out-ask-refused
+args: ["ask" "14" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+14.1
+-- stderr --
+-- sends --

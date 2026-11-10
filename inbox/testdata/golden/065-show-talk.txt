@@ -1,0 +1,12 @@
+step 065 show-talk
+args: ["show" "7.g2"]
+exit: 0
+-- stdout --
+7.g2  [answered]  spec-s1 (s1)  2026-01-01T12:00:00+00:00
+#7 T
+New brief
+Again?
+resolved in talk talked
+delivery: none
+-- stderr --
+-- sends --

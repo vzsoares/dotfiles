@@ -1,0 +1,7 @@
+step 022 ask-empty-session-flag
+args: ["ask" "7" "-q" "Late?" "--session" ""]
+exit: 0
+-- stdout --
+7.3
+-- stderr --
+-- sends --

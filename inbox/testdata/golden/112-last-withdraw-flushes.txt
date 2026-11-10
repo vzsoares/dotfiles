@@ -1,0 +1,9 @@
+step 112 last-withdraw-flushes
+args: ["withdraw" "32.2" "--force"]
+exit: 0
+-- stdout --
+withdrew 32.2
+sent 32.1 to s8
+-- stderr --
+-- sends --
+["send" "s8" "[zen-inbox] Answers to your decisions:\n32.1 One? → a: a" "--from" "zen-inbox" "--json"]

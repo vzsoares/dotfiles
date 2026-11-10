@@ -1,0 +1,8 @@
+step 074 retry-ok
+args: ["retry" "s4"]
+exit: 0
+-- stdout --
+sent 11.1 to s4
+-- stderr --
+-- sends --
+["send" "s4" "[zen-inbox] Answers to your decisions:\n11.1 Fails? → a: a" "--from" "zen-inbox" "--json"]

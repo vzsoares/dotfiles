@@ -1,0 +1,7 @@
+step 047 answer-neither
+args: ["answer" "7.1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: give an option letter or --text, not both
+-- sends --

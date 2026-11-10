@@ -1,0 +1,7 @@
+step 067 show-text
+args: ["show" "7.g" "--json"]
+exit: 0
+-- stdout --
+{"id": "7.g", "task": "7", "seq": 1, "gate": true, "session_id": "s1", "session_name": "spec-s1", "question": "Ship?", "context": "", "rec": "", "status": "answered", "amended": false, "answer_kind": "text", "answer_option": "", "answer_text": "use the env var", "note": "", "created_at": "2026-01-01T12:00:00+00:00", "updated_at": "2026-01-01T12:00:00+00:00", "answered_at": "2026-01-01T12:00:00+00:00", "delivery": "held", "message_id": "", "delivery_error": "", "options": [{"letter": "a", "text": "yes"}, {"letter": "b", "text": "no"}], "rev": 1, "title": "T", "brief": "New brief"}
+-- stderr --
+-- sends --

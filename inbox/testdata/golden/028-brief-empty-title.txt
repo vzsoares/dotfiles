@@ -1,0 +1,7 @@
+step 028 brief-empty-title
+args: ["brief" "8" "--title" ""]
+exit: 0
+-- stdout --
+brief 8 for s1
+-- stderr --
+-- sends --

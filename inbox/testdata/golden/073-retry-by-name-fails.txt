@@ -1,0 +1,8 @@
+step 073 retry-by-name-fails
+args: ["retry" "spec-s4"]
+exit: 3
+-- stdout --
+-- stderr --
+delivery failed: send refused; zen-inbox retry s4
+-- sends --
+["send" "s4" "[zen-inbox] Answers to your decisions:\n11.1 Fails? → a: a" "--from" "zen-inbox" "--json"]

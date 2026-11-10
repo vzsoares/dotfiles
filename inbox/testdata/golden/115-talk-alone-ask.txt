@@ -1,0 +1,7 @@
+step 115 talk-alone-ask
+args: ["ask" "34" "-q" "Talk?" "--session" "s9"]
+exit: 0
+-- stdout --
+34.1
+-- stderr --
+-- sends --

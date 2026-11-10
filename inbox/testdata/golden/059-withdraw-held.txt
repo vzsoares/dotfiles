@@ -1,0 +1,7 @@
+step 059 withdraw-held
+args: ["withdraw" "7.2"]
+exit: 0
+-- stdout --
+withdrew 7.2
+-- stderr --
+-- sends --

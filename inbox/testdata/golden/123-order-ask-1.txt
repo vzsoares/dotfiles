@@ -1,0 +1,7 @@
+step 123 order-ask-1
+args: ["ask" "36" "-q" "Order?" "--session" "s11"]
+exit: 0
+-- stdout --
+36.1
+-- stderr --
+-- sends --

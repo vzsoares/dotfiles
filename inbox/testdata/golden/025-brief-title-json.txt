@@ -1,0 +1,7 @@
+step 025 brief-title-json
+args: ["brief" "7" "--session" "s1" "--title" "T" "--json"]
+exit: 0
+-- stdout --
+{"session_id": "s1", "task": "7", "title": "T", "brief": "New brief", "updated_at": "2026-01-01T12:00:00+00:00"}
+-- stderr --
+-- sends --

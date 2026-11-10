@@ -1,0 +1,40 @@
+step 070 fail-list
+args: ["list"]
+exit: 0
+-- stdout --
+spec-s1 · #7 T · 1 open · 0s · [idle]
+spec-s2 · #8, #10 · 2 open · 0s · [busy]
+zz · #9 · 1 open · 0s · [gone]
+held · spec-s1: 7.1, 7.g held until 7.3
+failed · spec-s4: 11.1 (send refused); zen-inbox retry s4
+
+#7 T
+  New brief
+asked by spec-s1 (me, dotfiles) · idle · 0s
+
+7.3  Late?
+
+#8
+asked by spec-s2 · busy · 0s
+#10
+asked by spec-s2 · busy · 0s
+
+8.1  Unicode é 😀 "quoted" \ tab ?
+│ ctx
+  line2
+a) é
+b) 日本
+
+10.1  Q?
+a) x
+b) y
+c) z
+
+#9
+asked by zz · gone · 0s
+
+9.1  Who?
+a) a
+b) b
+-- stderr --
+-- sends --

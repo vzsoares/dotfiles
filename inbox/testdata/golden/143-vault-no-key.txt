@@ -1,0 +1,7 @@
+step 143 vault-no-key
+args: ["list"]
+exit: 4
+-- stdout --
+-- stderr --
+zen-inbox: no vault in $ROOT/h2/.claude/second-brain.json
+-- sends --

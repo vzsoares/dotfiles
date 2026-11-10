@@ -1,0 +1,11 @@
+step 089 out-show-id-only
+args: ["show" "16.1"]
+exit: 0
+-- stdout --
+16.1  [answered]  spec-s6 (s6)  2026-01-01T12:00:00+00:00
+#16
+Out?
+16.1 Out? → free text: ok
+delivery: sent 7
+-- stderr --
+-- sends --

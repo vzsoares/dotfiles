@@ -1,0 +1,7 @@
+step 057 withdraw-closed
+args: ["withdraw" "7.1" "--force"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 7.1 is answered
+-- sends --

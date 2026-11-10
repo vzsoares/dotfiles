@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Fake agent-manager: sessions from $FAKE_AM/sessions.json; each send's argv
+# saved NUL-separated under $FAKE_AM/sends, in call order.
+case "$1" in
+sessions) cat "$FAKE_AM/sessions.json" ;;
+send)
+    n=$(find "$FAKE_AM/sends" -type f | wc -l | tr -d ' ')
+    f=$(mktemp "$FAKE_AM/sends/$(printf %06d "$n").XXXXXX")
+    printf '%s\0' "$@" >"$f"
+    if [ -f "$FAKE_AM/refuse_from" ] && [[ " $* " == *" --from "* ]]; then
+        echo "agent-manager: a sender name is for a caller with no session on this machine" >&2
+        exit 1
+    fi
+    if [ -f "$FAKE_AM/send_rc" ]; then
+        echo "send refused" >&2
+        exit "$(cat "$FAKE_AM/send_rc")"
+    fi
+    if [ -f "$FAKE_AM/send_out" ]; then
+        cat "$FAKE_AM/send_out"
+    else
+        echo '{"message_id": 42}'
+    fi
+    ;;
+*) exit 2 ;;
+esac

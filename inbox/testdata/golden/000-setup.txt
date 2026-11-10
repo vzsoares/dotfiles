@@ -1,0 +1,7 @@
+step 000 setup
+args: ["list"]
+exit: 0
+-- stdout --
+inbox empty
+-- stderr --
+-- sends --

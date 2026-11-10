@@ -1,0 +1,11 @@
+step 092 out-show-not-json
+args: ["show" "17.1"]
+exit: 0
+-- stdout --
+17.1  [answered]  spec-s6 (s6)  2026-01-01T12:00:00+00:00
+#17
+Out?
+17.1 Out? → free text: ok
+delivery: sent
+-- stderr --
+-- sends --

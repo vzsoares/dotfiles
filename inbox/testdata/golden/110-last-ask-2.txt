@@ -1,0 +1,7 @@
+step 110 last-ask-2
+args: ["ask" "32" "-q" "Two?"]
+exit: 0
+-- stdout --
+32.2
+-- stderr --
+-- sends --

@@ -1,0 +1,7 @@
+step 056 amend-closed
+args: ["amend" "7.1" "-q" "x?" "--force"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 7.1 is answered
+-- sends --

@@ -1,0 +1,7 @@
+step 096 out-ask-list-out
+args: ["ask" "19" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+19.1
+-- stderr --
+-- sends --

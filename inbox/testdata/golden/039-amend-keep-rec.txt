@@ -1,0 +1,7 @@
+step 039 amend-keep-rec
+args: ["amend" "7.1" "-o" "up" "-o" "down"]
+exit: 0
+-- stdout --
+amended 7.1
+-- stderr --
+-- sends --

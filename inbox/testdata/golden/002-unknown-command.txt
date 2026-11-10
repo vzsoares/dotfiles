@@ -1,0 +1,4 @@
+step 002 unknown-command
+args: ["nope"]
+exit: 2
+(usage error: output not compared)

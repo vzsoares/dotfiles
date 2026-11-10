@@ -7,10 +7,12 @@ related: [overview, release-tooling]
 
 # Decision Inbox — zen-inbox
 
-`scripts/inbox.py` (`zen-inbox`) is a single-file `uv` + `typer` script that collects
-agent decisions in one place, so they never interrupt chief's pane. Spec-writers and
-the orchestrator run `zen-inbox ask` and end their turn; the user answers from a
-watcher terminal; the answers go back to the asking session in one message.
+`zen-inbox` is a Go binary (`inbox/`, one binary for the CLI and a Bubble Tea panel)
+that collects agent decisions in one place, so they never interrupt chief's pane. It
+replaced `scripts/inbox.py` with the same commands, flags, output, exit codes and db.
+Spec-writers and the orchestrator run `zen-inbox ask` and end their turn; the user
+answers from a watcher terminal; the answers go back to the asking session in one
+message.
 
 ## Flow
 
@@ -26,12 +28,15 @@ watcher terminal; the answers go back to the asking session in one message.
 3. **session screen** — per task a context block (`#task title`, the brief, `asked by
    name (group, repo) · status · age`; without a brief just `#task` and the asker),
    then the questions in ID order.
-4. **answer** — Answer walks the open questions one screen each: pick, free text
-   (`gum write`), skip, talk, view full (`gum pager`) or back. Answers are staged in
-   memory with the decision's `rev`; a review screen offers Send / Change one /
-   Cancel. Send records them through `answer()`: one closed elsewhere is reported and
-   skipped, one whose `rev` changed (amended) is shown again, and questions asked
-   during the pass are walked before the review. Talk opens `tmux display-popup` on
+4. **answer** — Answer walks the open questions one screen each: `a`-`d` pick, `f`
+   free text (a textarea, `ctrl+d` sends), `s` skip, `t` talk, `v` view full, `esc`
+   back; `?` toggles help and the footer always lists the screen's keys. Answers are
+   staged in memory with the decision's `rev`; a review screen offers Send / Change
+   one / Cancel. The open session updates live (2 s poll): an amended question shows
+   its new text, a staged answer to it goes stale and is asked again before the
+   review, one answered elsewhere shows `answered elsewhere: <answer>` and leaves the
+   walk, and new questions join its end. At Send the `rev` check stays the backstop:
+   one closed elsewhere is reported and skipped, one amended is shown again. Talk opens `tmux display-popup` on
    the agent's session, then a multi-select resolves the decisions it settled (as
    `talk`, optional note); the rest stay open.
 5. **flush** — when the session's last open decision closes (answer, resolve or
@@ -82,31 +87,40 @@ never flushed).
   send then retries once without `--from`, so the message shows the calling session as
   sender. A clean-env pane outside any session accepts `--from`; the unnested
   `decisions` terminal is expected to as well.
-- **Watcher redraws.** A poll thread compares a fingerprint every 2 s (`id, rev` of
-  every open, held or undelivered row, the briefs, each listed session's status from
-  `agent-manager sessions`, refreshed every 10 s, and the minute, for ages) and
-  terminates the list's `gum choose` only, never a session screen or a menu. `rev` is
-  bumped on every write, so same-second changes still flip.
+- **Self-withdraw hands answers back (#582).** When an agent withdraws its own last
+  open decision (`$AGENT_MANAGER_SESSION_ID` is the decision's session), the flush
+  would run in that agent's process tree, where `--from` is refused and the fallback
+  messages the agent itself. So `withdraw` prints the held-answers message on stdout,
+  marks them `sent` with no message id and exits 0; a `--force` withdraw by another
+  session still sends. This is the one deliberate difference from `inbox.py`.
+- **Watcher refresh.** The panel reads the db every 2 s and `agent-manager sessions`
+  every 10 s, all inside `tea.Cmd`s, so `Update` never blocks; Bubble Tea redraws
+  only what changed. Sends, popups and bells run in commands too.
 - **Popup socket.** `display-popup` goes to the watcher's own tmux server (first field
   of `$TMUX`), but the inner attach always uses `env -u TMUX tmux -L agentmgr attach -t
   am_<id>`: agent sessions live on agent-manager's server, so a watcher run in the
   user's own tmux still opens the right one. With no client the popup fails and the
   watcher prints that attach command instead.
-- **Screen fit.** gum choose truncates items at the pane width and scrolls long
-  headers away, so the question, context and full option text are printed above a menu
-  of short items (`a`, `b  ← rec`, `Free text`, …). `screen()` fits them to the pane,
-  cutting in order: brief text, per-decision context (`… (View full)`), the asked-by
-  line, gum's help line, menu height (paged), the title line. Only when the question
-  and options alone overflow are the options clipped, so the question stays on
-  screen. gum's empty header takes no row; its help footer takes 3, paging 1 more.
+- **Screen fit.** The question, context and full option text sit above a menu of
+  short items (`a`, `b  ← rec`, `Free text`, …) and a key footer. `fitWalk()` cuts in
+  order: brief text, per-decision context (`… (View full)`), the asked-by line, the
+  `?` help, menu height (paged), the title line. When the question and options alone
+  overflow, the whole body scrolls (`pgup`/`pgdn`) instead: option text is never
+  clipped. Text is wrapped by a port of Python's `textwrap`, so `list` matches
+  `inbox.py` byte for byte; widths count code points, so wide (CJK, emoji) text can
+  overrun a pane.
+- **Build.** `inbox/zen-inbox` (linked by `link-bin`) rebuilds into `~/.cache/zen/bin`
+  when a source is newer than the binary; Go from PATH or mise's shims, else exit 4.
+  `modernc.org/sqlite` is pure Go, so `CGO_ENABLED=0` builds on both machines.
 - **Watcher start from chief.** agent-manager refuses `terminal send` to an un-nested
   terminal from inside a session, so chief starts it with `tmux -L agentmgr send-keys
   -t am_<terminal id> 'zen-inbox watch' Enter`.
-- Pipe gum's stdout only (see `scripts/README.md`).
-
 ## Tests
 
-`uv run scripts/test_inbox.py`: temp db through `ZEN_FLOW_DB`; `agent-manager` and
-`tmux` are fake scripts on PATH that record their argv. Concurrency tests spawn real
-processes against one db. The interactive flow runs against a scripted `UI` (the
-`GumUI` protocol), so no gum is needed; layout is tested at 92x29, 60x20 and 40x15.
+`cd inbox && go test -race ./...`: temp db through `ZEN_FLOW_DB`, clock pinned with
+`ZEN_INBOX_NOW`; `agent-manager`, `tmux` and `zen-bell` are fake scripts on PATH that
+record their argv. Golden files hold `inbox.py`'s stdout, stderr, exit code and send
+argv for ~150 commands, captured before it was deleted; v1 and v2 dbs it wrote are
+committed as SQL dumps. Concurrency tests spawn real processes against one db. The
+panel is driven through `Update` with key and window-size messages at 92x29, 60x20
+and 40x15; the launcher tests rebuild a copy of the module.

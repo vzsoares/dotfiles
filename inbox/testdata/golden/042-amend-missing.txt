@@ -1,0 +1,7 @@
+step 042 amend-missing
+args: ["amend" "7.99" "-q" "x?"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: no decision 7.99
+-- sends --

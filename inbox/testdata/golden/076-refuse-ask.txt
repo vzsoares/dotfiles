@@ -1,0 +1,7 @@
+step 076 refuse-ask
+args: ["ask" "12" "-q" "From?" "-o" "a" "-o" "b" "--session" "s5"]
+exit: 0
+-- stdout --
+12.1
+-- stderr --
+-- sends --

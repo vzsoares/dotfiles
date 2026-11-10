@@ -1,0 +1,7 @@
+step 079 gone-answer
+args: ["answer" "13.1" "--text" "hi"]
+exit: 3
+-- stdout --
+-- stderr --
+delivery failed: session s3 is gone (dead, archived or missing); zen-inbox retry s3
+-- sends --

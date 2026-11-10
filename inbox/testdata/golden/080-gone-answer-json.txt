@@ -1,0 +1,7 @@
+step 080 gone-answer-json
+args: ["show" "13.1" "--json"]
+exit: 0
+-- stdout --
+{"id": "13.1", "task": "13", "seq": 1, "gate": false, "session_id": "s3", "session_name": "spec-s3", "question": "Gone?", "context": "", "rec": "", "status": "answered", "amended": false, "answer_kind": "text", "answer_option": "", "answer_text": "hi", "note": "", "created_at": "2026-01-01T12:00:00+00:00", "updated_at": "2026-01-01T12:00:00+00:00", "answered_at": "2026-01-01T12:00:00+00:00", "delivery": "failed", "message_id": "", "delivery_error": "session s3 is gone (dead, archived or missing)", "options": [], "rev": 3, "title": "", "brief": ""}
+-- stderr --
+-- sends --

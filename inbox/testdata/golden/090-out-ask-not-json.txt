@@ -1,0 +1,7 @@
+step 090 out-ask-not-json
+args: ["ask" "17" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+17.1
+-- stderr --
+-- sends --

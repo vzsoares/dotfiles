@@ -1,0 +1,7 @@
+step 052 answer-missing
+args: ["answer" "7.99" "a"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: no decision 7.99
+-- sends --

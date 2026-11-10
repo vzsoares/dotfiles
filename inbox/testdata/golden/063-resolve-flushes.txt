@@ -1,0 +1,7 @@
+step 063 resolve-flushes
+args: ["resolve" "7.g2" "--note" "talked"]
+exit: 0
+-- stdout --
+resolved 7.g2
+-- stderr --
+-- sends --

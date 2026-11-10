@@ -1,0 +1,7 @@
+step 019 ask-unicode-json
+args: ["ask" "8" "-q" "Unicode é 😀 \"quoted\" \\ tab\t?" "-o" "é" "--option=日本" "--context" "ctx\nline2" "--session" "s2" "--json"]
+exit: 0
+-- stdout --
+{"id": "8.1", "task": "8", "seq": 1, "gate": false, "session_id": "s2", "session_name": "spec-s2", "question": "Unicode \u00e9 \ud83d\ude00 \"quoted\" \\ tab\t?", "context": "ctx\nline2", "rec": "", "status": "open", "amended": false, "answer_kind": "", "answer_option": "", "answer_text": "", "note": "", "created_at": "2026-01-01T12:00:00+00:00", "updated_at": "2026-01-01T12:00:00+00:00", "answered_at": "", "delivery": "none", "message_id": "", "delivery_error": "", "options": [{"letter": "a", "text": "\u00e9"}, {"letter": "b", "text": "\u65e5\u672c"}], "rev": 0, "title": "", "brief": ""}
+-- stderr --
+-- sends --

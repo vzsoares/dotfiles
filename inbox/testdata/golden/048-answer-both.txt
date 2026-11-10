@@ -1,0 +1,7 @@
+step 048 answer-both
+args: ["answer" "7.1" "a" "--text" "x"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: give an option letter or --text, not both
+-- sends --

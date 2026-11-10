@@ -1,0 +1,7 @@
+step 103 stale-in-flight
+args: ["retry" "s7"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: no failed delivery for session s7
+-- sends --

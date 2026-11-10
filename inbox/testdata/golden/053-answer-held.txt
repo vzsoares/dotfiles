@@ -1,0 +1,7 @@
+step 053 answer-held
+args: ["answer" "7.1" "b" "--note" "ship it"]
+exit: 0
+-- stdout --
+held until 7.2, 7.3, 7.g, 7.g2
+-- stderr --
+-- sends --

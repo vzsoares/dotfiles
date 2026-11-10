@@ -1,0 +1,7 @@
+step 146 vault-ask
+args: ["ask" "1" "-q" "Vault?" "--session" "s1"]
+exit: 0
+-- stdout --
+1.1
+-- stderr --
+-- sends --

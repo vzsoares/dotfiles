@@ -1,0 +1,7 @@
+step 034 amend-blank-q
+args: ["amend" "7.1" "-q" ""]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: a question is required
+-- sends --

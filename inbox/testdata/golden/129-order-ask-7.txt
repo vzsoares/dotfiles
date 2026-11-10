@@ -1,0 +1,7 @@
+step 129 order-ask-7
+args: ["ask" "36" "-q" "Order?" "--session" "s11"]
+exit: 0
+-- stdout --
+36.7
+-- stderr --
+-- sends --

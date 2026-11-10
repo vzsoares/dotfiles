@@ -1,0 +1,7 @@
+step 106 held-ask
+args: ["ask" "31" "-q" "Held?" "-o" "a" "-o" "b" "--session" "s7"]
+exit: 0
+-- stdout --
+31.1
+-- stderr --
+-- sends --

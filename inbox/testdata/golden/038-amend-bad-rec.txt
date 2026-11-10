@@ -1,0 +1,7 @@
+step 038 amend-bad-rec
+args: ["amend" "7.1" "-o" "x" "-o" "y" "--rec" "c"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: --rec 'c' is not one of the options
+-- sends --

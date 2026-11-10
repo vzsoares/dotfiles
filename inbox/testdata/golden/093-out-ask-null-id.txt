@@ -1,0 +1,7 @@
+step 093 out-ask-null-id
+args: ["ask" "18" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+18.1
+-- stderr --
+-- sends --

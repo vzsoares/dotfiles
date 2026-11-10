@@ -1,0 +1,7 @@
+step 058 withdraw-not-owner
+args: ["withdraw" "7.2"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 7.2 belongs to session s1; --force overrides
+-- sends --

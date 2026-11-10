@@ -1,0 +1,7 @@
+step 021 ask-rec-substring
+args: ["ask" "10" "--rec" "ab" "-q" "Q?" "-o" "x" "-o" "y" "-o" "z" "--session" "s2"]
+exit: 0
+-- stdout --
+10.1
+-- stderr --
+-- sends --

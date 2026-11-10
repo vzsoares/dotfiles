@@ -1,0 +1,7 @@
+step 145 vault-ok
+args: ["list"]
+exit: 0
+-- stdout --
+inbox empty
+-- stderr --
+-- sends --

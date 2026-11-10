@@ -1,0 +1,7 @@
+step 041 amend-context
+args: ["amend" "7.1" "--context" "new ctx"]
+exit: 0
+-- stdout --
+amended 7.1
+-- stderr --
+-- sends --

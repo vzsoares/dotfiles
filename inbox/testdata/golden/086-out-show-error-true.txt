@@ -1,0 +1,11 @@
+step 086 out-show-error-true
+args: ["show" "15.1"]
+exit: 0
+-- stdout --
+15.1  [answered]  spec-s6 (s6)  2026-01-01T12:00:00+00:00
+#15
+Out?
+15.1 Out? → free text: ok
+delivery: failed  True
+-- stderr --
+-- sends --

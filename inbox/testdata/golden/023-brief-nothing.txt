@@ -1,0 +1,7 @@
+step 023 brief-nothing
+args: ["brief" "7" "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: give --title or --text
+-- sends --

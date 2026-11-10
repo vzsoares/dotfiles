@@ -1,0 +1,11 @@
+step 083 out-show-refused
+args: ["show" "14.1"]
+exit: 0
+-- stdout --
+14.1  [answered]  spec-s6 (s6)  2026-01-01T12:00:00+00:00
+#14
+Out?
+14.1 Out? → free text: ok
+delivery: failed  too many
+-- stderr --
+-- sends --

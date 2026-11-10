@@ -1,0 +1,7 @@
+step 078 gone-ask
+args: ["ask" "13" "-q" "Gone?" "--session" "s3"]
+exit: 0
+-- stdout --
+13.1
+-- stderr --
+-- sends --

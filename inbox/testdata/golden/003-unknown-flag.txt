@@ -1,0 +1,4 @@
+step 003 unknown-flag
+args: ["list" "--bogus"]
+exit: 2
+(usage error: output not compared)

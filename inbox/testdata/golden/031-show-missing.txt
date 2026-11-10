@@ -1,0 +1,7 @@
+step 031 show-missing
+args: ["show" "7.99"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: no decision 7.99
+-- sends --

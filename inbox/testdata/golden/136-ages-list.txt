@@ -1,0 +1,64 @@
+step 136 ages-list
+args: ["list"]
+exit: 0
+-- stdout --
+zz · #9 · 1 open · 2d · [gone]
+spec-s1 · #7 T · 1 open · 3h · [idle]
+spec-s11 · #36 · 8 open · 5m · [idle]
+spec-s2 · #8, #10 · 2 open · 0s · [busy]
+held · spec-s1: 7.1, 7.g held until 7.3
+held · spec-s11: 36.2, 36.10 held until 36.1, 36.3, 36.4, 36.5, 36.6, 36.7,
+    36.8, 36.9
+failed · spec-s3: 13.1 (session s3 is gone (dead, archived or missing));
+    zen-inbox retry s3
+failed · spec-s6: 14.1, 15.1 (too many); zen-inbox retry s6
+
+#9
+asked by zz · gone · 2d
+
+9.1  Who?
+a) a
+b) b
+
+#7 T
+  New brief
+asked by spec-s1 (me, dotfiles) · idle · 3h
+
+7.3  Late?
+
+#36
+asked by spec-s11 · idle · 5m
+
+36.1  Order?
+
+36.3  Order?
+
+36.4  Order?
+
+36.5  Order?
+
+36.6  Order?
+
+36.7  Order?
+
+36.8  Order?
+
+36.9  Order?
+
+#8
+asked by spec-s2 · busy · 0s
+#10
+asked by spec-s2 · busy · ?
+
+8.1  Unicode é 😀 "quoted" \ tab ?
+│ ctx
+  line2
+a) é
+b) 日本
+
+10.1  Q?
+a) x
+b) y
+c) z
+-- stderr --
+-- sends --

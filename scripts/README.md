@@ -20,7 +20,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
-| `inbox.py` | `zen-inbox` | Decision inbox: agents `ask`, a gum watcher answers by pick, free text or talk; batched delivery. |
+| `../inbox/` (Go) | `zen-inbox` | Decision inbox: agents `ask`, a Bubble Tea watcher answers by pick, free text or talk; batched delivery. See `inbox/README.md`. |
 | `telemetry/` (Go) | `zen-telemetry` | Hook that logs every agent tool call to `zen-flow.db`; weekly time-sink report for chief. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
 | `env-build.py` | `zen-env` | Resolves `.env.example` parameters from AWS SSM Parameter Store. |
@@ -118,14 +118,18 @@ zen-inbox watch                                         # one row per session
 SQLite at `<vault>/config/zen-flow.db` (`ZEN_FLOW_DB` overrides). Answers are held
 until the asking session has no open decision, then sent as one
 `agent-manager send … --from zen-inbox` message (without `--from` when run inside an
-agent pane, where agent-manager refuses it). Exit codes: 0 ok · 1 not found or wrong
-state · 2 usage · 3 recorded, delivery failed · 4 vault or db unavailable. `watch`
-lists one row per asking session; opening one shows each task's title, brief and
-asker, then its questions. Answer walks them (pick, free text, skip), a review screen
-sends them; nothing is recorded before Send. Talk opens `tmux display-popup` on
-`tmux -L agentmgr attach -t am_<session>`, then asks which decisions it settled. The
-list redraws on inbox or session-status changes and every minute, never inside a
-menu. See `docs/wiki/architecture/decision-inbox.md`.
+agent pane, where agent-manager refuses it). An agent that withdraws its own last
+open decision gets the held answers printed on stdout instead of a send to itself.
+Exit codes: 0 ok · 1 not found or wrong state · 2 usage · 3 recorded, delivery
+failed · 4 vault, db or Go unavailable. `watch` is a Bubble Tea panel: one row per
+asking session; opening one shows each task's title, brief and asker, then its
+questions. Answer walks them (`a`-`d` pick, `f` free text, `s` skip, `t` talk, `v`
+view full, `esc` back), a review screen sends them; nothing is recorded before Send.
+The open session updates live: amended questions show their new text, ones answered
+elsewhere leave the walk, new ones join it. Talk opens `tmux display-popup` on
+`tmux -L agentmgr attach -t am_<session>`, then asks which decisions it settled.
+It is a Go binary: `inbox/zen-inbox` rebuilds it into `~/.cache/zen/bin` when a
+source changed (see `inbox/README.md`). See `docs/wiki/architecture/decision-inbox.md`.
 
 ### zen-board
 ```
@@ -210,10 +214,11 @@ uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_board.py
 uv run scripts/test_sweep.py
-uv run scripts/test_inbox.py
 (cd scripts/telemetry && gofmt -l . && go vet ./... && go test ./...)
 uv run scripts/lib/test_sessions.py
 ```
+
+`zen-inbox` is Go: `cd inbox && go test -race ./...`.
 
 ### zen-config
 ```

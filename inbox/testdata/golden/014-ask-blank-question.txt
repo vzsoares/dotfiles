@@ -1,0 +1,7 @@
+step 014 ask-blank-question
+args: ["ask" "7" "-q" "   " "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: a question is required
+-- sends --

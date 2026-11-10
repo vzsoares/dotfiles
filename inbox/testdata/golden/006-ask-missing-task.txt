@@ -1,0 +1,4 @@
+step 006 ask-missing-task
+args: ["ask" "-q" "Q?" "--session" "s1"]
+exit: 2
+(usage error: output not compared)

@@ -1,0 +1,7 @@
+step 068 fail-ask
+args: ["ask" "11" "-q" "Fails?" "-o" "a" "-o" "b" "--session" "s4"]
+exit: 0
+-- stdout --
+11.1
+-- stderr --
+-- sends --

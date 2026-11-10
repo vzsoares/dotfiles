@@ -1,0 +1,9 @@
+step 077 refuse-answer
+args: ["answer" "12.1" "b"]
+exit: 0
+-- stdout --
+sent 12.1 to s5
+-- stderr --
+-- sends --
+["send" "s5" "[zen-inbox] Answers to your decisions:\n12.1 From? → b: b" "--from" "zen-inbox" "--json"]
+["send" "s5" "[zen-inbox] Answers to your decisions:\n12.1 From? → b: b" "--json"]

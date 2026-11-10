@@ -1,0 +1,7 @@
+step 020 ask-unknown-session
+args: ["ask" "9" "-q" "Who?" "--session" "zz" "-oa" "-ob"]
+exit: 0
+-- stdout --
+9.1
+-- stderr --
+-- sends --

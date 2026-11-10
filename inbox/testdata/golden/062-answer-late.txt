@@ -1,0 +1,7 @@
+step 062 answer-late
+args: ["answer" "7.3" "a"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: 7.3 has no option 'a'
+-- sends --

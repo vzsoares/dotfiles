@@ -1,0 +1,7 @@
+step 109 last-ask-1
+args: ["ask" "32" "-q" "One?" "-o" "a" "-o" "b"]
+exit: 0
+-- stdout --
+32.1
+-- stderr --
+-- sends --

@@ -1,0 +1,8 @@
+step 082 out-answer-refused
+args: ["answer" "14.1" "--text" "ok"]
+exit: 3
+-- stdout --
+-- stderr --
+delivery failed: too many; zen-inbox retry s6
+-- sends --
+["send" "s6" "[zen-inbox] Answers to your decisions:\n14.1 Out? → free text: ok" "--from" "zen-inbox" "--json"]

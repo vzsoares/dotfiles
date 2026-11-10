@@ -1,0 +1,7 @@
+step 009 ask-blank-option
+args: ["ask" "7" "-q" "Q?" "-o" "a1" "-o" "  " "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: options must not be empty
+-- sends --

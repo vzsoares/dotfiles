@@ -1,0 +1,7 @@
+step 017 ask-gate-json-brief
+args: ["ask" "7" "--gate" "-q" "Ship?" "-o" "yes" "-o" "no" "--session" "s1" "--json" "--title" "Zen board" "--brief" "line one\nline two"]
+exit: 0
+-- stdout --
+{"id": "7.g", "task": "7", "seq": 1, "gate": true, "session_id": "s1", "session_name": "spec-s1", "question": "Ship?", "context": "", "rec": "", "status": "open", "amended": false, "answer_kind": "", "answer_option": "", "answer_text": "", "note": "", "created_at": "2026-01-01T12:00:00+00:00", "updated_at": "2026-01-01T12:00:00+00:00", "answered_at": "", "delivery": "none", "message_id": "", "delivery_error": "", "options": [{"letter": "a", "text": "yes"}, {"letter": "b", "text": "no"}], "rev": 0, "title": "Zen board", "brief": "line one\nline two"}
+-- stderr --
+-- sends --

@@ -1,0 +1,11 @@
+step 095 out-show-null-id
+args: ["show" "18.1"]
+exit: 0
+-- stdout --
+18.1  [answered]  spec-s6 (s6)  2026-01-01T12:00:00+00:00
+#18
+Out?
+18.1 Out? → free text: ok
+delivery: sent None
+-- stderr --
+-- sends --

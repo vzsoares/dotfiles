@@ -1,0 +1,4 @@
+step 001 no-args
+args: []
+exit: 2
+(usage error: output not compared)

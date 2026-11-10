@@ -1,0 +1,7 @@
+step 040 amend-drop-rec
+args: ["amend" "7.2" "-o" "p" "-o" "q"]
+exit: 0
+-- stdout --
+amended 7.2
+-- stderr --
+-- sends --

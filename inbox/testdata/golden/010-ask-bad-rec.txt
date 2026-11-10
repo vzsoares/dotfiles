@@ -1,0 +1,7 @@
+step 010 ask-bad-rec
+args: ["ask" "7" "-q" "Q?" "-o" "a1" "-o" "b1" "--rec" "c" "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: --rec 'c' is not one of the options
+-- sends --

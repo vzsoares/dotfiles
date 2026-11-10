@@ -1,0 +1,7 @@
+step 027 brief-no-session
+args: ["brief" "7" "--title" "x"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: no session: set AGENT_MANAGER_SESSION_ID or --session
+-- sends --

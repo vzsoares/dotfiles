@@ -1,0 +1,4 @@
+step 032 show-extra-arg
+args: ["show" "7.1" "extra"]
+exit: 2
+(usage error: output not compared)

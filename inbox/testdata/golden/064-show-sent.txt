@@ -1,0 +1,16 @@
+step 064 show-sent
+args: ["show" "7.1"]
+exit: 0
+-- stdout --
+7.1  [answered]  spec-s1 (s1)  2026-01-01T12:00:00+00:00
+#7 T
+New brief
+Which road?
+new ctx
+  a) up
+  b) down  ← recommended
+7.1 Which road? → b: down
+  Note: ship it
+delivery: held
+-- stderr --
+-- sends --

@@ -1,0 +1,7 @@
+step 013 ask-bad-task-quote
+args: ["ask" "it's" "-q" "Q?" "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: bad task "it's": letters, digits, - or _
+-- sends --

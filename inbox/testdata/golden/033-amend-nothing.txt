@@ -1,0 +1,7 @@
+step 033 amend-nothing
+args: ["amend" "7.1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: nothing to amend
+-- sends --

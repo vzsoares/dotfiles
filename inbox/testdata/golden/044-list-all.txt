@@ -1,0 +1,14 @@
+step 044 list-all
+args: ["list" "--all"]
+exit: 0
+-- stdout --
+7.1	open	spec-s1	Which road?
+7.2	open	spec-s1	Free?
+7.3	open	spec-s1	Late?
+7.g	open	spec-s1	Ship?
+7.g2	open	spec-s1	Again?
+8.1	open	spec-s2	Unicode é 😀 "quoted" \ tab	?
+9.1	open	zz	Who?
+10.1	open	spec-s2	Q?
+-- stderr --
+-- sends --

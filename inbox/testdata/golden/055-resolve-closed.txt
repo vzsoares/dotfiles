@@ -1,0 +1,7 @@
+step 055 resolve-closed
+args: ["resolve" "7.1"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 7.1 is answered
+-- sends --

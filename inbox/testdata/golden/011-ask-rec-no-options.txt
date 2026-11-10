@@ -1,0 +1,7 @@
+step 011 ask-rec-no-options
+args: ["ask" "7" "-q" "Q?" "--rec" "a" "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: --rec 'a' is not one of the options
+-- sends --

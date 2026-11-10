@@ -1,0 +1,13 @@
+step 071 fail-show
+args: ["show" "11.1"]
+exit: 0
+-- stdout --
+11.1  [answered]  spec-s4 (s4)  2026-01-01T12:00:00+00:00
+#11
+Fails?
+  a) a
+  b) b
+11.1 Fails? → a: a
+delivery: failed  send refused
+-- stderr --
+-- sends --

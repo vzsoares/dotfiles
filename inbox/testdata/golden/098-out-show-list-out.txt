@@ -1,0 +1,11 @@
+step 098 out-show-list-out
+args: ["show" "19.1"]
+exit: 0
+-- stdout --
+19.1  [answered]  spec-s6 (s6)  2026-01-01T12:00:00+00:00
+#19
+Out?
+19.1 Out? → free text: ok
+delivery: sent
+-- stderr --
+-- sends --

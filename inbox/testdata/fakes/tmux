@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+printf '%s\0' "$@" >"$FAKE_AM/tmux.argv"
+[ -f "$FAKE_AM/tmux_rc" ] && exit "$(cat "$FAKE_AM/tmux_rc")"
+exit 0

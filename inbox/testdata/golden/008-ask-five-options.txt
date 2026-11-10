@@ -1,0 +1,7 @@
+step 008 ask-five-options
+args: ["ask" "7" "-q" "Q?" "-o" "a" "-o" "b" "-o" "c" "-o" "d" "-o" "e" "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: give 0 options (free text) or 2 to 4
+-- sends --

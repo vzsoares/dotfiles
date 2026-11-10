@@ -1,0 +1,8 @@
+step 088 out-answer-id-only
+args: ["answer" "16.1" "--text" "ok"]
+exit: 0
+-- stdout --
+sent 16.1 to s6
+-- stderr --
+-- sends --
+["send" "s6" "[zen-inbox] Answers to your decisions:\n16.1 Out? → free text: ok" "--from" "zen-inbox" "--json"]

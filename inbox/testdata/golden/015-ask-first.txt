@@ -1,0 +1,7 @@
+step 015 ask-first
+args: ["ask" "7" "-q" "Which way?" "-o" "left" "-o" "right" "--rec" "b" "--session" "s1"]
+exit: 0
+-- stdout --
+7.1
+-- stderr --
+-- sends --

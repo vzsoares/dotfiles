@@ -1,0 +1,7 @@
+step 084 out-ask-error-true
+args: ["ask" "15" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+15.1
+-- stderr --
+-- sends --

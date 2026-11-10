@@ -1,0 +1,7 @@
+step 113 force-ask
+args: ["ask" "33" "-q" "Force?" "--session" "s9"]
+exit: 0
+-- stdout --
+33.1
+-- stderr --
+-- sends --

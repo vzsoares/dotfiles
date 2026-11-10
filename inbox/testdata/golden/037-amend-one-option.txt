@@ -1,0 +1,7 @@
+step 037 amend-one-option
+args: ["amend" "7.1" "-o" "only"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: give 0 options (free text) or 2 to 4
+-- sends --

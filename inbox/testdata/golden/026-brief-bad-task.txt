@@ -1,0 +1,7 @@
+step 026 brief-bad-task
+args: ["brief" "x y" "--title" "t" "--session" "s1"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: bad task 'x y': letters, digits, - or _
+-- sends --

@@ -36,3 +36,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-10] ingest | Agent tool telemetry (#588)
 Added `zen-telemetry`, a Go binary (modernc sqlite) in its own module at `scripts/telemetry/`, built by `./link-bin`. An async `PostToolUse`/`PostToolUseFailure` hook logs every tool call of an agent-manager session into `zen-flow.db` beside zen-inbox: `tool_*`/`telemetry_*` tables only, `user_version` untouched. A one-time `import` pairs `tool_use`/`tool_result` from transcripts (skipping `api-request-blob` lines, which repeat tool blocks), and `report` ranks time sinks and compares same-job tools from `jobs.json` for chief's weekly step. Found that Go hook latency is mostly process start, so it tracks machine load.
 Pages created: architecture/agent-telemetry.md
+
+## [2026-11-10] update | zen-inbox rewritten in Go (#587, folds in #582)
+`zen-inbox` is now one Go binary in `inbox/` (cobra CLI, Bubble Tea panel, pure-Go `modernc.org/sqlite`), replacing `scripts/inbox.py`. CLI output matches inbox.py byte for byte, checked by golden files captured from the Python version before deletion; v1/v2 dbs written by Python open and answer unchanged. The panel keeps #586's flow and adds live session updates (amended, answered elsewhere, new asks). `link-bin` now links the `inbox/zen-inbox` launcher, which rebuilds into `~/.cache/zen/bin` when a source changed. #582: an agent withdrawing its own last open decision gets the held answers on stdout instead of a send to itself.
+Pages updated: architecture/decision-inbox.md

@@ -26,6 +26,9 @@ flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+P
 gnupg/        # gpg-agent.conf; macos.conf / linux.conf are full per-OS files
               #   (gpg-agent.conf has no import directive, unlike alacritty's
               #   toml), linked to ~/.gnupg/gpg-agent.conf by ./link
+inbox/        # zen-inbox decision inbox (Go, Bubble Tea panel); the
+              #   inbox/zen-inbox launcher rebuilds into ~/.cache/zen/bin
+              #   when a source changed -- see its README
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.
               #   Driven by the `diagram` skill in .claude/skills/

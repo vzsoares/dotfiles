@@ -1,0 +1,7 @@
+step 036 amend-force
+args: ["amend" "7.1" "-q" "Which road?" "-o" "up" "-o" "down" "-o" "sideways" "--force"]
+exit: 0
+-- stdout --
+amended 7.1
+-- stderr --
+-- sends --

@@ -1,0 +1,7 @@
+step 024 brief-text
+args: ["brief" "7" "--session" "s1" "--text" "New brief"]
+exit: 0
+-- stdout --
+brief 7 for s1
+-- stderr --
+-- sends --

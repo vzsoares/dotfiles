@@ -1,0 +1,7 @@
+step 099 out-ask-empty-out
+args: ["ask" "20" "-q" "Out?" "--session" "s6"]
+exit: 0
+-- stdout --
+20.1
+-- stderr --
+-- sends --

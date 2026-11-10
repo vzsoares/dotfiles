@@ -1,0 +1,7 @@
+step 133 order-held-10
+args: ["answer" "36.10" "--text" "ten"]
+exit: 0
+-- stdout --
+held until 36.1, 36.2, 36.3, 36.4, 36.5, 36.6, 36.7, 36.8, 36.9
+-- stderr --
+-- sends --

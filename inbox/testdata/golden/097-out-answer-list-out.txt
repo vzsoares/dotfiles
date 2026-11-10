@@ -1,0 +1,8 @@
+step 097 out-answer-list-out
+args: ["answer" "19.1" "--text" "ok"]
+exit: 0
+-- stdout --
+sent 19.1 to s6
+-- stderr --
+-- sends --
+["send" "s6" "[zen-inbox] Answers to your decisions:\n19.1 Out? → free text: ok" "--from" "zen-inbox" "--json"]

@@ -1,0 +1,7 @@
+step 116 talk-alone-resolve
+args: ["resolve" "34.1"]
+exit: 0
+-- stdout --
+resolved 34.1
+-- stderr --
+-- sends --

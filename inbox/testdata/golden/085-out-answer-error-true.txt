@@ -1,0 +1,8 @@
+step 085 out-answer-error-true
+args: ["answer" "15.1" "--text" "ok"]
+exit: 3
+-- stdout --
+-- stderr --
+delivery failed: True; zen-inbox retry s6
+-- sends --
+["send" "s6" "[zen-inbox] Answers to your decisions:\n15.1 Out? → free text: ok" "--from" "zen-inbox" "--json"]

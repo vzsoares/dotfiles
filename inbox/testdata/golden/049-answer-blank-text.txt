@@ -1,0 +1,7 @@
+step 049 answer-blank-text
+args: ["answer" "7.1" "--text" "  "]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: --text must not be empty
+-- sends --

@@ -1,0 +1,12 @@
+step 029 show
+args: ["show" "7.1"]
+exit: 0
+-- stdout --
+7.1  [open]  spec-s1 (s1)  2026-01-01T12:00:00+00:00
+#7 T
+New brief
+Which way?
+  a) left
+  b) right  ← recommended
+-- stderr --
+-- sends --

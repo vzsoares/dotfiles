@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# zen-inbox launcher: rebuilds the Go binary into the cache when any source
+# under inbox/ is newer than it, then execs it with all arguments.
+set -e
+
+src=${BASH_SOURCE[0]}
+while [ -L "$src" ]; do
+    dir=$(cd -P "$(dirname "$src")" && pwd)
+    src=$(readlink "$src")
+    [[ $src == /* ]] || src=$dir/$src
+done
+here=$(cd -P "$(dirname "$src")" && pwd)
+
+bindir=${XDG_CACHE_HOME:-$HOME/.cache}/zen/bin
+bin=$bindir/zen-inbox
+
+stale() {
+    [ -x "$bin" ] || return 0
+    [ -n "$(find "$here" \( -name '*.go' -o -name go.mod -o -name go.sum \) \
+        -newer "$bin" -print -quit)" ]
+}
+
+find_go() {
+    local shim=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims/go
+    if command -v go >/dev/null 2>&1; then
+        command -v go
+    elif [ -x "$shim" ]; then
+        echo "$shim"
+    fi
+}
+
+if stale; then
+    go=$(find_go)
+    if [ -z "$go" ]; then
+        echo "zen-inbox: go not found on PATH or in mise shims; install Go to build zen-inbox" >&2
+        exit 4
+    fi
+    mkdir -p "$bindir"
+    # A temp file renamed into place: a concurrent first run never execs a
+    # half-written binary. The start stamp keeps edits made mid-build stale.
+    tmp=$(mktemp "$bindir/.zen-inbox.XXXXXX")
+    stamp=$(mktemp "$bindir/.zen-inbox-start.XXXXXX")
+    trap 'rm -f "$tmp" "$stamp"' EXIT
+    (cd "$here" && CGO_ENABLED=0 "$go" build -trimpath -o "$tmp" .)
+    touch -r "$stamp" "$tmp"
+    mv -f "$tmp" "$bin"
+    rm -f "$stamp"
+    trap - EXIT
+fi
+
+exec "$bin" "$@"
