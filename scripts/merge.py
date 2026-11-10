@@ -124,6 +124,7 @@ class State:
     shas: list[str] = field(default_factory=list)
     board: str = ""
     stopped: str = ""
+    worker_live: bool = True
     phases: dict[str, str] = field(default_factory=dict)
 
     def done(self, phase: str) -> bool:
@@ -440,6 +441,12 @@ def phase_archive(state: State) -> None:
             file=sys.stderr,
         )
         return
+    row = next(
+        (s for s in _sessions.list_sessions() or [] if s.get("id") == state.session_id),
+        None,
+    )
+    # Probed before archiving: the row may report differently afterwards.
+    state.worker_live = row is None or _sessions.is_live({**row, "archived": False})
     code, _ = _sessions.agent_manager("archive", state.session_id, "--json")
     if code != 0:
         raise Stop(EXIT_ERROR, f"agent-manager archive {state.session_id} failed")
@@ -457,13 +464,7 @@ def phase_stop(state: State) -> None:
         )
         state.stopped = "(dry-run)"
         return
-    row = next(
-        (s for s in _sessions.list_sessions() or [] if s.get("id") == state.session_id),
-        None,
-    )
-    if row is not None and (
-        row.get("running") is False or row.get("status") in _sessions.DEAD_STATUSES
-    ):
+    if not state.worker_live:
         state.stopped = "already dead"
         return
     code, _ = _sessions.agent_manager("kill", state.session_id, "--json")

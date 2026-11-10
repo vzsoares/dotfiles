@@ -108,16 +108,17 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
   resume. A repo without `dev` whose main checkout is on `main` or `master` lands
   there and reports "push pending"; any other checkout exits 6. Only base `dev` is
-  released. After archiving the worker it runs `agent-manager kill <id>` so the
-  process exits (~250 MB each): skipped when the session is already dead or is the
-  calling session (`$AGENT_MANAGER_SESSION_ID`); a failed kill only warns, exit
-  stays 0; `--json` gains `stopped` (`killed`, `already dead`, `self`, `failed`,
-  `(dry-run)`); `--dry-run` prints the kill. It refuses (exit 6) prod, and the zen-release target branch when the repo has `dev`.
+  released. It refuses (exit 6) prod, and the zen-release target branch when the repo has `dev`.
   Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
   branch's `Task:` trailer, or the base reflog's `merge <branch>:` range once merged
   by hand, or `--task` (skipped without an ID); exit 7 = that step failed.
   `--phase N/M` on a non-final phase runs `zen-board note` instead and leaves the
   task open (`board noted`).
+  After archiving the worker it runs `agent-manager kill <id>` so the process
+  exits (~250 MB each). Skipped when the session was already dead (probed before
+  the archive) or is the calling session (`$AGENT_MANAGER_SESSION_ID`). A failed
+  kill only warns; exit stays 0. `--json` gains `stopped` (`killed`,
+  `already dead`, `self`, `failed`, `(dry-run)`); `--dry-run` prints the kill.
 - **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
   `~/code/personal/*`, and every worktree of each. A linked worktree with a live
   session is skipped and noted as `live worker: <path> (<branch>)`; the main checkout
