@@ -55,14 +55,11 @@ GUARD_TTL=60
 # A reap guard is stale when its owner is gone or it outlived the milliseconds the
 # reap section takes. Without an owner file (killed right after mkdir) use its mtime.
 guard_stale() {
-    local pid started
-    pid=$(owner_field "$1" pid)
+    local started
+    is_stale "$1" && return 0
     started=$(owner_field "$1" started)
-    if [ -n "$pid" ] && [ "$(owner_field "$1" host)" = "$(hostname)" ] && ! kill -0 "$pid" 2>/dev/null; then
-        return 0
-    fi
     case "$started" in
-        "" | *[!0-9]*) [ -z "$pid" ] && [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ] ;;
+        "" | *[!0-9]*) [ -z "$(owner_field "$1" pid)" ] && [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ] ;;
         *) [ $(($(date +%s) - started)) -gt "$GUARD_TTL" ] ;;
     esac
 }
