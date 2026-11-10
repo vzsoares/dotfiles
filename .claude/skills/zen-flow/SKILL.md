@@ -160,9 +160,12 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
   (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
   decisions (see Decision inbox), keeps the `decisions` watcher running, records answers
-  the user gives in chat with `zen-inbox answer`, and lists Human Only work. It never
-  waits on sessions, merges or cuts dev releases; a prod action it runs only after an
-  approved ask (Write permissions). After an agent-manager restart it revives the
+  the user gives in chat with `zen-inbox answer` (never a `--prod` ask: the user
+  approves those in the panel), and lists Human Only work. On the user's `go #<id>` in
+  its chat it spawns that queue entry's worker (`worker-rules`, tier and repo from the
+  entry) and sends the orchestrator the session id; if auto mode blocks it too, it says
+  so in one line. It never waits on sessions, merges or cuts dev releases; a prod
+  action it runs only after an approved ask (Write permissions). After an agent-manager restart it revives the
   orchestrator and the watcher. At its first start each ISO week it runs the telemetry
   review (see Telemetry).
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
@@ -176,7 +179,9 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   claim and never by stopping running workers; plus up to 2 dotfiles workers (light: unit
   tests, no browsers or dev servers); the core-heavy lock `~/.cache/zen/core-heavy.lock`
   covers browser runs, `just check`, tsc/tsgo, `just test` and builds; `list_reservations`
-  before a second worker in one repo) and waits on them. A stuck Sonnet worker gets one
+  before a second worker in one repo) and waits on them. When auto mode blocks a spawn it
+  files a gate (`zen-inbox ask <task> --gate`) telling the user to type `go #<id>` in
+  chief's chat, then adopts the worker chief starts (zen-await, merge as usual). A stuck Sonnet worker gets one
   relaunch on Opus on the same branch; anything else becomes a gate in the inbox
   (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
