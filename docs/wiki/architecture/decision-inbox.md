@@ -106,29 +106,10 @@ never flushed).
   short items (`a`, `b  ← rec`, `Free text`, …) and a key footer. `fitWalk()` cuts in
   order: brief text, per-decision context (`… (View full)`), the asked-by line, the
   `?` help, menu height (paged), the title line. When the question and options alone
-  overflow, the body scrolls instead: option text is never clipped.
-- **Scrolling (#669).** Every screen is a pinned top (title), a body, and a pinned
-  menu, key footer and status line. A body taller than the pane scrolls with
-  `pgup`/`pgdn`, `ctrl+u`/`ctrl+d` (half the shown body) and the mouse wheel, and
-  shows a dimmed `↑ N more` / `↓ N more` at each clipped edge. On the list, Change
-  one and Talk-pick screens the rows are the body and moving the cursor keeps it in
-  view. On Free text and the talk note only `pgup`/`pgdn` scroll, since the ctrl keys
-  edit text there.
-- **Markdown in the panel (#611).** The brief, question, context and option text on
-  the session, walk and View full screens go through `internal/md`: glamour v1 with
-  our own ANSI-16 style (no margins, inline code and fences without their backticks,
-  chroma's `terminal16` formatter for fenced code with a language). glamour does not
-  split words longer than the width, so every line also goes through
-  `ansi.Hardwrap`, keeps the colour it was split from and ends reset. The profile
-  comes from the panel's lipgloss renderer: under `NO_COLOR`, `CLICOLOR=0` or a
-  non-TTY it is Ascii, and the lines are `ansi.Strip`ped (glamour still writes empty
-  `\x1b[;m` there). Renders are cached per (decision ID, rev, field, width). Painted
-  lines are measured and clipped with `lipgloss.Width` / `ansi.Truncate`, never
-  `pyfmt`. Because backticks are hidden, the panel wraps differently from
-  `list --all`, which stays plain.
-- **CLI text.** `list` and `show` wrap with a port of Python's `textwrap`, so they
-  match `inbox.py` byte for byte; widths count code points, so wide (CJK, emoji) text
-  can overrun a pane.
+  overflow, the whole body scrolls (`pgup`/`pgdn`) instead: option text is never
+  clipped. Text is wrapped by a port of Python's `textwrap`, so `list` matches
+  `inbox.py` byte for byte; widths count code points, so wide (CJK, emoji) text can
+  overrun a pane.
 - **Build.** `inbox/zen-inbox` (linked by `link-bin`) rebuilds into `~/.cache/zen/bin`
   when a source is newer than the binary; Go from PATH or mise's shims, else exit 4.
   `modernc.org/sqlite` is pure Go, so `CGO_ENABLED=0` builds on both machines.
