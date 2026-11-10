@@ -103,10 +103,19 @@ writes code.
 - Max 3 workers at once.
 - Before a second worker starts in the same repo, run `list_reservations` and give each
   worker its file scope in the prompt; workers `reserve_files` before editing.
-- The user reviews each diff (ctrl+r) and merges. After the merge, chief runs **done**,
-  archives the session (`archive_session`) and removes the worktree. Archiving only
-  hides the session row, it keeps the worktree: run
-  `git worktree remove <path>` from the repo, then `git branch -d <branch>`.
+- The user never reviews diffs. When a worker finishes with its checks green and its
+  single `/code-review` round done, chief:
+  - merges the branch into `dev` in the repo's main checkout (`git merge --ff-only`
+    when possible; for a real merge, re-run the repo's checks first)
+  - runs `zen-release --dev --yes --bump patch`
+  - marks the task Done (**done**) with the release tag in a note
+  - archives the session (`archive_session`), then removes the worktree and branch:
+    `git worktree remove <path>`, then `git branch -d <branch>` (`-D` once
+    `git merge-base --is-ancestor <branch> dev` confirms it is merged)
+- Open review findings become To Do tasks; facts and copy only the user can verify
+  become Human Only tasks.
+- Repos without a `dev` branch (e.g. dotfiles on master): chief merges locally and
+  leaves the push to the user. Prod merges and prod releases stay the user's.
 
 ## Commit → dev release routine (every repo)
 
