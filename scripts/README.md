@@ -210,12 +210,9 @@ uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_board.py
 uv run scripts/test_sweep.py
-<<<<<<< HEAD
 uv run scripts/test_inbox.py
 (cd scripts/telemetry && gofmt -l . && go vet ./... && go test ./...)
-=======
 uv run scripts/lib/test_sessions.py
->>>>>>> 178b0bb (feat(scripts): skip live workers in zen-sweep, wait out fresh workers in zen-await, share session parsing)
 ```
 
 ### zen-config
