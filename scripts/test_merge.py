@@ -30,6 +30,7 @@ assert _spec is not None and _spec.loader is not None
 merge = importlib.util.module_from_spec(_spec)
 sys.modules["merge"] = merge
 _spec.loader.exec_module(merge)
+_real_board_note = merge.run_board_note
 
 
 # --------------------------------------------------------------------------- #
@@ -60,6 +61,8 @@ class Fake:
     board_ok: bool = True
     # (task id, note, branch still present) per zen-board call
     boards: list[tuple[str, str, bool]] = field(default_factory=list)
+    # (task id, note) per zen-board note call
+    notes: list[tuple[str, str]] = field(default_factory=list)
 
     def agent_manager(self, *args: str) -> tuple[int, str]:
         self.calls.append(args)
@@ -82,6 +85,14 @@ class Fake:
         self, main: str, task_id: str, note: str
     ) -> subprocess.CompletedProcess[str]:
         self.boards.append((task_id, note, merge.branch_exists(main, "am/task")))
+        if not self.board_ok:
+            return subprocess.CompletedProcess([], 1, "", "zen-board: HTTP 502")
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    def note(
+        self, main: str, task_id: str, note: str
+    ) -> subprocess.CompletedProcess[str]:
+        self.notes.append((task_id, note))
         if not self.board_ok:
             return subprocess.CompletedProcess([], 1, "", "zen-board: HTTP 502")
         return subprocess.CompletedProcess([], 0, "", "")
@@ -124,6 +135,7 @@ def _make(
     monkeypatch.setattr(merge._sessions, "agent_manager", fake.agent_manager)
     monkeypatch.setattr(merge, "run_release", fake.release)
     monkeypatch.setattr(merge, "run_board", fake.board)
+    monkeypatch.setattr(merge, "run_board_note", fake.note)
     monkeypatch.setattr(merge, "DRY_RUN", False)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     return Setup(main=main, worktree=wt, fake=fake)
@@ -333,6 +345,138 @@ def test_run_board_dry_run_echoes(
     assert merge.run_board(str(setup.main), "568", "tag · abc").returncode == 0
     err = capsys.readouterr().err
     assert "board.py done 568 --note 'tag · abc'" in err
+
+
+def _stop_not_ff(s: Setup) -> None:
+    _commit(s.main, "z.txt", "z\n")
+    assert _code() == merge.EXIT_NOT_FF
+
+
+def test_restart_after_manual_merge_recovers_task(setup: Setup) -> None:
+    sha = _sha(setup.worktree, "HEAD")
+    _stop_not_ff(setup)
+    _git("merge", "-q", "--no-edit", "am/task", cwd=setup.main)
+    state = merge.land("task", "dev", restart=True)
+    assert state.task_id == "568"
+    assert setup.fake.boards == [("568", f"v0.0.1-dev.0 · {sha}", False)]
+
+
+def test_manual_merge_without_prior_run(setup: Setup) -> None:
+    sha = _sha(setup.worktree, "HEAD")
+    _git("merge", "-q", "--ff-only", "am/task", cwd=setup.main)
+    state = merge.land("task", "dev")
+    assert (state.task_id, state.board, state.shas) == ("568", "done", [sha])
+
+
+def test_rebase_then_manual_merge_lists_new_shas(setup: Setup) -> None:
+    old = _sha(setup.worktree, "HEAD")
+    _stop_not_ff(setup)
+    _git("rebase", "-q", "dev", cwd=setup.worktree)
+    new = _sha(setup.worktree, "HEAD")
+    assert new != old
+    _git("merge", "-q", "--ff-only", "am/task", cwd=setup.main)
+    merge.land("task", "dev")
+    note = setup.fake.boards[-1][1]
+    assert new in note and old not in note
+
+
+def _expire_reflog(repo: Path) -> None:
+    _git("reflog", "expire", "--expire=now", "--all", cwd=repo)
+
+
+def test_no_reflog_keeps_saved_shas_on_branch(setup: Setup) -> None:
+    sha = _sha(setup.worktree, "HEAD")
+    (setup.main / "a.txt").write_text("dirty\n")
+    assert _code() == merge.EXIT_DIRTY
+    _git("checkout", "-q", "a.txt", cwd=setup.main)
+    _git("reset", "-q", "--hard", "am/task", cwd=setup.main)
+    _expire_reflog(setup.main)
+    state = merge.land("task", "dev")
+    assert state.shas == [sha]
+
+
+def test_no_reflog_after_rebase_falls_back_to_tip(setup: Setup) -> None:
+    _stop_not_ff(setup)
+    _git("rebase", "-q", "dev", cwd=setup.worktree)
+    tip = _sha(setup.worktree, "HEAD")
+    _git("reset", "-q", "--hard", "am/task", cwd=setup.main)
+    _expire_reflog(setup.main)
+    state = merge.land("task", "dev")
+    assert state.shas == [tip]
+
+
+def test_phase_1_of_2_notes_and_leaves_task_open(setup: Setup) -> None:
+    sha = _sha(setup.worktree, "HEAD")
+    res = CliRunner().invoke(merge.app, ["task", "--phase", "1/2", "--json"])
+    assert res.exit_code == 0
+    out = json.loads(res.stdout)
+    assert (out["phase"], out["board"]) == ("1/2", "noted")
+    assert setup.fake.boards == []
+    assert setup.fake.notes == [("568", f"phase 1/2 · v0.0.1-dev.0 · {sha}")]
+
+
+def test_phase_summary_ends_with_board_noted(setup: Setup) -> None:
+    state = merge.land("task", "dev", phase="1/2")
+    assert state.board == "noted"
+    assert merge.summary_line(state).endswith(
+        "#568 · v0.0.1-dev.0 · cleanup ok · board noted (phase 1/2)"
+    )
+
+
+def test_final_phase_closes_task_with_prefixed_note(setup: Setup) -> None:
+    state = merge.land("task", "dev", phase="2/2")
+    assert state.board == "done"
+    assert setup.fake.notes == []
+    assert setup.fake.boards[0][1].startswith("phase 2/2 · v0.0.1-dev.0 · ")
+
+
+def test_phase_flag_on_rerun_overrides_saved_state(setup: Setup) -> None:
+    setup.fake.board_ok = False
+    assert _code() == merge.EXIT_BOARD
+    setup.fake.board_ok = True
+    state = merge.land("task", "dev", phase="1/3")
+    assert state.board == "noted"
+    assert setup.fake.boards[0][0] == "568"
+
+
+def test_noted_board_failure_exits_7(setup: Setup) -> None:
+    setup.fake.board_ok = False
+    res = CliRunner().invoke(merge.app, ["task", "--phase", "1/2"])
+    assert res.exit_code == merge.EXIT_BOARD
+
+
+@pytest.mark.parametrize("value", ["3/2", "0/2", "x", "1/", "1/0", "-1/2"])
+def test_invalid_phase_exits_1(setup: Setup, value: str) -> None:
+    res = CliRunner().invoke(merge.app, ["task", "--phase", value])
+    assert res.exit_code == merge.EXIT_ERROR
+    assert setup.worktree.exists() and setup.fake.calls == []
+
+
+def test_task_flag_wins_over_trailer(
+    setup: Setup, capsys: pytest.CaptureFixture[str]
+) -> None:
+    state = merge.land("task", "dev", task="#900")
+    assert (state.task_id, setup.fake.boards[0][0]) == ("900", "900")
+    assert "--task 900 overrides Task: 568" in capsys.readouterr().err
+
+
+def test_task_flag_without_trailer_runs_board(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _make(tmp_path, monkeypatch, trailer="")
+    state = merge.land("task", "dev", task="700")
+    assert (state.task_id, state.board) == ("700", "done")
+    assert s.fake.boards[0][0] == "700"
+
+
+def test_dry_run_phase_echoes_board_note(
+    setup: Setup, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(merge, "run_board_note", _real_board_note)
+    monkeypatch.setattr(merge, "DRY_RUN", True)
+    state = merge.land("task", "dev", phase="1/2")
+    assert state.board == "(dry-run)"
+    assert "board.py note 568 'phase 1/2 · (dry-run) · " in capsys.readouterr().err
 
 
 # --------------------------------------------------------------------------- #

@@ -79,7 +79,8 @@ All take `--json`; the header of each script is the full reference.
 zen-await <session>... [--timeout 4h] [--new]   # 0 done · 10 escalation · 11 idle · 20 dead · 124 timeout
 zen-await --summary <session>...                # classify each last message now; worst code wins
 zen-gate [--base dev]                           # 0 clean · 1 hits (file:line rule)
-zen-merge <session> [--base dev] [--dry-run]    # 0 landed · 2 gate · 3 not ff · 4 dirty · 5 release · 6 refused · 7 board
+zen-merge <session> [--base dev] [--phase N/M] [--task ID] [--dry-run]
+                                                # 0 landed · 2 gate · 3 not ff · 4 dirty · 5 release · 6 refused · 7 board
 zen-sweep                                       # 0 clean · 1 findings; never changes anything
 ```
 
@@ -100,7 +101,10 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   "push pending"; without `dev` it never releases, even with `--base`.
   It refuses prod, main and the zen-release target branch.
   Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
-  branch's `Task:` trailer (skipped without one); exit 7 = that step failed.
+  branch's `Task:` trailer, or the base reflog's `merge <branch>:` range once merged
+  by hand, or `--task` (skipped without an ID); exit 7 = that step failed.
+  `--phase N/M` on a non-final phase runs `zen-board note` instead and leaves the
+  task open (`board noted`).
 - **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
   `~/code/personal/*`, and every worktree of each. A linked worktree with a live
   session is skipped and noted as `live worker: <path> (<branch>)`; the main checkout

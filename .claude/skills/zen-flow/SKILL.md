@@ -165,7 +165,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
   in the branch diff; exceptions in `.zen-gate-allow`.
 - `zen-merge <session>` (orchestrator, on exit 0): gate, ff-merge, dev release,
   archive, worktree and branch cleanup, then marks the task Done via `zen-board`
-  with the tag and shas in a note; 2 gate, 3 not ff, 4 dirty, 5 release, 7 board.
+  with the tag and shas in a note (`--phase N/M` on a non-final phase only appends
+  the note and leaves the task open; `--task <id>` overrides the recovered ID);
+  2 gate, 3 not ff, 4 dirty, 5 release, 7 board.
 - `zen-board` (everyone): the routine board ops above, over REST.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
   trees, unpushed work, stashes, orphan branches and worktrees.

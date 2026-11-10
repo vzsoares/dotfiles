@@ -20,12 +20,18 @@
 #      merge.py  --  land a finished worker branch and clean up after it
 #
 #  SYNOPSIS
-#      zen-merge <session> [--base dev] [--dry-run] [--restart] [--json]
+#      zen-merge <session> [--base dev] [--phase N/M] [--task ID] [--dry-run]
+#                          [--restart] [--json]
 #
 #  OPTIONS
 #      --base BRANCH  Branch to land on. Default dev; a repo without `dev`
 #                     lands on its main checkout's branch. Without
 #                     a `dev` branch no base is released.
+#      --phase N/M    The merge is phase N of M of a phased task. A non-final
+#                     phase appends a note and leaves the task open; only
+#                     N == M (or no flag) marks it Done.
+#      --task ID      Board task ID. Wins over the Task: trailer (stderr
+#                     warning on a mismatch).
 #      --dry-run      Run the checks, echo the mutating commands, save nothing.
 #      --restart      Discard the saved state for this session and start over.
 #      --json         Print the outcome as JSON.
@@ -39,8 +45,12 @@
 #      archive   `agent-manager archive <session>`
 #      worktree  `git worktree remove <path>`
 #      branch    `git branch -d`, or -D once merge-base --is-ancestor agrees
-#      board     `zen-board done <task> --note "<tag> · <shas>"`; skipped
-#                without a Task: trailer
+#      board     `zen-board done <task> --note "<tag> · <shas>"`, or `zen-board
+#                note <task> "phase N/M · <tag> · <shas>"` for a non-final
+#                phase; skipped without a task ID. The ID and shas come from
+#                base..branch, else the base reflog's `merge <branch>:` entry
+#                (a branch merged by hand), else the saved shas still on the
+#                branch, else the branch tip.
 #
 #      Never merges into, or releases from, prod, main or the zen-release
 #      target branch.
@@ -61,6 +71,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -103,6 +114,7 @@ class State:
     release: bool = False
     task_id: str = ""
     tag: str = ""
+    part: str = ""
     shas: list[str] = field(default_factory=list)
     board: str = ""
     phases: dict[str, str] = field(default_factory=dict)
@@ -136,6 +148,12 @@ def run_release(main: str) -> subprocess.CompletedProcess[str]:
 
 def run_board(main: str, task_id: str, note: str) -> subprocess.CompletedProcess[str]:
     return mutate(main, [str(BOARD), "done", task_id, "--note", note])
+
+
+def run_board_note(
+    main: str, task_id: str, note: str
+) -> subprocess.CompletedProcess[str]:
+    return mutate(main, [str(BOARD), "note", task_id, note])
 
 
 def load_gate() -> ModuleType:
@@ -204,18 +222,49 @@ def protected_branches(main: str) -> set[str]:
     return names
 
 
-def task_from_trailers(main: str, base: str, branch: str) -> str:
-    out = git(
-        main, "log", f"{base}..{branch}", "--format=%(trailers:key=Task,valueonly)"
-    ).stdout
+def worker_range(main: str, base: str, branch: str) -> str:
+    """Revision range of the worker's commits, or "" when it cannot be found."""
+    ahead = git(main, "rev-list", "--count", f"{base}..{branch}").stdout.strip()
+    if ahead.isdigit() and int(ahead) > 0:
+        return f"{base}..{branch}"
+    if git(main, "merge-base", "--is-ancestor", branch, base).returncode != 0:
+        return ""
+    log = git(main, "log", "-g", "--format=%H %gs", f"refs/heads/{base}").stdout
+    entries = log.splitlines()
+    for i, entry in enumerate(entries):
+        if entry.partition(" ")[2].startswith(f"merge {branch}:"):
+            return (
+                f"{entries[i + 1].split()[0]}..{branch}" if i + 1 < len(entries) else ""
+            )
+    return ""
+
+
+def task_from_trailers(main: str, rng: str) -> str:
+    if not rng:
+        return ""
+    out = git(main, "log", rng, "--format=%(trailers:key=Task,valueonly)").stdout
     for line in out.splitlines():
         if line.strip():
             return line.strip().lstrip("#")
     return ""
 
 
-def branch_shas(main: str, base: str, branch: str) -> list[str]:
-    return git(main, "log", "--format=%h", f"{base}..{branch}").stdout.split()
+def branch_shas(main: str, rng: str, branch: str, saved: list[str]) -> list[str]:
+    if rng:
+        return git(main, "log", "--format=%h", rng).stdout.split()
+    kept = [
+        sha
+        for sha in saved
+        if git(main, "merge-base", "--is-ancestor", sha, branch).returncode == 0
+    ]
+    return kept or git(main, "log", "-1", "--format=%h", branch).stdout.split()
+
+
+def parse_phase(raw: str) -> tuple[int, int]:
+    match = re.fullmatch(r"(\d+)/(\d+)", raw)
+    if match is None or not 1 <= int(match[1]) <= int(match[2]):
+        raise Stop(EXIT_ERROR, f"bad --phase {raw!r}: want N/M with 1 <= N <= M")
+    return int(match[1]), int(match[2])
 
 
 # --------------------------------------------------------------------------- #
@@ -296,8 +345,9 @@ def phase_resolve(state: State, base: str) -> None:
         raise Stop(EXIT_REFUSED, f"refusing to land on protected branch {state.base!r}")
     if state.branch in guarded or state.branch == state.base:
         raise Stop(EXIT_REFUSED, f"refusing to merge branch {state.branch!r}")
-    state.task_id = task_from_trailers(state.main, state.base, state.branch)
-    state.shas = branch_shas(state.main, state.base, state.branch)
+    rng = worker_range(state.main, state.base, state.branch)
+    state.task_id = task_from_trailers(state.main, rng) or state.task_id
+    state.shas = branch_shas(state.main, rng, state.branch, state.shas)
 
 
 def phase_clean(state: State) -> None:
@@ -327,8 +377,9 @@ def phase_gate(state: State) -> None:
 
 
 def phase_merge(state: State) -> None:
-    # Empty once merged by hand; keep what resolve saw for the board note.
-    state.shas = branch_shas(state.main, state.base, state.branch) or state.shas
+    rng = worker_range(state.main, state.base, state.branch)
+    state.task_id = state.task_id or task_from_trailers(state.main, rng)
+    state.shas = branch_shas(state.main, rng, state.branch, state.shas)
     if (
         git(
             state.main, "merge-base", "--is-ancestor", state.branch, state.base
@@ -401,16 +452,31 @@ def phase_branch(state: State) -> None:
     delete_branch(state.main, state.branch, state.base)
 
 
+def is_partial(state: State) -> bool:
+    if not state.part:
+        return False
+    n, m = parse_phase(state.part)
+    return n < m
+
+
 def phase_board(state: State) -> None:
     if not state.task_id:
         state.board = "skipped"
         return
-    note = " · ".join([state.tag, " ".join(state.shas)]) if state.shas else state.tag
-    result = run_board(state.main, state.task_id, note)
+    parts = [state.tag, " ".join(state.shas)] if state.shas else [state.tag]
+    if state.part:
+        parts.insert(0, f"phase {state.part}")
+    note = " · ".join(parts)
+    verb = "note" if is_partial(state) else "done"
+    run = run_board_note if verb == "note" else run_board
+    result = run(state.main, state.task_id, note)
     if result.returncode != 0:
         tail = (result.stdout + result.stderr).strip().splitlines()[-5:]
-        raise Stop(EXIT_BOARD, "zen-board done failed:\n" + "\n".join(tail))
-    state.board = "(dry-run)" if DRY_RUN else "done"
+        raise Stop(EXIT_BOARD, f"zen-board {verb} failed:\n" + "\n".join(tail))
+    if DRY_RUN:
+        state.board = "(dry-run)"
+    else:
+        state.board = "noted" if verb == "note" else "done"
 
 
 def run_phase(state: State, name: str, fn: Callable[[], None]) -> None:
@@ -428,15 +494,33 @@ def run_phase(state: State, name: str, fn: Callable[[], None]) -> None:
     save_state(state)
 
 
-def land(session: str, base: str, restart: bool = False) -> State:
+def land(
+    session: str,
+    base: str,
+    restart: bool = False,
+    phase: str = "",
+    task: str = "",
+) -> State:
+    if phase:
+        parse_phase(phase)
     state = None if restart else load_state(session)
     if state is None:
         state = State(session=session)
+    if phase:
+        state.part = phase
     if not state.done("merge"):
         # The branch may have moved since a failed run, so re-check it.
         state.phases.pop("clean", None)
         state.phases.pop("gate", None)
     run_phase(state, "resolve", lambda: phase_resolve(state, base))
+    task = task.lstrip("#")
+    if task and task != state.task_id:
+        if state.task_id:
+            print(
+                f"zen-merge: --task {task} overrides Task: {state.task_id}",
+                file=sys.stderr,
+            )
+        state.task_id = task
     run_phase(state, "clean", lambda: phase_clean(state))
     run_phase(state, "gate", lambda: phase_gate(state))
     run_phase(state, "merge", lambda: phase_merge(state))
@@ -453,7 +537,10 @@ def summary_line(state: State) -> str:
     task = f"#{state.task_id}" if state.task_id else "-"
     if DRY_RUN:
         return f"{task} · {state.tag} · dry-run, nothing changed"
-    board = " · board skipped" if state.board == "skipped" else ""
+    board = {
+        "skipped": " · board skipped",
+        "noted": f" · board noted (phase {state.part})",
+    }.get(state.board, "")
     return f"{task} · {state.tag} · cleanup ok{board}"
 
 
@@ -472,13 +559,19 @@ def main(
         False, "--dry-run", help="Echo mutating commands only."
     ),
     restart: bool = typer.Option(False, "--restart", help="Discard saved state."),
+    phase: str = typer.Option(
+        "", "--phase", help="Phase N/M of a phased task; only N == M closes it."
+    ),
+    task: str = typer.Option(
+        "", "--task", help="Board task ID; wins over the trailer."
+    ),
     as_json: bool = typer.Option(False, "--json", help="JSON output."),
 ) -> None:
     """Land a worker branch; exit 0 landed, 2 gate, 3 not ff, 4 dirty, 5 release, 6 refused, 7 board."""
     global DRY_RUN
     DRY_RUN = dry_run
     try:
-        state = land(session, base, restart)
+        state = land(session, base, restart, phase, task)
     except Stop as exc:
         if as_json:
             print(
@@ -512,6 +605,7 @@ def main(
                     "branch": state.branch,
                     "cleanup": "dry-run" if dry_run else "ok",
                     "board": state.board,
+                    "phase": state.part,
                 }
             )
         )
