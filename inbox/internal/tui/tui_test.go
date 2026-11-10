@@ -1,13 +1,17 @@
 package tui
 
 import (
+	"flag"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -201,7 +205,8 @@ var sizes = [][2]int{{92, 29}, {60, 20}, {40, 15}}
 
 func TestQuestionScreenKeepsQuestionAndOptions(t *testing.T) {
 	for _, sz := range sizes {
-		d := newDrv(t, sz[0], sz[1])
+		// +1 row for the status line, so the screen keeps its old budget.
+		d := newDrv(t, sz[0], sz[1]+1)
 		a, b := d.longFixture()
 		d.openWalk()
 		d.fits()
@@ -720,7 +725,11 @@ func TestPollDuringSendKeepsThePass(t *testing.T) {
 	d.openWalk()
 	d.keys("a")
 	_, cmd := d.m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	sent := cmd()
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || len(batch) != 2 {
+		t.Fatalf("send should batch the work with the spinner tick, got %T", batch)
+	}
+	sent := batch[0]()
 	d.poll()
 	d.send(sent)
 	if d.m.scr != scList || !strings.HasPrefix(d.m.flash, "sent 7.1 to spec-s1") {
@@ -743,5 +752,162 @@ func TestListCursorFollowsShrinkingList(t *testing.T) {
 	d.poll()
 	if !strings.Contains(d.view(), "› spec-s1") {
 		t.Fatalf("no row under the cursor:\n%s", d.view())
+	}
+}
+
+var updatePanel = flag.Bool("update-panel", false, "rewrite testdata/panel goldens")
+
+// golden compares got with testdata/panel/<name>.txt.
+func golden(t *testing.T, name, got string) {
+	t.Helper()
+	path := filepath.Join("..", "..", "testdata", "panel", name+".txt")
+	if *updatePanel {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(got+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got+"\n" != string(want) {
+		t.Errorf("%s differs:\n--- got\n%s\n--- want\n%s", name, got, want)
+	}
+}
+
+// startSend stages one answer per question and presses Send, leaving the
+// send in flight; it returns the command that completes it.
+func (d *drv) startSend() tea.Cmd {
+	d.openWalk()
+	d.keys("a")
+	_, cmd := d.m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	return cmd
+}
+
+func TestBusyScreenGolden(t *testing.T) {
+	for _, sz := range [][2]int{{60, 12}, {28, 8}} {
+		d := newDrv(t, sz[0], sz[1])
+		d.ask("7", "s1", "Which way?", "left", "right")
+		d.ask("7", "s1", "And then?", "up", "down")
+		d.ask("7", "s1", "Last?", "x", "y")
+		d.poll()
+		d.keys("enter", "enter", "a", "a", "a")
+		if d.m.scr != scReview {
+			t.Fatalf("not at review:\n%s", d.view())
+		}
+		d.m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		if d.m.busy == "" {
+			t.Fatalf("no send in flight:\n%s", d.view())
+		}
+		v := d.view()
+		for _, hidden := range []string{"Change one", "Cancel", "›", "enter", "esc", "q quit", "↑↓"} {
+			if strings.Contains(v, hidden) {
+				t.Errorf("busy screen shows %q:\n%s", hidden, v)
+			}
+		}
+		d.fits()
+		golden(t, "busy-sending-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]), v)
+	}
+}
+
+func TestBusyIgnoresKeysExceptCtrlC(t *testing.T) {
+	d := newDrv(t, 60, 12)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.startSend()
+	before := d.view()
+	d.keys("a", "enter", "esc", "q", "?", "down")
+	if d.view() != before || d.quit {
+		t.Fatalf("keys reached a busy panel:\n%s", d.view())
+	}
+	d.keys("ctrl+c")
+	if !d.quit {
+		t.Fatal("ctrl+c did not quit while busy")
+	}
+}
+
+func TestSpinnerTicksOnlyWhileBusy(t *testing.T) {
+	d := newDrv(t, 60, 12)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	if _, cmd := d.m.Update(tickMsg{}); cmd == nil {
+		t.Fatal("poll should load")
+	}
+	if d.m.spinning {
+		t.Fatal("spinner running while idle")
+	}
+	d.openWalk()
+	d.keys("a")
+	_, cmd := d.m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || !d.m.spinning {
+		t.Fatalf("send should start the spinner, got %T spinning=%v", cmd(), d.m.spinning)
+	}
+	first := d.view()
+	_, next := d.m.Update(batch[1]())
+	if next == nil || d.view() == first {
+		t.Fatal("tick while busy should advance the frame and schedule the next")
+	}
+	d.send(batch[0]())
+	if d.m.busy != "" {
+		t.Fatal("send did not finish")
+	}
+	if _, next := d.m.Update(spinner.TickMsg{}); next != nil || d.m.spinning {
+		t.Fatal("tick after the send should end the chain")
+	}
+}
+
+func TestSentFlashShowsThenExpires(t *testing.T) {
+	d := newDrv(t, 60, 12)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.run(d.startSend())
+	if !d.m.flashOK || !strings.HasPrefix(d.view(), "» sent 7.1 to spec-s1") {
+		t.Fatalf("flash %q ok=%v:\n%s", d.m.flash, d.m.flashOK, d.view())
+	}
+	golden(t, "sent-flash", d.view())
+	now := d.m.now()
+	d.m.now = func() time.Time { return now.Add(FlashFor + time.Second) }
+	d.poll()
+	if d.m.flash != "" || strings.Contains(d.view(), "sent 7.1") {
+		t.Fatalf("flash did not expire:\n%s", d.view())
+	}
+}
+
+func TestFailedSendKeepsErrorAndRetryHint(t *testing.T) {
+	d := newDrv(t, 80, 12)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	if err := d.other.CloseRaw("7.1", "answered", "pick", "a", "", "failed"); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	golden(t, "status-failed", d.view())
+	if !strings.Contains(d.view(), "r retry") || !strings.Contains(d.view(), "zen-inbox retry s1") {
+		t.Fatalf("failure hint gone:\n%s", d.view())
+	}
+	d.keys("r")
+	if len(d.am.sends) != 1 {
+		t.Fatalf("r did not retry: %v", d.am.sends)
+	}
+}
+
+func TestStatusLineStates(t *testing.T) {
+	d := newDrv(t, 60, 10)
+	golden(t, "status-empty", d.view())
+	d.ask("7", "s1", "Q?", "a", "b")
+	d.ask("8", "s2", "Q?", "a", "b")
+	d.ask("8", "s2", "Q2?", "a", "b")
+	d.poll()
+	golden(t, "status-open", d.view())
+	last := func(v string) string {
+		lines := strings.Split(v, "\n")
+		return lines[len(lines)-1]
+	}
+	if got := last(d.view()); got != "◆ 3 open · spec-s1, spec-s2" {
+		t.Errorf("open status %q", got)
+	}
+	d.send(tea.WindowSizeMsg{Width: 14, Height: 10})
+	if got := last(d.view()); got != "◆ 3 open · sp…" {
+		t.Errorf("status wrapped or overflowed: %q", got)
 	}
 }

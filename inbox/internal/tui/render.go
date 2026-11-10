@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,11 +16,22 @@ var (
 	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
 	bannerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	footerStyle = lipgloss.NewStyle().Faint(true)
+	busyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
+	okStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
+	failStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 )
 
 type section struct {
 	lines []string
 	style *lipgloss.Style
+}
+
+// rows is the height left for a screen: the last row is the status line.
+func (m *Model) rows() int {
+	if m.h < 2 {
+		return m.h
+	}
+	return m.h - 1
 }
 
 func (m *Model) footerRows(s screen) int { return len(m.bottom(s, false)) }
@@ -34,14 +46,10 @@ func (m *Model) bottom(s screen, scroll bool) []string {
 }
 
 func (m *Model) banner() []string {
-	note := m.busy
-	if note == "" && m.p != nil && len(m.p.notes) > 0 {
-		note = m.p.notes[len(m.p.notes)-1]
-	}
-	if note == "" {
+	if m.p == nil || len(m.p.notes) == 0 {
 		return nil
 	}
-	return []string{pyfmt.Clip("» "+note, max(m.w, view.MinWidth))}
+	return []string{pyfmt.Clip("» "+m.p.notes[len(m.p.notes)-1], max(m.w, view.MinWidth))}
 }
 
 func menuSection(items []item, cursor, n, width int) []section {
@@ -60,6 +68,39 @@ func (m *Model) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
+	var secs []section
+	switch {
+	case m.busy != "":
+		secs = m.viewBusy()
+	default:
+		secs = m.viewScreen()
+	}
+	var out []string
+	for _, s := range secs {
+		for _, line := range s.lines {
+			if lipgloss.Width(line) > m.w {
+				line = pyfmt.Clip(line, m.w)
+			}
+			if s.style != nil {
+				line = s.style.Render(line)
+			}
+			out = append(out, line)
+		}
+	}
+	if len(out) > m.rows() {
+		out = out[:m.rows()]
+	}
+	if m.h >= 2 {
+		for len(out) < m.rows() {
+			out = append(out, "")
+		}
+		line, style := m.status()
+		out = append(out, style.Render(line))
+	}
+	return strings.Join(out, "\n")
+}
+
+func (m *Model) viewScreen() []section {
 	var secs []section
 	switch m.scr {
 	case scList:
@@ -83,51 +124,69 @@ func (m *Model) View() string {
 		secs = []section{{lines: []string{"note (optional)", pyfmt.Clip(m.ti.View(), m.w)}},
 			{lines: m.bottom(scTalkNote, false), style: &footerStyle}}
 	}
-	var out []string
-	for _, s := range secs {
-		for _, line := range s.lines {
-			if lipgloss.Width(line) > m.w {
-				line = pyfmt.Clip(line, m.w)
-			}
-			if s.style != nil {
-				line = s.style.Render(line)
-			}
-			out = append(out, line)
+	return secs
+}
+
+// viewBusy is the whole screen while a send, retry or talk is in flight: no
+// menu, cursor or key hints, since keys are ignored until it finishes.
+func (m *Model) viewBusy() []section {
+	return []section{{lines: view.WrapRest(m.sp.View()+" "+m.busy, m.w, "", "  "), style: &busyStyle}}
+}
+
+// status is the one-line bottom row agent-manager shows as the terminal's
+// last output.
+func (m *Model) status() (string, lipgloss.Style) {
+	switch {
+	case m.busy != "":
+		text := "» " + strings.ToLower(m.busy[:1]) + m.busy[1:]
+		return pyfmt.Clip(text, max(m.w-2, 0)) + " " + m.sp.View(), busyStyle
+	case len(m.snap.undelivered) > 0:
+		var names []string
+		for _, b := range m.snap.undelivered {
+			names = append(names, b.Decisions[0].SessionName)
 		}
+		return pyfmt.Clip("✕ delivery failed · "+strings.Join(names, ", ")+" · r retry", m.w), failStyle
+	case !m.loaded:
+		return "○ loading…", footerStyle
+	case len(m.snap.open) == 0:
+		return "○ inbox empty", footerStyle
 	}
-	if len(out) > m.h {
-		out = out[:m.h]
+	var names []string
+	for _, r := range view.Rows(m.snap.open, m.snap.sessions) {
+		names = append(names, r.Name)
 	}
-	return strings.Join(out, "\n")
+	return pyfmt.Clip("◆ "+strconv.Itoa(len(m.snap.open))+" open · "+strings.Join(names, ", "), m.w), footerStyle
 }
 
 func (m *Model) viewList() []section {
-	var top []string
-	if m.busy != "" {
-		top = append(top, "» "+m.busy)
-	}
+	var flash, top []string
 	if m.flash != "" {
-		top = append(append(top, view.WrapRest("» "+m.flash, m.w, "", "  ")...), "")
+		flash = append(view.WrapRest("» "+m.flash, m.w, "", "  "), "")
 	}
 	for _, s := range view.StatusLines(m.snap.held, m.snap.open, m.snap.undelivered) {
 		top = append(top, view.WrapRest(s, m.w, "", "    ")...)
 	}
+	flashStyle := &bannerStyle
+	if m.flashOK {
+		flashStyle = &okStyle
+	}
 	foot := m.bottom(scList, false)
 	items := m.listItems()
-	rows := m.h - len(foot)
+	rows := m.rows() - len(foot)
 	if len(items) == 0 {
 		empty := "inbox empty"
 		if !m.loaded {
 			empty = "loading…"
 		}
-		return []section{{lines: top, style: &bannerStyle}, {lines: []string{empty}},
-			{lines: foot, style: &footerStyle}}
+		return []section{{lines: flash, style: flashStyle}, {lines: top, style: &bannerStyle},
+			{lines: []string{empty}}, {lines: foot, style: &footerStyle}}
 	}
-	if len(top) > rows-1 {
-		top = top[:max(rows-1, 0)]
+	if len(flash)+len(top) > rows-1 {
+		top = top[:max(min(len(top), rows-1-len(flash)), 0)]
+		flash = flash[:max(min(len(flash), rows-1), 0)]
 	}
-	secs := []section{{lines: top, style: &bannerStyle}}
-	secs = append(secs, menuSection(items, m.cursor, max(min(len(items), rows-len(top)), 1), m.w)...)
+	secs := []section{{lines: flash, style: flashStyle}, {lines: top, style: &bannerStyle}}
+	secs = append(secs, menuSection(items, m.cursor, max(min(len(items), rows-len(flash)-len(top)), 1), m.w)...)
 	return append(secs, section{lines: foot, style: &footerStyle})
 }
 
@@ -143,10 +202,10 @@ func (m *Model) markerLines() []string {
 // overflows; it returns the text rows to show and the footer to use.
 func (m *Model) scrolled(s screen, variants [][]string, items, extra int) ([]string, int, []string) {
 	foot := m.bottom(s, false)
-	text, menuH, scroll := fitText(variants, items, m.h-len(foot)-extra)
+	text, menuH, scroll := fitText(variants, items, m.rows()-len(foot)-extra)
 	if scroll {
 		foot = m.bottom(s, true)
-		text, _ = window(text, m.scroll, max(m.h-len(foot)-extra-menuH, 1))
+		text, _ = window(text, m.scroll, max(m.rows()-len(foot)-extra-menuH, 1))
 	}
 	return text, menuH, foot
 }
@@ -170,10 +229,10 @@ func (m *Model) walkFit() (walkFit, inbox.Decision, []string) {
 	if m.showHelp {
 		help = len(helpLines(scWalk, m.w))
 	}
-	f := fitWalk(d, m.brief(d), m.banner(), m.w, m.h, len(questionMenu(d)), len(foot), help)
+	f := fitWalk(d, m.brief(d), m.banner(), m.w, m.rows(), len(questionMenu(d)), len(foot), help)
 	if f.scroll {
 		foot = footerLines(scWalk, m.w, true)
-		f.rows = max(m.h-len(foot)-f.menuH, 1)
+		f.rows = max(m.rows()-len(foot)-f.menuH, 1)
 	}
 	return f, d, foot
 }
@@ -222,7 +281,7 @@ func (m *Model) viewChange() []section {
 	}
 	items = append(items, item{"Back", ""})
 	foot := m.bottom(scChange, false)
-	n := max(min(len(items), m.h-len(foot)-1), 1)
+	n := max(min(len(items), m.rows()-len(foot)-1), 1)
 	secs := []section{{lines: []string{"Change which answer?"}}}
 	secs = append(secs, menuSection(items, m.cursor, n, m.w)...)
 	return append(secs, section{lines: foot, style: &footerStyle})
@@ -239,7 +298,7 @@ func (m *Model) viewTalkPick() []section {
 		items = append(items, item{box + d.ID + "  " + d.Question, d.ID})
 	}
 	foot := m.bottom(scTalkPick, false)
-	n := max(min(len(items), m.h-len(foot)-len(head)), 1)
+	n := max(min(len(items), m.rows()-len(foot)-len(head)), 1)
 	secs := []section{{lines: head}}
 	secs = append(secs, menuSection(items, m.cursor, n, m.w)...)
 	return append(secs, section{lines: foot, style: &footerStyle})

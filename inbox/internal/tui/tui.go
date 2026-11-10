@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -25,6 +26,8 @@ import (
 const (
 	PollEvery     = 2 * time.Second
 	SessionsEvery = 10 * time.Second
+	// FlashFor is how long a success flash stays; polls clear it.
+	FlashFor = 6 * time.Second
 )
 
 type screen int
@@ -72,6 +75,7 @@ type resolvedMsg struct {
 }
 type retriedMsg struct {
 	flash string
+	ok    bool
 	snap  snapshot
 }
 
@@ -117,15 +121,19 @@ type Model struct {
 	scr      screen
 	showHelp bool
 	busy     string
+	sp       spinner.Model
+	spinning bool // a spinner tick is in flight
 
 	snap       snapshot
 	loaded     bool
 	sessionsAt time.Time
 	seen       map[string]bool
 
-	cursor int
-	scroll int
-	flash  string
+	cursor  int
+	scroll  int
+	flash   string
+	flashOK bool
+	flashAt time.Time
 
 	sid, sname string
 	known      map[string]bool
@@ -153,6 +161,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti,
+		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
 		},
@@ -246,6 +255,9 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	m.snap, m.loaded = s, true
 	if s.refreshed {
 		m.sessionsAt = m.now()
+	}
+	if m.flashOK && m.now().Sub(m.flashAt) >= FlashFor {
+		m.flash, m.flashOK = "", false
 	}
 	cmds := m.ring()
 	// A send or talk in flight changes the db under the pass; its own reply
@@ -371,6 +383,7 @@ func (m *Model) livePass() {
 
 func (m *Model) toList(flash string) {
 	m.scr, m.p, m.flash, m.cursor, m.scroll = scList, nil, flash, 0, 0
+	m.flashOK, m.flashAt = false, m.now()
 	m.known, m.markers, m.talkOpen = nil, nil, nil
 }
 
@@ -451,6 +464,14 @@ func (m *Model) stage(s view.Staged) {
 	m.advance()
 }
 
+func sendingText(n int, name string) string {
+	noun := " answers"
+	if n == 1 {
+		noun = " answer"
+	}
+	return "Sending " + strconv.Itoa(n) + noun + " to " + name + "…"
+}
+
 func (m *Model) sendCmd() tea.Cmd {
 	byID := maps.Clone(m.p.staged)
 	ids := slices.Collect(maps.Keys(byID))
@@ -500,8 +521,10 @@ func (m *Model) onSent(msg sentMsg) {
 	p := m.p
 	m.busy = ""
 	m.snap = msg.snap
+	ok := msg.res != nil && msg.res.OK
 	if p == nil {
 		m.toList(msg.flash)
+		m.flashOK = ok
 		return
 	}
 	p.staged = map[string]view.Staged{}
@@ -518,12 +541,13 @@ func (m *Model) onSent(msg sentMsg) {
 		return
 	}
 	m.toList(strings.Join(append([]string{msg.flash}, p.notes...), "; "))
+	m.flashOK = ok
 }
 
 // ------------------------------------------------------------------- talk --
 
 func (m *Model) startTalk(from screen) tea.Cmd {
-	m.talkFrom, m.busy = from, "talking to "+m.sname+"…"
+	m.talkFrom, m.busy = from, "Talking to "+m.sname+"…"
 	ib, client, sid, watched, sessions := m.ib, m.am, m.sid, m.watchedIDs(), m.snap.sessions
 	return func() tea.Msg {
 		if !client.Popup(sid) {
@@ -560,7 +584,7 @@ func (m *Model) chosen() []string {
 }
 
 func (m *Model) resolveCmd(note string) tea.Cmd {
-	m.busy = "resolving…"
+	m.busy = "Resolving…"
 	ib, client, sid, name, ids := m.ib, m.am, m.sid, m.sname, m.chosen()
 	watched, sessions := m.watchedIDs(), m.snap.sessions
 	return func() tea.Msg {
@@ -617,14 +641,31 @@ func (m *Model) finishTalk(resolved []string, flash string) {
 // ----------------------------------------------------------------- update --
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.update(msg)
+	if m.busy != "" && !m.spinning {
+		m.spinning = true
+		cmd = tea.Batch(cmd, m.sp.Tick)
+	}
+	return m, cmd
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		m.ta.SetWidth(max(m.w, 1))
-		m.ta.SetHeight(max(m.h-4, 1))
+		m.ta.SetHeight(max(m.rows()-4, 1))
 		m.ti.Width = max(m.w-3, 1)
-		m.vp.Width, m.vp.Height = m.w, max(m.h-m.footerRows(scFull), 1)
+		m.vp.Width, m.vp.Height = m.w, max(m.rows()-m.footerRows(scFull), 1)
 		return m, nil
+	case spinner.TickMsg:
+		if m.busy == "" {
+			m.spinning = false
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.sp, cmd = m.sp.Update(msg)
+		return m, cmd
 	case tickMsg:
 		return m, m.loadCmd(m.now().Sub(m.sessionsAt) >= SessionsEvery)
 	case loadedMsg:
@@ -642,6 +683,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case retriedMsg:
 		m.busy, m.snap = "", msg.snap
 		m.toList(msg.flash)
+		m.flashOK = msg.ok
 		return m, nil
 	case tea.KeyMsg:
 		return m.key(msg)
@@ -737,10 +779,23 @@ func (m *Model) listItems() []item {
 	return out
 }
 
+func (m *Model) undeliveredName(sid string) string {
+	for _, b := range m.snap.undelivered {
+		if b.SessionID == sid {
+			return b.Decisions[0].SessionName
+		}
+	}
+	return sid
+}
+
 func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "q", "esc":
 		return m, tea.Quit
+	case "r":
+		if len(m.snap.undelivered) > 0 {
+			return m, m.retryCmd(m.snap.undelivered[0].SessionID)
+		}
 	case "enter":
 		items := m.listItems()
 		if m.cursor >= len(items) {
@@ -756,7 +811,7 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) retryCmd(sid string) tea.Cmd {
-	m.busy = "retrying…"
+	m.busy = "Retrying delivery to " + m.undeliveredName(sid) + "…"
 	ib, client, sessions := m.ib, m.am, m.snap.sessions
 	return func() tea.Msg {
 		res, err := ib.Retry(sid)
@@ -766,7 +821,8 @@ func (m *Model) retryCmd(sid string) tea.Cmd {
 		} else if flash, err = ib.Describe(res, sid, ""); err != nil {
 			flash = err.Error()
 		}
-		return retriedMsg{flash, load(ib, client, nil, sessions, false)}
+		ok := err == nil && res != nil && res.OK
+		return retriedMsg{flash, ok, load(ib, client, nil, sessions, false)}
 	}
 }
 
@@ -892,7 +948,7 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 	}
 	switch choice {
 	case "send":
-		m.busy = "sending…"
+		m.busy = sendingText(len(m.p.staged), m.sname)
 		return m, m.sendCmd()
 	case "change":
 		m.scr, m.cursor = scChange, 0
