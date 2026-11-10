@@ -122,19 +122,33 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
   ponytail" coding rules, adopted from ponytail.
 
+### Scripts
+
+Repeated orchestration lives in `zen-*` scripts, so an agent only wakes when one exits
+non-zero. Each takes `--json`; see `scripts/README.md`.
+
+- `zen-await <session>...` (orchestrator, run_in_background): waits until a worker
+  stops; 0 done marker, 10 escalation, 11 idle, 20 dead, 124 timeout.
+- `zen-gate [--base dev]` (worker, before `WORKER_DONE`): banned ways to get green
+  in the branch diff; exceptions in `.zen-gate-allow`.
+- `zen-merge <session>` (orchestrator, on exit 0): gate, ff-merge, dev release,
+  archive, worktree and branch cleanup; 2 gate, 3 not ff, 4 dirty, 5 release.
+- `zen-sweep` (chief, at start and after a restart): read-only report of dirty
+  trees, unpushed work, stashes, orphan branches and worktrees.
+
 The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
 orchestrator:
 
-- checks green was reported, one `/code-review` round ran, and the branch diff has no
-  banned way to get green; each `shortcut:` marker in the diff becomes a To Do task
-- merges into `dev` in the repo's main checkout (`git merge --ff-only`; for a real
-  merge, re-runs the repo's checks first), runs `zen-release --dev --yes --bump patch`,
-  and marks the task Done (**done**) with the release tag in a note
+- checks green was reported and one `/code-review` round ran, then runs `zen-merge`:
+  `zen-gate` on the branch diff, `git merge --ff-only` into `dev` in the repo's main
+  checkout, `zen-release --dev --yes --bump patch`, then cleanup (below); each
+  shortcut follow-up it prints becomes a To Do task
+- marks the task Done (**done**) with the release tag in a note
 - files open review findings as To Do tasks, and device, prod, data or
   messages-to-people steps as Human Only tasks
-- archives the session, runs `git worktree remove <path>` and `git branch -d <branch>`
-  (`-D` once `git merge-base --is-ancestor <branch> dev` confirms it), and sends chief
-  one line
+- leaves cleanup to `zen-merge`: archive the session, `git worktree remove <path>`,
+  `git branch -d <branch>` (`-D` once `git merge-base --is-ancestor <branch> dev`
+  confirms it); then sends chief one line
 
 Repos without `dev` (dotfiles on master): the orchestrator merges locally and leaves
 the push to the user. Prod merges, prod releases and deploys stay the user's.
