@@ -263,6 +263,31 @@ def test_await_new_ignores_stale_message(projects: Path, fake_am: Path) -> None:
     assert ev.state == "timeout"
 
 
+def test_await_refused_wait_is_dead(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo")
+    (fake_am / "wait.json").write_text("")
+    (fake_am / "sessions.json").write_text(json.dumps([{**s, "archived": True}]))
+    ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("dead", 20)
+
+
+def test_await_refusal_from_live_session_keeps_waiting(
+    projects: Path, fake_am: Path
+) -> None:
+    s = _session("/repo", status="working")
+    (fake_am / "wait.json").write_text("")
+    (fake_am / "sessions.json").write_text(json.dumps([s]))
+    ev = zen_await.await_sessions([s], timeout=0.3, root=projects, poll=0.01)
+    assert ev.state == "timeout"
+
+
+def test_find_session_prefers_live_name() -> None:
+    old = {**_session("/a", sid="old"), "name": "w", "archived": True}
+    live = {**_session("/b", sid="new"), "name": "w"}
+    assert zen_await.find_session("w", [old, live]) is live
+    assert zen_await.find_session("old", [old, live]) is old
+
+
 def test_cli_summary_and_unknown(
     fake_am: Path, monkeypatch: pytest.MonkeyPatch, projects: Path
 ) -> None:

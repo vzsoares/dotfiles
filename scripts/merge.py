@@ -249,8 +249,11 @@ def phase_resolve(state: State, base: str) -> None:
     sessions = (
         [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
     )
-    match = next((s for s in sessions if s.get("id") == state.session), None) or next(
-        (s for s in sessions if s.get("name") == state.session), None
+    named = [s for s in sessions if s.get("name") == state.session]
+    match = (
+        next((s for s in sessions if s.get("id") == state.session), None)
+        or next((s for s in named if not s.get("archived")), None)
+        or next(iter(named), None)
     )
     if match is None:
         raise Stop(EXIT_ERROR, f"unknown session {state.session!r}")
@@ -309,6 +312,13 @@ def phase_gate(state: State) -> None:
 
 
 def phase_merge(state: State) -> None:
+    if (
+        git(
+            state.main, "merge-base", "--is-ancestor", state.branch, state.base
+        ).returncode
+        == 0
+    ):
+        return
     ff = git(state.main, "merge-base", "--is-ancestor", state.base, state.branch)
     if ff.returncode != 0:
         raise Stop(EXIT_NOT_FF, f"{state.branch} is not a fast-forward of {state.base}")
@@ -393,6 +403,10 @@ def land(session: str, base: str, restart: bool = False) -> State:
     state = None if restart else load_state(session)
     if state is None:
         state = State(session=session)
+    if not state.done("merge"):
+        # The branch may have moved since a failed run, so re-check it.
+        state.phases.pop("clean", None)
+        state.phases.pop("gate", None)
     run_phase(state, "resolve", lambda: phase_resolve(state, base))
     run_phase(state, "clean", lambda: phase_clean(state))
     run_phase(state, "gate", lambda: phase_gate(state))

@@ -201,6 +201,31 @@ def test_release_failure_then_resume(setup: Setup) -> None:
     assert not setup.worktree.exists()
 
 
+def test_resume_regates_a_moved_branch(setup: Setup) -> None:
+    _commit(setup.main, "z.txt", "z\n")
+    assert _code() == merge.EXIT_NOT_FF
+    _git("rebase", "-q", "dev", cwd=setup.worktree)
+    _commit(setup.worktree, "c.test.ts", "it.only('x', () => {})\n")
+    assert _code() == merge.EXIT_GATE
+
+
+def test_resume_after_manual_merge(setup: Setup) -> None:
+    _commit(setup.main, "z.txt", "z\n")
+    assert _code() == merge.EXIT_NOT_FF
+    _git("merge", "-q", "--no-edit", "am/task", cwd=setup.main)
+    state = merge.land("task", "dev")
+    assert state.tag == "v0.0.1-dev.0"
+    assert not setup.worktree.exists()
+
+
+def test_name_prefers_live_session(setup: Setup) -> None:
+    live = setup.fake.sessions[0]
+    stale = {**live, "id": "old", "directory": "/gone", "archived": True}
+    setup.fake.sessions = [stale, live]
+    state = merge.land("task", "dev")
+    assert state.session_id == "s1"
+
+
 def test_refuses_prod_and_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _make(tmp_path, monkeypatch, base="main")
     with pytest.raises(merge.Stop) as exc:

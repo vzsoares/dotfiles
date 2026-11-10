@@ -229,12 +229,17 @@ def agent_manager(*args: str) -> tuple[int, str]:
     return result.returncode, result.stdout
 
 
+def list_sessions_from(out: str) -> list[dict[str, object]]:
+    try:
+        data = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return []
+    return [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
+
+
 def list_sessions() -> list[dict[str, object]]:
     code, out = agent_manager("sessions", "--json")
-    if code != 0:
-        return []
-    data = json.loads(out or "[]")
-    return [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
+    return list_sessions_from(out) if code == 0 else []
 
 
 def find_session(
@@ -243,10 +248,11 @@ def find_session(
     for s in sessions:
         if s.get("id") == key:
             return s
-    for s in sessions:
-        if s.get("name") == key:
-            return s
-    return None
+    named = [s for s in sessions if s.get("name") == key]
+    # Archived sessions keep their names, so a reused name must pick the live one.
+    return next((s for s in named if not s.get("archived")), None) or next(
+        iter(named), None
+    )
 
 
 def event_for(session: dict[str, object], root: Path | None = None) -> Event:
@@ -263,11 +269,24 @@ def event_for(session: dict[str, object], root: Path | None = None) -> Event:
     return Event(session=name, task_id=task_id, state=state, summary=summarize(text))
 
 
+def session_alive(session_id: str) -> bool:
+    """True if the manager still lists the session as live (or is unreachable)."""
+    code, out = agent_manager("sessions", "--json")
+    if code != 0:
+        return True
+    found = find_session(session_id, list_sessions_from(out))
+    return (
+        found is not None
+        and not found.get("archived")
+        and found.get("status") not in DEAD_STATUSES
+    )
+
+
 def _spawn_wait(session_id: str) -> subprocess.Popen[str]:
     return subprocess.Popen(
         ["agent-manager", "wait", session_id, "--timeout", WAIT_SLICE, "--json"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         text=True,
     )
 
@@ -299,9 +318,21 @@ def await_sessions(
                 proc = procs[sid]
                 if proc.poll() is None:
                     continue
-                out = proc.stdout.read() if proc.stdout else ""
+                out, err = proc.communicate()
                 del procs[sid]
-                result = json.loads(out) if out.strip().startswith("{") else {}
+                if not out.strip().startswith("{"):
+                    # Archived or deleted sessions get a refusal, not a JSON result;
+                    # a manager hiccup also lands here, so confirm before calling it.
+                    if session_alive(sid):
+                        time.sleep(poll * 5)
+                        continue
+                    return Event(
+                        session=str(s.get("name") or sid),
+                        task_id=None,
+                        state="dead",
+                        summary=summarize(err),
+                    )
+                result = json.loads(out)
                 if not isinstance(result, dict) or not result.get("reached"):
                     continue
                 fresh = result.get("session")
@@ -330,9 +361,9 @@ def emit(event: Event, as_json: bool) -> None:
     if as_json:
         print(json.dumps(asdict(event)))
         return
-    first = event.summary.splitlines()[-1] if event.summary else ""
+    last = event.summary.splitlines()[-1] if event.summary else ""
     task = f"#{event.task_id}" if event.task_id else "-"
-    print(f"{event.session} · {event.state} · {task} · {first}".rstrip(" ·"))
+    print(f"{event.session} · {event.state} · {task} · {last}".rstrip(" ·"))
 
 
 app = typer.Typer(add_completion=False, help=__doc__)
