@@ -1,0 +1,5 @@
+# zen-gate exceptions: <path glob> [rule]
+scripts/gate.py
+scripts/test_gate.py
+scripts/test_merge.py skip-focus
+scripts/await.py timeout-bump
