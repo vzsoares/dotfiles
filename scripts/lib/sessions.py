@@ -1,4 +1,4 @@
-"""Shared agent-manager session parsing for zen-await, zen-sweep and zen-merge.
+"""Shared agent-manager session parsing for zen-await and zen-sweep.
 
 Plain stdlib, no CLI. Scripts load it by path with importlib.
 """

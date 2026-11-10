@@ -214,7 +214,8 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> Sweep:
             continue
         live = live_dirs is not None and str(Path(wt.path).resolve()) in live_dirs
         if live and not wt.main:
-            live_branches.add(wt.branch)
+            if wt.branch:
+                live_branches.add(wt.branch)
             result.notes.append(f"live worker: {wt.path} ({wt.branch or 'detached'})")
             continue
         status = git(wt.path, "status", "--porcelain").stdout.splitlines()

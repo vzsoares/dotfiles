@@ -107,7 +107,6 @@ def load_sessions() -> ModuleType:
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
-    # @dataclass-style lookups resolve the module through sys.modules.
     sys.modules["zen_sessions"] = module
     spec.loader.exec_module(module)
     return module
@@ -398,7 +397,7 @@ def main(
     as_json: bool = typer.Option(False, "--json", help="JSON output."),
 ) -> None:
     """Wait for a session to stop; exit 0 done, 10 escalation, 11 idle, 20 dead, 124 timeout."""
-    known = list_sessions()
+    known = list_sessions() or []
     watched: list[dict[str, object]] = []
     for key in sessions:
         found = find_session(key, known)
