@@ -198,7 +198,8 @@ orchestrator:
   checkout, `zen-release --dev --yes --bump patch`, then cleanup (below); each
   shortcut follow-up it prints becomes a To Do task
 - leaves **done** to `zen-merge`'s board phase (tag and shas in the note); on
-  exit 7 it reruns `zen-merge` or marks it Done via MCP
+  exit 7 it reruns `zen-merge` or marks it Done via MCP, and on `board skipped`
+  (no `Task:` trailer) it marks it Done itself
 - files open review findings as To Do tasks, and device, prod, data or
   messages-to-people steps as Human Only tasks
 - leaves cleanup to `zen-merge`: archive the session, `git worktree remove <path>`,

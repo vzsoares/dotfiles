@@ -178,7 +178,7 @@ def test_dry_run_changes_nothing(setup: Setup, monkeypatch: pytest.MonkeyPatch) 
     head = _git("rev-parse", "HEAD", cwd=setup.main)
     monkeypatch.setattr(merge, "DRY_RUN", True)
     state = merge.land("task", "dev")
-    assert state.tag == "(dry-run)"
+    assert (state.tag, state.board) == ("(dry-run)", "(dry-run)")
     assert _git("rev-parse", "HEAD", cwd=setup.main) == head
     assert setup.worktree.exists()
     assert not any(c[0] == "archive" for c in setup.fake.calls)
@@ -287,6 +287,7 @@ def test_board_skipped_without_task_trailer(
     state = merge.land("task", "dev")
     assert (state.task_id, state.board) == ("", "skipped")
     assert s.fake.boards == []
+    assert merge.summary_line(state).endswith("cleanup ok · board skipped")
 
 
 def test_board_failure_exits_7_then_resumes_only_board(setup: Setup) -> None:

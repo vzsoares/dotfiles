@@ -62,6 +62,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sys
 import time
 import urllib.error
@@ -137,10 +138,11 @@ def load_token() -> str:
         for line in rc.read_text().splitlines():
             m = re.match(r"\s*(?:export\s+)?NOTION_TOKEN=(.*)$", line)
             if m:
-                value = m.group(1).strip()
-                if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-                    value = value[1:-1]
-                token = value or token
+                try:
+                    words = shlex.split(m.group(1), comments=True)
+                except ValueError:
+                    words = []
+                token = (words[0] if words else "") or token
     if token:
         return token
     raise BoardError(
@@ -399,7 +401,9 @@ def trailing_uuid(value: str) -> str:
 def page_id_from(ref: str) -> str:
     ref = ref.strip().lower()
     if "://" not in ref:
-        return ref.replace("-", "") if UUID.fullmatch(ref) else ""
+        if "/" not in ref:
+            return ref.replace("-", "") if UUID.fullmatch(ref) else ""
+        ref = "https://" + ref
     url = urlparse(ref)
     # A database view URL names the open page in ?p=, not the path.
     for candidate in [*parse_qs(url.query).get("p", []), url.path.rstrip("/")]:

@@ -159,6 +159,7 @@ def test_resolves_task_numbers_by_unique_id(fake: Fake, ref: str) -> None:
         f"https://app.notion.com/p/{PAGE}?pvs=204",
         f"https://www.notion.so/Fix-deadbeef-cafe-{PAGE}",
         f"https://www.notion.so/ws/{WORK}?v={ME}&p={PAGE}",
+        f"www.notion.so/Fix-{PAGE}",
         DASHED,
         PAGE,
         PAGE.upper(),
@@ -411,6 +412,7 @@ def test_env_token_wins(fake: Fake, tmp_path: Path) -> None:
         "export NOTION_TOKEN='tok-123'",
         'export NOTION_TOKEN="tok-123"',
         "NOTION_TOKEN=tok-123",
+        'export NOTION_TOKEN="tok-123"  # board integration',
     ],
 )
 def test_token_falls_back_to_zshrc_local(

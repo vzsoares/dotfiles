@@ -411,7 +411,7 @@ def phase_board(state: State) -> None:
     if result.returncode != 0:
         tail = (result.stdout + result.stderr).strip().splitlines()[-5:]
         raise Stop(EXIT_BOARD, "zen-board done failed:\n" + "\n".join(tail))
-    state.board = "done"
+    state.board = "(dry-run)" if DRY_RUN else "done"
 
 
 def run_phase(state: State, name: str, fn: Callable[[], None]) -> None:
@@ -452,7 +452,8 @@ def land(session: str, base: str, restart: bool = False) -> State:
 
 def summary_line(state: State) -> str:
     task = f"#{state.task_id}" if state.task_id else "-"
-    return f"{task} · {state.tag} · cleanup ok"
+    board = " · board skipped" if state.board == "skipped" else ""
+    return f"{task} · {state.tag} · cleanup ok{board}"
 
 
 # --------------------------------------------------------------------------- #
