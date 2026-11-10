@@ -58,7 +58,8 @@
 #
 #  EXIT CODES
 #      0 landed   2 gate hit   3 not fast-forward   4 dirty tree / wrong branch
-#      5 release failed   6 protected base   7 board step failed
+#      5 release failed   6 refused (protected base, or no dev and the main
+#      checkout off main/master)   7 board step failed
 #      1 anything else (rerun resumes)
 #
 #  AUTHOR

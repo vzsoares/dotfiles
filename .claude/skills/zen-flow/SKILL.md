@@ -285,15 +285,10 @@ always refused. `zen-release` pre-fills `dev → prod` on a first run when both 
 `prod` (or the reverse), a `main`/`master` left beside dev+prod, or a dev+prod repo
 whose `origin/HEAD` is not `dev`.
 
-| Repo | Model | Default branch |
-| --- | --- | --- |
-| core | dev+prod | dev |
-| moranduba | dev+prod | dev |
-| labinfra | dev+prod | dev |
-| me | dev+prod | dev |
-| dotfiles | single `master` | master (raw URLs and clones depend on it) |
-| valt | single `main` | main (never a worker target, never released) |
-| Approva repos | unchanged; approva-node is single `master` | unchanged |
+The per-repo model list lives in the vault (`repos.branch_models` in
+`config/zen-flow.json`). Public ones: dotfiles is single `master` (raw URLs and
+clones depend on it); the vault is single `main` (never a worker target, never
+released).
 
 Moving a repo to dev+prod, in its main checkout with a clean tree (local steps):
 
