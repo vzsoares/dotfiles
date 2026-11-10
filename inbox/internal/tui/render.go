@@ -220,8 +220,8 @@ func (m *Model) frame() frame {
 		return frame{s: scFull, body: []section{{lines: m.fullLines(d)}}, cur: -1, help: true}
 	case scReview:
 		return m.viewReview()
-	case scChange:
-		return m.viewChange()
+	case scJump:
+		return m.viewJump()
 	case scTalkPick:
 		return m.viewTalkPick()
 	case scConfirm:
@@ -380,13 +380,9 @@ func (m *Model) viewConfirm() frame {
 		body: []section{{lines: body}}, cur: -1, help: true}
 }
 
-func (m *Model) viewChange() frame {
-	var items []item
-	for _, e := range m.entries() {
-		items = append(items, item{e.d.ID + "  " + e.d.Question, e.d.ID})
-	}
-	items = append(items, item{"Back", ""})
-	return frame{s: scChange, top: []section{{lines: []string{"Change which answer?"}}},
+func (m *Model) viewJump() frame {
+	items := m.jumpItems()
+	return frame{s: scJump, top: []section{{lines: []string{"Jump to which question?"}}},
 		body: menuSection(items, m.cursor, len(items), m.w), cur: m.cursor}
 }
 

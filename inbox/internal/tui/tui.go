@@ -41,7 +41,7 @@ const (
 	scFree
 	scFull
 	scReview
-	scChange
+	scJump
 	scTalkPick
 	scTalkNote
 	scConfirm
@@ -56,8 +56,11 @@ type snapshot struct {
 	undelivered []inbox.Batch
 	byID        map[string]inbox.Decision
 	sessions    am.Sessions
-	refreshed   bool
-	err         error
+	drafts      map[string]inbox.Draft
+	// gen is the panel's draftGen when the read started.
+	gen       int
+	refreshed bool
+	err       error
 }
 
 type tickMsg struct{}
@@ -83,18 +86,26 @@ type retriedMsg struct {
 	ok    bool
 	snap  snapshot
 }
+type draftsSavedMsg struct{ err error }
+
+// draftOp is one queued draft write: s saved for id, nil s deleting it, or
+// every draft of session clear dropped.
+type draftOp struct {
+	id    string
+	s     *view.Staged
+	clear string
+}
 
 type entry struct {
 	d      inbox.Decision
 	staged *view.Staged
 }
 
-// pass is one walk through a session's questions; nothing in it reaches the
-// db before Send.
+// pass is one walk through a session's questions in order; staged answers
+// are kept as drafts and recorded only at Send.
 type pass struct {
-	queue    []string
+	order    []string
 	cur      string
-	visited  []string
 	staged   map[string]view.Staged
 	notes    []string
 	recorded []string
@@ -107,12 +118,11 @@ func (p *pass) stopped(how string) string {
 	if len(p.recorded) > 0 {
 		kept = strings.Join(p.recorded, ", ") + " recorded earlier"
 	}
+	if len(p.staged) > 0 {
+		kept += ", drafts kept"
+	}
 	return strings.Join(append([]string{how + ": " + kept}, p.notes...), "; ")
 }
-
-func (p *pass) queued(id string) bool { return id == p.cur || slices.Contains(p.queue, id) }
-
-func (p *pass) seen(id string) bool { return slices.Contains(p.visited, id) }
 
 // Model is the panel. Every db read and subprocess runs in a tea.Cmd.
 type Model struct {
@@ -149,6 +159,13 @@ type Model struct {
 	markers    []string
 
 	p *pass
+	// drafts mirrors the db's drafts; draftGen counts local changes so a
+	// poll read before one cannot overwrite it.
+	drafts   map[string]view.Staged
+	draftGen int
+	draftOps []draftOp
+	saving   bool
+	jumpFrom screen
 
 	ta textarea.Model
 	ti textinput.Model
@@ -178,8 +195,8 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, md: md.New(lipgloss.DefaultRenderer()),
-		prodBlock: "guard not run",
-		sp:        spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		prodBlock: "guard not run", drafts: map[string]view.Staged{},
+		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
 		},
@@ -217,6 +234,9 @@ func load(ib *inbox.Inbox, client am.Client, ids []string, sessions am.Sessions,
 	if s.undelivered, s.err = ib.Undelivered(); s.err != nil {
 		return s
 	}
+	if s.drafts, s.err = ib.Drafts(); s.err != nil {
+		return s
+	}
 	for _, id := range ids {
 		if d, err := ib.Get(id); err == nil {
 			s.byID[id] = d
@@ -231,7 +251,7 @@ func (m *Model) watchedIDs() []string {
 		set[id] = true
 	}
 	if m.p != nil {
-		for _, id := range append(append([]string(nil), m.p.visited...), m.p.queue...) {
+		for _, id := range m.p.order {
 			set[id] = true
 		}
 	}
@@ -242,8 +262,12 @@ func (m *Model) watchedIDs() []string {
 }
 
 func (m *Model) loadCmd(refresh bool) tea.Cmd {
-	ib, client, ids, sessions := m.ib, m.am, m.watchedIDs(), m.snap.sessions
-	return func() tea.Msg { return loadedMsg{load(ib, client, ids, sessions, refresh)} }
+	ib, client, ids, sessions, gen := m.ib, m.am, m.watchedIDs(), m.snap.sessions, m.draftGen
+	return func() tea.Msg {
+		s := load(ib, client, ids, sessions, refresh)
+		s.gen = gen
+		return loadedMsg{s}
+	}
 }
 
 func (m *Model) Init() tea.Cmd { return m.loadCmd(true) }
@@ -275,6 +299,12 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		return nil
 	}
 	m.snap, m.loaded = s, true
+	if s.gen == m.draftGen && !m.saving && len(m.draftOps) == 0 {
+		m.drafts = map[string]view.Staged{}
+		for id, d := range s.drafts {
+			m.drafts[id] = view.Staged{Kind: d.Kind, Option: d.Option, Text: d.Text, Rev: d.Rev}
+		}
+	}
 	if s.refreshed {
 		m.sessionsAt = m.now()
 	}
@@ -360,8 +390,7 @@ func (m *Model) liveSession() {
 func (m *Model) livePass() {
 	p := m.p
 	curGone := false
-	ids := append([]string(nil), p.visited...)
-	for _, id := range ids {
+	for _, id := range p.order {
 		d, ok := m.decision(id)
 		if !ok {
 			continue
@@ -369,23 +398,20 @@ func (m *Model) livePass() {
 		if d.Status != "open" {
 			if !p.gone[id] {
 				p.gone[id] = true
-				delete(p.staged, id)
+				m.unstage(id)
 				p.notes = append(p.notes, closedMarker(d))
 			}
 			curGone = curGone || id == p.cur
 			continue
 		}
 		if s, ok := p.staged[id]; ok && s.Rev != d.Rev {
-			delete(p.staged, id)
+			m.unstage(id)
 			p.notes = append(p.notes, id+" amended; asked again")
-			if !p.queued(id) {
-				p.queue = append(p.queue, id)
-			}
 		}
 	}
 	for _, d := range m.sessionOpen() {
-		if !p.seen(d.ID) && !p.queued(d.ID) {
-			p.queue = append(p.queue, d.ID)
+		if !slices.Contains(p.order, d.ID) {
+			p.order = append(p.order, d.ID)
 			p.notes = append(p.notes, d.ID+" asked; added to the walk")
 		}
 	}
@@ -394,11 +420,17 @@ func (m *Model) livePass() {
 		if curGone {
 			m.advance()
 		}
-	case scReview, scChange:
-		if len(p.queue) > 0 || len(m.entries()) == 0 {
+	case scReview, scJump:
+		if m.next() != "" || len(m.entries()) == 0 {
 			m.advance()
 		}
 	}
+}
+
+// unstage forgets id's staged answer; the store already dropped its draft.
+func (m *Model) unstage(id string) {
+	delete(m.p.staged, id)
+	delete(m.drafts, id)
 }
 
 // --------------------------------------------------------------- the pass --
@@ -423,34 +455,45 @@ func (m *Model) enterSession(sid string) {
 	m.scr, m.cursor, m.scroll, m.flash = scSession, 0, 0, ""
 }
 
+// startPass resumes from the session's drafts at the first undrafted question.
 func (m *Model) startPass() {
 	m.p = &pass{staged: map[string]view.Staged{}, gone: map[string]bool{}}
 	for _, d := range m.sessionOpen() {
-		m.p.queue = append(m.p.queue, d.ID)
+		m.p.order = append(m.p.order, d.ID)
+		if s, ok := m.drafts[d.ID]; ok && s.Rev == d.Rev {
+			m.p.staged[d.ID] = s
+		}
 	}
 	m.advance()
 }
 
-// advance moves to the next open question in the queue, else the review.
-func (m *Model) advance() {
+// next is the first open question of the pass with nothing staged, or "".
+func (m *Model) next() string {
 	p := m.p
-	for len(p.queue) > 0 {
-		id := p.queue[0]
-		p.queue = p.queue[1:]
-		d, ok := m.decision(id)
-		if !ok || d.Status != "open" {
-			if ok && !p.gone[id] {
-				p.gone[id] = true
-				delete(p.staged, id)
-				p.notes = append(p.notes, id+" already "+d.Status)
-			}
+	for _, id := range p.order {
+		if _, ok := p.staged[id]; ok || p.gone[id] {
 			continue
 		}
-		p.cur = id
-		if !p.seen(id) {
-			p.visited = append(p.visited, id)
+		if d, ok := m.decision(id); ok && d.Status == "open" {
+			return id
 		}
-		m.scr, m.cursor, m.scroll = scWalk, 0, 0
+	}
+	return ""
+}
+
+// advance shows the first undrafted question, else the review.
+func (m *Model) advance() {
+	p := m.p
+	for _, id := range p.order {
+		d, ok := m.decision(id)
+		if ok && d.Status != "open" && !p.gone[id] {
+			p.gone[id] = true
+			delete(p.staged, id)
+			p.notes = append(p.notes, id+" already "+d.Status)
+		}
+	}
+	if id := m.next(); id != "" {
+		m.show(id)
 		return
 	}
 	p.cur = ""
@@ -465,15 +508,56 @@ func (m *Model) advance() {
 	m.scr, m.cursor, m.scroll = scReview, 0, 0
 }
 
+// show puts id on screen with the cursor on its staged answer.
+func (m *Model) show(id string) {
+	m.p.cur = id
+	m.scr, m.cursor, m.scroll = scWalk, 0, 0
+	d, ok := m.decision(id)
+	s, staged := m.p.staged[id]
+	if !ok || !staged {
+		return
+	}
+	want := s.Option
+	switch s.Kind {
+	case "text":
+		want = "free"
+	case "skip":
+		want = "skip"
+	}
+	for i, it := range questionMenu(d, m.locked(d)) {
+		if it.value == want {
+			m.cursor = i
+		}
+	}
+}
+
+// step shows the open question dir places from the current one (the review
+// counts as past the last); false when there is none.
+func (m *Model) step(dir int) bool {
+	p := m.p
+	i := slices.Index(p.order, p.cur)
+	if i < 0 {
+		i = len(p.order)
+	}
+	for i += dir; i >= 0 && i < len(p.order); i += dir {
+		id := p.order[i]
+		if d, ok := m.decision(id); ok && d.Status == "open" && !p.gone[id] {
+			m.show(id)
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) entries() []entry {
 	var out []entry
-	for _, id := range m.p.visited {
+	for _, id := range m.p.order {
 		d, ok := m.decision(id)
-		if !ok || d.Status != "open" {
+		if !ok || d.Status != "open" || m.p.gone[id] {
 			continue
 		}
 		e := entry{d: d}
-		if s, ok := m.p.staged[id]; ok {
+		if s, ok := m.p.staged[id]; ok && s.Kind != "skip" {
 			e.staged = &s
 		}
 		out = append(out, e)
@@ -481,9 +565,78 @@ func (m *Model) entries() []entry {
 	return out
 }
 
-func (m *Model) stage(s view.Staged) {
-	m.p.staged[m.p.cur] = s
+func (m *Model) stage(s view.Staged) tea.Cmd {
+	id := m.p.cur
+	m.p.staged[id] = s
 	m.advance()
+	return m.saveDraft(id, s)
+}
+
+// saveDraft mirrors s as id's draft and queues its write. A prod Approve is
+// kept only in the pass, so a restart asks it again with its confirm.
+func (m *Model) saveDraft(id string, s view.Staged) tea.Cmd {
+	if d, ok := m.decision(id); ok && d.Prod != nil && s.Kind == "pick" && d.OptionText(s.Option) == "Approve" {
+		delete(m.drafts, id)
+		return m.queueDrafts(draftOp{id: id})
+	}
+	m.drafts[id] = s
+	return m.queueDrafts(draftOp{id: id, s: &s})
+}
+
+func (m *Model) queueDrafts(ops ...draftOp) tea.Cmd {
+	m.draftGen++
+	m.draftOps = append(m.draftOps, ops...)
+	return m.writeDrafts()
+}
+
+// writeDrafts runs the queued writes; one batch at a time, so they land in
+// the order they were made.
+func (m *Model) writeDrafts() tea.Cmd {
+	if m.saving || len(m.draftOps) == 0 {
+		return nil
+	}
+	ops, ib := m.draftOps, m.ib
+	m.draftOps, m.saving = nil, true
+	return func() tea.Msg {
+		for _, op := range ops {
+			var err error
+			switch {
+			case op.clear != "":
+				err = ib.ClearDrafts(op.clear)
+			case op.s == nil:
+				err = ib.DeleteDraft(op.id)
+			default:
+				err = ib.SaveDraft(inbox.Draft{ID: op.id, Kind: op.s.Kind, Option: op.s.Option, Text: op.s.Text, Rev: op.s.Rev})
+			}
+			if err != nil {
+				return draftsSavedMsg{err}
+			}
+		}
+		return draftsSavedMsg{}
+	}
+}
+
+func (m *Model) onDraftsSaved(msg draftsSavedMsg) tea.Cmd {
+	m.saving = false
+	if msg.err != nil {
+		note := "draft not saved: " + msg.err.Error()
+		if m.p != nil {
+			m.p.notes = append(m.p.notes, note)
+		} else {
+			m.flash, m.flashOK = note, false
+		}
+	}
+	return m.writeDrafts()
+}
+
+func (p *pass) answers() int {
+	n := 0
+	for _, s := range p.staged {
+		if s.Kind != "skip" {
+			n++
+		}
+	}
+	return n
 }
 
 func sendingText(n int, name string) string {
@@ -504,6 +657,9 @@ func (m *Model) sendCmd() tea.Cmd {
 		msg := sentMsg{res: prior}
 		for _, id := range ids {
 			s := byID[id]
+			if s.Kind == "skip" {
+				continue
+			}
 			var letter, text *string
 			if s.Kind == "pick" {
 				letter = &s.Option
@@ -539,7 +695,7 @@ func (m *Model) sendCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) onSent(msg sentMsg) {
+func (m *Model) onSent(msg sentMsg) tea.Cmd {
 	p := m.p
 	m.busy = ""
 	m.snap = msg.snap
@@ -547,9 +703,13 @@ func (m *Model) onSent(msg sentMsg) {
 	if p == nil {
 		m.toList(msg.flash)
 		m.flashOK = ok
-		return
+		return nil
 	}
-	p.staged = map[string]view.Staged{}
+	for id, s := range p.staged {
+		if s.Kind != "skip" {
+			delete(p.staged, id)
+		}
+	}
 	p.recorded = append(p.recorded, msg.recorded...)
 	p.notes = append(p.notes, msg.notes...)
 	p.result = msg.res
@@ -558,12 +718,15 @@ func (m *Model) onSent(msg sentMsg) {
 	}
 	if len(msg.amended) > 0 {
 		p.notes = append(p.notes, strings.Join(msg.amended, ", ")+" amended; shown again")
-		p.queue = append(msg.amended, p.queue...)
 		m.advance()
-		return
+		return nil
+	}
+	for _, id := range p.order {
+		delete(m.drafts, id)
 	}
 	m.toList(strings.Join(append([]string{msg.flash}, p.notes...), "; "))
 	m.flashOK = ok
+	return m.queueDrafts(draftOp{clear: m.sid})
 }
 
 // ------------------------------------------------------------------- talk --
@@ -657,7 +820,7 @@ func (m *Model) finishTalk(resolved []string, flash string) {
 	}
 	p := m.p
 	for _, id := range resolved {
-		delete(p.staged, id)
+		m.unstage(id)
 		p.gone[id] = true
 	}
 	if flash != "" {
@@ -728,8 +891,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds := m.apply(msg.snap)
 		return m, tea.Batch(append(cmds, m.after(PollEvery, tickMsg{}))...)
 	case sentMsg:
-		m.onSent(msg)
-		return m, nil
+		return m, m.onSent(msg)
+	case draftsSavedMsg:
+		return m, m.onDraftsSaved(msg)
 	case talkMsg:
 		return m, m.onTalk(msg)
 	case resolvedMsg:
@@ -759,8 +923,8 @@ func (m *Model) menuLen() int {
 		}
 	case scReview:
 		return len(reviewMenu)
-	case scChange:
-		return len(m.entries()) + 1
+	case scJump:
+		return len(m.jumpItems())
 	case scTalkPick:
 		return len(m.talkOpen)
 	}
@@ -814,8 +978,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyWalk(k)
 	case scReview:
 		return m.keyReview(k)
-	case scChange:
-		return m.keyChange(k)
+	case scJump:
+		return m.keyJump(k)
 	case scTalkPick:
 		return m.keyTalkPick(k)
 	}
@@ -955,19 +1119,29 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		choice = "full"
 	case "esc":
 		choice = "back"
+	case "left", "shift+tab":
+		m.step(-1)
+	case "right":
+		if !m.step(1) {
+			m.advance()
+		}
+	case "l":
+		m.openJump()
 	}
 	switch choice {
 	case "":
 	case "back":
 		m.toList(m.p.stopped("back"))
 	case "skip":
-		delete(m.p.staged, d.ID)
-		m.advance()
+		return m, m.stage(view.Staged{Kind: "skip", Rev: d.Rev})
 	case "free":
 		if m.locked(d) {
 			return m, nil
 		}
 		m.ta.Reset()
+		if s, ok := m.p.staged[d.ID]; ok && s.Kind == "text" {
+			m.ta.SetValue(s.Text)
+		}
 		m.scr = scFree
 		return m, m.ta.Focus()
 	case "full":
@@ -981,7 +1155,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 			m.confirm = choice
 			m.scr = scConfirm
 		default:
-			m.stage(view.Staged{Kind: "pick", Option: choice, Rev: d.Rev})
+			return m, m.stage(view.Staged{Kind: "pick", Option: choice, Rev: d.Rev})
 		}
 	}
 	return m, nil
@@ -992,7 +1166,7 @@ func (m *Model) keyConfirm(k string) (tea.Model, tea.Cmd) {
 	d, ok := m.decision(m.p.cur)
 	m.scr = scWalk
 	if ok && k == "y" && !m.locked(d) && d.OptionText(m.confirm) == "Approve" {
-		m.stage(view.Staged{Kind: "pick", Option: m.confirm, Rev: d.Rev})
+		return m, m.stage(view.Staged{Kind: "pick", Option: m.confirm, Rev: d.Rev})
 	}
 	return m, nil
 }
@@ -1020,8 +1194,7 @@ func (m *Model) keyFree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scr = scWalk
 			return m, nil
 		}
-		m.stage(view.Staged{Kind: "text", Text: text, Rev: d.Rev})
-		return m, nil
+		return m, m.stage(view.Staged{Kind: "text", Text: text, Rev: d.Rev})
 	}
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
@@ -1043,27 +1216,64 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 		choice = reviewMenu[min(m.cursor, len(reviewMenu)-1)].value
 	case "esc":
 		choice = "cancel"
+	case "left", "shift+tab":
+		m.step(-1)
+	case "l":
+		choice = "change"
 	}
 	switch choice {
 	case "send":
-		m.busy = sendingText(len(m.p.staged), m.sname)
+		m.busy = sendingText(m.p.answers(), m.sname)
 		return m, m.sendCmd()
 	case "change":
-		m.scr, m.cursor = scChange, 0
+		m.openJump()
 	case "cancel":
 		m.toList(m.p.stopped("cancelled"))
 	}
 	return m, nil
 }
 
-func (m *Model) keyChange(k string) (tea.Model, tea.Cmd) {
-	entries := m.entries()
+// jumpItems is every open question of the pass with its draft, then Back.
+func (m *Model) jumpItems() []item {
+	var out []item
+	for _, id := range m.p.order {
+		d, ok := m.decision(id)
+		if !ok || d.Status != "open" || m.p.gone[id] {
+			continue
+		}
+		answer := "—"
+		if s, ok := m.p.staged[id]; ok {
+			var staged *view.Staged
+			if s.Kind != "skip" {
+				staged = &s
+			}
+			answer = view.StagedText(d, staged)
+		}
+		q := pyfmt.Clip(d.Question, max(m.w/3, 10))
+		out = append(out, item{id + "  " + q + " → " + answer, id})
+	}
+	return append(out, item{"Back", ""})
+}
+
+func (m *Model) openJump() {
+	m.jumpFrom, m.scr, m.cursor = m.scr, scJump, 0
+	for i, it := range m.jumpItems() {
+		if it.value == m.p.cur && it.value != "" {
+			m.cursor = i
+		}
+	}
+}
+
+func (m *Model) keyJump(k string) (tea.Model, tea.Cmd) {
+	items := m.jumpItems()
+	back := k == "esc" || (k == "enter" && items[min(m.cursor, len(items)-1)].value == "")
 	switch {
-	case k == "esc" || (k == "enter" && m.cursor >= len(entries)):
+	case back && m.jumpFrom == scWalk && m.p.cur != "":
+		m.show(m.p.cur)
+	case back:
 		m.scr, m.cursor = scReview, 0
 	case k == "enter":
-		m.p.queue = append([]string{entries[m.cursor].d.ID}, m.p.queue...)
-		m.advance()
+		m.show(items[m.cursor].value)
 	}
 	return m, nil
 }

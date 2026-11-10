@@ -431,7 +431,7 @@ func TestChangeOneRewalksOnlyThatQuestion(t *testing.T) {
 	d.ask("7", "s1", "Second?", "x", "y")
 	d.openWalk()
 	d.keys("a", "a", "down", "enter")
-	if d.m.scr != scChange {
+	if d.m.scr != scJump {
 		t.Fatal("not on change")
 	}
 	d.keys("down", "enter")

@@ -254,6 +254,9 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 			question, context, rec, stamp(), id); err != nil {
 			return err
 		}
+		if err := ib.deleteDraft(id); err != nil {
+			return err
+		}
 		if in.Options != nil {
 			if err := ib.exec("DELETE FROM decision_options WHERE decision_id = ?", id); err != nil {
 				return err
@@ -300,6 +303,9 @@ func (ib *Inbox) closeOne(id string, a closeArgs) (Decision, error) {
 		}
 		if a.kind == "pick" && d.OptionText(a.option) == "" {
 			return errf(2, "%s has no option %s", id, pyfmt.Repr(a.option))
+		}
+		if err := ib.deleteDraft(id); err != nil {
+			return err
 		}
 		return ib.exec("UPDATE decisions SET status = ?, answer_kind = ?, answer_option = ?,"+
 			" answer_text = ?, note = ?, delivery = ?, answered_at = ?,"+

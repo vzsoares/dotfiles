@@ -129,7 +129,7 @@ func TestV2FixtureMigratesToV3(t *testing.T) {
 	if r := f.zen(nil, "list", "--json"); r.code != 0 {
 		t.Fatalf("%+v", r)
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "3" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "4" {
 		t.Fatal(v)
 	}
 	if after := f.sqlite("SELECT * FROM decisions ORDER BY id"); after != before {

@@ -147,27 +147,31 @@ func reviewLines(entries []entry, width int, questionWidth int) []string {
 
 type key struct{ key, label string }
 
+// spare hints are dropped when the footer would take more than two rows;
+// both sit in the walk's menu too.
+var spare = map[string]bool{"t talk": true, "v full": true}
+
 // Footer labels stay short so the walk's keys fit in two rows at 40 columns;
 // ? adds the longer explanation.
 var footers = map[screen][]key{
 	scList:     {{"↑↓", ""}, {"enter", "open"}, {"q", "quit"}, {"?", "help"}},
 	scSession:  {{"↑↓", ""}, {"enter", ""}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
-	scWalk:     {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"esc", "back"}, {"?", "help"}},
-	scReview:   {{"↑↓", ""}, {"enter", ""}, {"esc", "cancel"}, {"?", "help"}},
-	scChange:   {{"↑↓", ""}, {"enter", ""}, {"esc", "back"}},
+	scWalk:     {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
+	scReview:   {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
+	scJump:     {{"↑↓", ""}, {"enter", "jump"}, {"esc", "back"}},
 	scFree:     {{"ctrl+d", "send"}, {"esc", "cancel"}},
 	scFull:     {{"↑↓", "scroll"}, {"esc", "back"}},
 	scTalkPick: {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote: {{"enter", "done"}, {"esc", "no note"}},
 	scConfirm:  {{"y", "approve"}, {"n/esc", "back"}},
-	scLocked:   {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"esc", "back"}, {"?", "help"}},
+	scLocked:   {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
 	scList:    "One row per asking session, oldest first. Open one to see its tasks and questions.",
 	scSession: "Answer walks the questions one by one; Talk opens the agent in a popup.",
-	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything; nothing is recorded until Send on the review screen. Approve on a prod ask asks y/N first.",
-	scReview:  "Send records the staged answers; Change one walks a single question again.",
+	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything. ← or shift+tab goes back a question, → forward, l lists them all. Answers are kept as drafts, even across esc and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
+	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the decisions terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
 }
@@ -182,11 +186,20 @@ func footerLines(s screen, width int, scroll bool) []string {
 		}
 		keys = append(append([]key(nil), keys...), hint)
 	}
-	parts := make([]string, len(keys))
-	for i, k := range keys {
-		parts[i] = strings.TrimSpace(k.key + " " + k.label)
+	wrap := func(all bool) []string {
+		var parts []string
+		for _, k := range keys {
+			part := strings.TrimSpace(k.key + " " + k.label)
+			if all || !spare[part] {
+				parts = append(parts, part)
+			}
+		}
+		return view.WrapRest(strings.Join(parts, " · "), width, "", "")
 	}
-	return view.WrapRest(strings.Join(parts, " · "), width, "", "")
+	if out := wrap(true); len(out) <= 2 {
+		return out
+	}
+	return wrap(false)
 }
 
 func helpLines(s screen, width int) []string {
