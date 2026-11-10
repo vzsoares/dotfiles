@@ -40,7 +40,6 @@ case "$1" in
     f=$(mktemp "$FAKE_AM/sends/send.XXXXXX")
     printf '%s\0' "$@" > "$f"
     if [ -f "$FAKE_AM/refuse_from" ] && [[ " $* " == *" --from "* ]]; then
-      rm "$f"
       echo "agent-manager: a sender name is for a caller with no session on this machine" >&2
       exit 1
     fi
@@ -388,6 +387,41 @@ def test_failed_send_exit_3_then_retry(fake: Path, conn: sqlite3.Connection) -> 
     assert cli("retry", "s1")[0] == 1
 
 
+def test_in_flight_sending_not_retryable_until_stale(
+    fake: Path, conn: sqlite3.Connection
+) -> None:
+    ask(conn)
+    conn.execute(
+        "UPDATE decisions SET status = 'answered', answer_kind = 'pick',"
+        " answer_option = 'a', delivery = 'sending', updated_at = ?",
+        (inbox.now(),),
+    )
+    assert inbox.undelivered(conn) == {}
+    assert cli("retry", "s1")[0] == 1
+    conn.execute("UPDATE decisions SET updated_at = '2000-01-01T00:00:00+00:00'")
+    assert cli("retry", "s1")[0] == 0
+    assert len(sends(fake)) == 1
+
+
+def test_held_with_nothing_open_is_retryable(
+    fake: Path, conn: sqlite3.Connection
+) -> None:
+    ask(conn)
+    inbox._close(conn, "7.1", "answered", "pick", option="a", delivery="held")
+    assert "retry s1" in inbox.render(conn, None)
+    assert cli("retry", "s1")[0] == 0
+    assert {d.delivery for d in inbox.select(conn)} == {"sent"}
+
+
+def test_pick_checked_against_current_options(
+    fake: Path, conn: sqlite3.Connection
+) -> None:
+    ask(conn, options=["x", "y", "z"])
+    inbox.amend(conn, "7.1", "s1", False, None, ["x", "y"], None, None)
+    assert cli("answer", "7.1", "c")[0] == 2
+    assert inbox.get(conn, "7.1").status == "open"
+
+
 def test_gone_session_fails_without_sending(
     fake: Path, conn: sqlite3.Connection
 ) -> None:
@@ -405,8 +439,23 @@ def test_sender_refused_falls_back_without_from(
     ask(conn)
     result = inbox.answer(conn, "7.1", "a", None)
     assert result is not None and result.ok
+    first, second = sends(fake)
+    assert first[3:5] == ["--from", "zen-inbox"]
+    assert "--from" not in second
+    assert second[2] == first[2]
+    assert inbox.get(conn, "7.1").delivery == "sent"
+
+
+def test_other_send_failure_does_not_drop_from(
+    fake: Path, conn: sqlite3.Connection
+) -> None:
+    (fake / "send_rc").write_text("1")
+    ask(conn)
+    result = inbox.answer(conn, "7.1", "a", None)
+    assert result is not None and not result.ok
     [argv] = sends(fake)
-    assert "--from" not in argv
+    assert "--from" in argv
+    assert inbox.get(conn, "7.1").delivery == "failed"
 
 
 def test_second_answer_refused(fake: Path, conn: sqlite3.Connection) -> None:

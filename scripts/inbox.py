@@ -72,8 +72,9 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -84,6 +85,9 @@ LETTERS = "abcd"
 SEND_LIMIT = 8000
 SEND_MARGIN = 200
 POLL_SECONDS = 2.0
+SEND_TIMEOUT = 30
+# A 'sending' row older than this is a crashed send, not one in flight.
+STALE_SECONDS = 2 * SEND_TIMEOUT
 AM_SOCKET = "agentmgr"
 
 SCHEMA = """
@@ -319,8 +323,9 @@ def am_sessions() -> list[dict[str, object]] | None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=SEND_TIMEOUT,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
     if result.returncode != 0:
         return None
@@ -355,21 +360,32 @@ SENDER_REFUSED = "a sender name is for a caller with no session"
 
 def send(session_id: str, message: str) -> tuple[bool, str, str]:
     """(ok, message_id, error) for one agent-manager send."""
-    status = session_status(find_session(am_sessions(), session_id))
-    if status == "gone":
+    sessions = am_sessions()
+    if (
+        sessions is not None
+        and session_status(find_session(sessions, session_id)) == "gone"
+    ):
         return False, "", f"session {session_id} is gone (dead, archived or missing)"
     argv = ["agent-manager", "send", session_id, message, "--from", "zen-inbox"]
-    try:
-        result = subprocess.run(
-            [*argv, "--json"], capture_output=True, text=True, check=False
+
+    def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [*cmd, "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=SEND_TIMEOUT,
         )
+
+    try:
+        result = run(argv)
         # Inside an agent pane --from is refused; the caller session sends instead.
         if result.returncode != 0 and SENDER_REFUSED in result.stderr:
-            result = subprocess.run(
-                [*argv[:4], "--json"], capture_output=True, text=True, check=False
-            )
+            result = run(argv[:4])
     except FileNotFoundError:
         return False, "", "agent-manager not found"
+    except subprocess.TimeoutExpired:
+        return False, "", f"agent-manager send timed out after {SEND_TIMEOUT}s"
     if result.returncode != 0:
         error = (result.stderr or result.stdout).strip()
         return False, "", error or f"agent-manager send exited {result.returncode}"
@@ -561,6 +577,8 @@ def _close(
     stamp = now()
     with immediate(conn):
         d = _open_owned(conn, decision_id, caller or "", force)
+        if kind == "pick" and not d.option_text(option):
+            raise InboxError(f"{decision_id} has no option {option!r}", 2)
         conn.execute(
             "UPDATE decisions SET status = ?, answer_kind = ?, answer_option = ?,"
             " answer_text = ?, note = ?, delivery = ?, answered_at = ?,"
@@ -586,31 +604,18 @@ def answer(
 ) -> Delivery | None:
     if (letter is None) == (text is None):
         raise InboxError("give an option letter or --text, not both", 2)
-    d = get(conn, decision_id)
-    if letter is not None:
-        if d.status == "open" and not d.option_text(letter):
-            raise InboxError(f"{decision_id} has no option {letter!r}", 2)
-        _close(
-            conn,
-            decision_id,
-            "answered",
-            "pick",
-            option=letter,
-            note=note,
-            delivery="held",
-        )
-    else:
-        if not (text or "").strip():
-            raise InboxError("--text must not be empty", 2)
-        _close(
-            conn,
-            decision_id,
-            "answered",
-            "text",
-            text=text or "",
-            note=note,
-            delivery="held",
-        )
+    if text is not None and not text.strip():
+        raise InboxError("--text must not be empty", 2)
+    d = _close(
+        conn,
+        decision_id,
+        "answered",
+        "pick" if letter is not None else "text",
+        option=letter or "",
+        text=text or "",
+        note=note,
+        delivery="held",
+    )
     return flush(conn, d.session_id)
 
 
@@ -633,6 +638,15 @@ def _deliver(conn: sqlite3.Connection, session_id: str, ids: list[str]) -> Deliv
     return Delivery(session_id, ids, ok, message_id, error)
 
 
+def _claim(conn: sqlite3.Connection, ids: list[str]) -> None:
+    stamp = now()
+    conn.executemany(
+        "UPDATE decisions SET delivery = 'sending', updated_at = ?, rev = rev + 1"
+        " WHERE id = ?",
+        [(stamp, i) for i in ids],
+    )
+
+
 def flush(conn: sqlite3.Connection, session_id: str) -> Delivery | None:
     """Send a session's held answers once none of its decisions are open."""
     with immediate(conn):
@@ -644,16 +658,26 @@ def flush(conn: sqlite3.Connection, session_id: str) -> Delivery | None:
         ]
         if not ids:
             return None
-        conn.executemany(
-            "UPDATE decisions SET delivery = 'sending', rev = rev + 1 WHERE id = ?",
-            [(i,) for i in ids],
-        )
+        _claim(conn, ids)
     return _deliver(conn, session_id, ids)
+
+
+# Failed, crashed mid-send, or held with nothing left open (closed but never flushed).
+UNDELIVERED = (
+    "(delivery = 'failed' OR (delivery = 'sending' AND updated_at < ?)"
+    " OR (delivery = 'held' AND NOT EXISTS (SELECT 1 FROM decisions o"
+    " WHERE o.session_id = decisions.session_id AND o.status = 'open')))"
+)
+
+
+def _stale_cutoff() -> str:
+    then = datetime.now(UTC) - timedelta(seconds=STALE_SECONDS)
+    return then.isoformat(timespec="seconds")
 
 
 def undelivered(conn: sqlite3.Connection) -> dict[str, list[Decision]]:
     out: dict[str, list[Decision]] = {}
-    for d in select(conn, "delivery IN ('failed', 'sending')"):
+    for d in select(conn, UNDELIVERED, (_stale_cutoff(),)):
         out.setdefault(d.session_id, []).append(d)
     return out
 
@@ -662,17 +686,14 @@ def retry(conn: sqlite3.Connection, session: str) -> Delivery:
     with immediate(conn):
         rows = select(
             conn,
-            "(session_id = ? OR session_name = ?) AND delivery IN ('failed', 'sending')",
-            (session, session),
+            f"(session_id = ? OR session_name = ?) AND {UNDELIVERED}",
+            (session, session, _stale_cutoff()),
         )
         if not rows:
             raise InboxError(f"no failed delivery for session {session}", 1)
         session_id = rows[0].session_id
         ids = [d.id for d in rows if d.session_id == session_id]
-        conn.executemany(
-            "UPDATE decisions SET delivery = 'sending', rev = rev + 1 WHERE id = ?",
-            [(i,) for i in ids],
-        )
+        _claim(conn, ids)
     return _deliver(conn, session_id, ids)
 
 
@@ -719,8 +740,11 @@ def render(conn: sqlite3.Connection, sessions: list[dict[str, object]] | None) -
         held.setdefault(d.session_id, []).append(d.id)
         names[d.session_id] = d.session_name
     for sid, ids in held.items():
-        waiting = ", ".join(open_ids(conn, sid)) or "flush"
-        lines.append(f"held · {names[sid]}: {', '.join(ids)} held until {waiting}")
+        waiting = open_ids(conn, sid)
+        if waiting:
+            lines.append(
+                f"held · {names[sid]}: {', '.join(ids)} held until {', '.join(waiting)}"
+            )
     for sid, batch in undelivered(conn).items():
         lines.append(
             f"failed · {batch[0].session_name}: {', '.join(d.id for d in batch)}"
@@ -827,7 +851,7 @@ class Poller(threading.Thread):
     def run(self) -> None:
         conn: sqlite3.Connection | None = None
         while True:
-            threading.Event().wait(POLL_SECONDS)
+            time.sleep(POLL_SECONDS)
             try:
                 conn = conn or connect(self.path)
                 current = fingerprint(conn)
@@ -892,7 +916,6 @@ def decision_menu(conn: sqlite3.Connection, d: Decision) -> str:
 def watch_loop(path: Path) -> None:
     conn = connect(path)
     poller = Poller(path)
-    poller.last = fingerprint(conn)
     poller.start()
     seen: set[str] | None = None
     flash = ""

@@ -55,6 +55,9 @@ before sending, so concurrent closers send the batch exactly once.
 `delivery`: `none` → `held` → `sending` → `sent` | `failed`. A failure (session dead,
 archived or missing, non-zero send, refusal) keeps the answers with the error, exits 3,
 and stays listed in the watcher until `zen-inbox retry <session>`.
+`retry` also picks up a `sending` claim older than 60 s (a send that died; sends
+time out at 30 s) and `held` answers whose session has nothing left open (closed but
+never flushed).
 
 ## Gotchas
 
