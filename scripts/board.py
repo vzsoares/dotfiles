@@ -24,8 +24,8 @@
 #      zen-board next [--json]
 #      zen-board start <task> [--json]
 #      zen-board done <task> [--note TEXT] [--json]
-#      zen-board add <title> --project P [--inbox] [--human-only]
-#                    [--priority low|medium] [--related <task>]... [--json]
+#      zen-board add <title> --project P [--inbox] [--human-only |
+#                    --human-approval] [--priority low|medium] [--related <task>]... [--json]
 #      zen-board priority <task> low|medium|none [--json]
 #      zen-board relate <task> <task>... [--json]
 #      zen-board note <task> <text> [--json]
@@ -35,6 +35,8 @@
 #      --project P    A vault projects[].name or agent_groups key (any case).
 #      --inbox        add: leave Status empty instead of To Do.
 #      --human-only   add: set the Human Only tag.
+#      --human-approval  add: set the Human Approval tag; with --human-only
+#                     both tags are set.
 #      --priority P   add: set Priority (low or medium; High is the user's).
 #      --related T    add: link T in Related Tasks (repeatable).
 #      --note TEXT    done: append a dated note after the status change.
@@ -108,6 +110,7 @@ BLOCKED = "Blocked"
 DONE = "✅ Done"
 INBOX = ""
 HUMAN_ONLY = "Human Only"
+HUMAN_APPROVAL = "Human Approval"
 HIGH = "High"
 AGENT_PRIORITIES = {"low": "Low", "medium": "Medium"}
 PRIORITY_ORDER = [HIGH, "Medium", "Low"]
@@ -528,6 +531,7 @@ def add_task(
     project: str,
     inbox: bool,
     human_only: bool,
+    human_approval: bool = False,
     priority: str = "",
     related: list[str] | None = None,
 ) -> Task:
@@ -539,8 +543,13 @@ def add_task(
     }
     if not inbox:
         props[STATUS] = {"select": {"name": TODO}}
-    if human_only:
-        props[TAGS] = {"multi_select": [{"name": HUMAN_ONLY}]}
+    tags = [
+        name
+        for name, on in ((HUMAN_ONLY, human_only), (HUMAN_APPROVAL, human_approval))
+        if on
+    ]
+    if tags:
+        props[TAGS] = {"multi_select": [{"name": t} for t in tags]}
     if name:
         props[PRIORITY] = {"select": {"name": name}}
     if links:
@@ -660,6 +669,9 @@ def add(
     project: str = typer.Option(..., "--project", help="Project name or group."),
     inbox: bool = typer.Option(False, "--inbox", help="Leave Status empty."),
     human_only: bool = typer.Option(False, "--human-only", help="Tag Human Only."),
+    human_approval: bool = typer.Option(
+        False, "--human-approval", help="Tag Human Approval."
+    ),
     priority: str = typer.Option("", "--priority", help="low or medium."),
     related: list[str] = RELATED_OPT,
     as_json: bool = JSON_OPT,
@@ -668,7 +680,15 @@ def add(
     try:
         client, cfg = connect()
         created = add_task(
-            client, cfg, title, project, inbox, human_only, priority, related
+            client,
+            cfg,
+            title,
+            project,
+            inbox,
+            human_only,
+            human_approval,
+            priority,
+            related,
         )
     except BoardError as exc:
         raise fail(exc) from exc

@@ -65,12 +65,21 @@ The relation is two-way, so one write links both pages.
 
 ### Tags (labels)
 
-- `Human Only` — a step only the user can do (visual review, messages to
-  colleagues, CMS edits, GitHub settings). When a session leaves such steps
-  behind, create one task per step with this tag so the board says what to do next.
-  One task with a checklist is fine when the steps share a kind or a release (device
-  checks, a prod rollout); append new items to an open checklist task instead of
-  creating a new one.
+- `Human Only` — a step that needs the user's own eyes, hands, accounts or secrets:
+  visual and device checks, steps on another machine, messages or calls to people,
+  creating or typing secrets and API keys, logins to outside dashboards and apps,
+  purchases, irreversible destruction (DB drops, deleting prod stacks). When a session
+  leaves such steps behind, create one task per step with this tag so the board says
+  what to do next. One task with a checklist is fine when the steps share a kind or a
+  release (device checks, a prod rollout); append new items to an open checklist task
+  instead of creating a new one.
+- `Human Approval` — a step an agent can run from this machine with credentials it
+  already has, once the user approves: pushes, remote branch deletes, edits to
+  `.claude/settings.json` or permissions, tool installs, `gh` repo settings, prod
+  releases, deploys and migrations, archiving data, scripts run against prod. It goes
+  to the inbox as an approval ask (see Agent roles), not as a Done/Later request.
+  If the user answers "I'll do it myself", re-tag the task `Human Only` and keep the
+  ask's commands in it.
 - `Has Data` — the task page carries data/notes worth reading before starting.
 
 ### Operations
@@ -78,7 +87,8 @@ The relation is two-way, so one write links both pages.
 **check, next, start, done, add and note run `zen-board` first** (Bash; see
 `scripts/README.md`): `zen-board check`, `next`, `start <id>`,
 `done <id> --note "…"`, `add "<title>" --project <name or group> [--inbox]
-[--human-only] [--priority low|medium] [--related <id>]...` (prints the new ID),
+[--human-only] [--human-approval] [--priority low|medium] [--related <id>]...`
+(prints the new ID),
 `priority <id> low|medium|none`, `relate <id> <id>...` (adds to the existing links,
 never drops one), `note <id> "…"`. It reads the IDs from the vault
 config and `NOTION_TOKEN` from the env or `~/.zshrc.local`. When it exits non-zero
@@ -161,7 +171,9 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
   decisions (see Decision inbox), keeps the `decisions` watcher running, records answers
   the user gives in chat with `zen-inbox answer` (never a `--prod` ask: the user
-  approves those in the panel), and lists Human Only work. On the user's `go #<id>` in
+  approves those in the panel), runs each Human Approval step the user approves (or hands
+  it to the orchestrator; if auto mode blocks it, it asks for `go #<id>`), re-tags a step
+  `Human Only` when the user answers "I'll do it myself", and lists Human Only work. On the user's `go #<id>` in
   its chat it spawns that queue entry's worker (`worker-rules`, tier and repo from the
   entry) and sends the orchestrator the session id; if auto mode blocks it too, it says
   so in one line. It never waits on sessions, merges or cuts dev releases; a prod
@@ -261,8 +273,14 @@ orchestrator:
 - leaves **done** to `zen-merge`'s board phase (tag and shas in the note); on
   exit 7 it reruns `zen-merge` or marks it Done via MCP, and on `board skipped`
   (no `Task:` trailer) it marks it Done itself
-- files open review findings as To Do tasks, and device, data, remote-settings or
-  messages-to-people steps as Human Only tasks
+- files open review findings as To Do tasks, and classifies each leftover step: Human
+  Only (device, secrets, messages to people, outside logins, purchases, irreversible
+  destruction) becomes a Human Only task; Human Approval (an agent can run it from this
+  machine once approved: pushes, settings edits, installs, deploys, prod scripts)
+  becomes a Human Approval task plus an ask stating the exact commands:
+  `zen-inbox ask <task> -q "<what the agent will run>. Approve?" -o "Approve: an agent
+  runs it" -o "I'll do it myself" -o "Later" --rec a` (`--prod …` for prod actions,
+  which only the user answers)
 - leaves cleanup to `zen-merge`: archive the session, `git worktree remove <path>`,
   `git branch -d <branch>` (`-D` once `git merge-base --is-ancestor <branch> dev`
   confirms it); then sends chief one line

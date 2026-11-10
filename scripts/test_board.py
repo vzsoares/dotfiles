@@ -395,6 +395,26 @@ def test_add_inbox_and_human_only(fake: Fake) -> None:
     assert props["Tags"] == {"multi_select": [{"name": "Human Only"}]}
 
 
+def test_add_human_approval_and_both_tags(fake: Fake) -> None:
+    fake.push(page(603))
+    code, _, _ = run("add", "ship it", "--project", "Me", "--human-approval")
+    assert code == 0
+    props = board.obj(fake.calls[0][2]["properties"])
+    assert props["Tags"] == {"multi_select": [{"name": "Human Approval"}]}
+    fake.push(page(604))
+    run("add", "both", "--project", "Me", "--human-only", "--human-approval")
+    props = board.obj(fake.calls[1][2]["properties"])
+    assert props["Tags"] == {
+        "multi_select": [{"name": "Human Only"}, {"name": "Human Approval"}]
+    }
+
+
+def test_check_json_lists_human_approval_tag(fake: Fake) -> None:
+    fake.push(results(page(5, tags=("Human Approval",))))
+    (task,) = json.loads(run("check", "--json")[1])
+    assert task["tags"] == ["Human Approval"]
+
+
 def test_add_priority_and_related(fake: Fake) -> None:
     fake.push(results(page(570, page_id=PAGE)))
     fake.push(results(page(571, page_id=WORK)))
