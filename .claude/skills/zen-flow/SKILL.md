@@ -128,10 +128,12 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   spec-writer writes its spec into the body of the task it was spawned for (its only
   board write).
 - Prod actions: a push, tag, release or deploy that targets `prod`, `main` or
-  `master` is filed as `zen-inbox ask <task> -q "<action> <repo> <branch>@<sha>?"
-  -o "Approve" -o "Hold" --rec a` and runs only after "Approve", once per action, in
-  every repo (Approva included). Workers never run one; chief or the orchestrator
-  may after an approved ask. Never ff-merge a worker branch into `prod`.
+  `master` is filed as `zen-inbox ask <task> --prod <push|tag|release|deploy>
+  --repo <repo> --branch <branch> --sha <sha>`, approved once per action in the
+  panel, in every repo (Approva included). `zen-release --approval <id>` consumes
+  it and a `git push` checks it first. Agents never answer a `--prod` ask. Workers
+  never run one; chief or the orchestrator may after my approval. Never ff-merge a
+  worker branch into `prod`.
 
 ## Linking tasks to code
 
