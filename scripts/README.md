@@ -17,7 +17,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. |
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
-| `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable. |
+| `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
 | `inbox.py` | `zen-inbox` | Decision inbox: agents `ask`, a gum watcher answers by pick, free text or talk; batched delivery. |

@@ -121,7 +121,7 @@ def _make(
             }
         ]
     )
-    monkeypatch.setattr(merge, "agent_manager", fake.agent_manager)
+    monkeypatch.setattr(merge._sessions, "agent_manager", fake.agent_manager)
     monkeypatch.setattr(merge, "run_release", fake.release)
     monkeypatch.setattr(merge, "run_board", fake.board)
     monkeypatch.setattr(merge, "DRY_RUN", False)
@@ -183,6 +183,15 @@ def test_dry_run_changes_nothing(setup: Setup, monkeypatch: pytest.MonkeyPatch) 
     assert setup.worktree.exists()
     assert not any(c[0] == "archive" for c in setup.fake.calls)
     assert not merge.state_path("task").exists()
+
+
+def test_dry_run_summary_and_json(setup: Setup) -> None:
+    res = CliRunner().invoke(merge.app, ["task", "--dry-run"])
+    assert res.exit_code == 0
+    assert "dry-run, nothing changed" in res.stdout
+    assert "cleanup ok" not in res.stdout
+    res = CliRunner().invoke(merge.app, ["task", "--dry-run", "--json"])
+    assert json.loads(res.stdout)["cleanup"] == "dry-run"
 
 
 # --------------------------------------------------------------------------- #

@@ -130,13 +130,6 @@ def mutate(cwd: str | Path, cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
 
 
-def agent_manager(*args: str) -> tuple[int, str]:
-    result = subprocess.run(
-        ["agent-manager", *args], capture_output=True, text=True, check=False
-    )
-    return result.returncode, result.stdout
-
-
 def run_release(main: str) -> subprocess.CompletedProcess[str]:
     return mutate(main, ["zen-release", "--dev", "--yes", "--bump", "patch"])
 
@@ -155,6 +148,20 @@ def load_gate() -> ModuleType:
     sys.modules["zen_gate"] = module
     spec.loader.exec_module(module)
     return module
+
+
+def load_sessions() -> ModuleType:
+    path = Path(__file__).resolve().parent / "lib" / "sessions.py"
+    spec = importlib.util.spec_from_file_location("zen_sessions", path)
+    if spec is None or spec.loader is None:
+        raise Stop(EXIT_ERROR, f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["zen_sessions"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_sessions = load_sessions()
 
 
 def branch_exists(repo: str, name: str) -> bool:
@@ -258,19 +265,10 @@ def clear_state(state: State) -> None:
 
 
 def phase_resolve(state: State, base: str) -> None:
-    code, out = agent_manager("sessions", "--json")
-    if code != 0:
+    sessions = _sessions.list_sessions()
+    if sessions is None:
         raise Stop(EXIT_ERROR, "agent-manager sessions failed")
-    data = json.loads(out or "[]")
-    sessions = (
-        [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
-    )
-    named = [s for s in sessions if s.get("name") == state.session]
-    match = (
-        next((s for s in sessions if s.get("id") == state.session), None)
-        or next((s for s in named if not s.get("archived")), None)
-        or next(iter(named), None)
-    )
+    match = _sessions.find_session(state.session, sessions)
     if match is None:
         raise Stop(EXIT_ERROR, f"unknown session {state.session!r}")
     worktree, branch = match.get("directory"), match.get("branch")
@@ -372,7 +370,7 @@ def phase_archive(state: State) -> None:
             file=sys.stderr,
         )
         return
-    code, _ = agent_manager("archive", state.session_id, "--json")
+    code, _ = _sessions.agent_manager("archive", state.session_id, "--json")
     if code != 0:
         raise Stop(EXIT_ERROR, f"agent-manager archive {state.session_id} failed")
 
@@ -453,6 +451,8 @@ def land(session: str, base: str, restart: bool = False) -> State:
 
 def summary_line(state: State) -> str:
     task = f"#{state.task_id}" if state.task_id else "-"
+    if DRY_RUN:
+        return f"{task} · {state.tag} · dry-run, nothing changed"
     board = " · board skipped" if state.board == "skipped" else ""
     return f"{task} · {state.tag} · cleanup ok{board}"
 
@@ -510,7 +510,7 @@ def main(
                     "tag": state.tag,
                     "base": state.base,
                     "branch": state.branch,
-                    "cleanup": "ok",
+                    "cleanup": "dry-run" if dry_run else "ok",
                     "board": state.board,
                 }
             )
