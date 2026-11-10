@@ -51,9 +51,14 @@ def test_list_sessions_parses_list_and_drops_junk(fake_am: Path) -> None:
     assert sessions.list_sessions() == [{"id": "a"}, {"id": "b"}]
 
 
-@pytest.mark.parametrize("body", ["not json", '{"id": "a"}', ""])
-def test_list_sessions_tolerates_bad_output(fake_am: Path, body: str) -> None:
+@pytest.mark.parametrize("body", ["not json", '{"id": "a"}'])
+def test_list_sessions_none_on_bad_output(fake_am: Path, body: str) -> None:
     (fake_am / "sessions.json").write_text(body)
+    assert sessions.list_sessions() is None
+
+
+def test_list_sessions_empty_output_is_empty_list(fake_am: Path) -> None:
+    (fake_am / "sessions.json").write_text("")
     assert sessions.list_sessions() == []
 
 
@@ -79,6 +84,20 @@ def test_find_session_live_name_beats_archived() -> None:
     live = _s("new")
     assert sessions.find_session("w", [old, live]) is live
     assert sessions.find_session("w", [live, old]) is live
+
+
+def test_find_session_tiers_live_then_unarchived_then_any() -> None:
+    old = _s("old", archived=True)
+    dead = _s("dead", status="dead")
+    live = _s("live")
+    assert sessions.find_session("w", [old, dead]) is dead
+    assert sessions.find_session("w", [old, dead, live]) is live
+    assert sessions.find_session("w", [dead, live, old]) is live
+
+
+def test_find_session_same_tier_uses_list_order() -> None:
+    first, second = _s("a"), _s("b")
+    assert sessions.find_session("w", [first, second]) is first
 
 
 def test_find_session_falls_back_to_archived() -> None:

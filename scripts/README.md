@@ -89,7 +89,10 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   it from Bash with `run_in_background`; `--new` ignores a message already there.
   A live worker with no reply yet is waited on for up to 10m, then reported idle; an
   archived, stopped, dead or errored session is dead (20) unless it ended with a done
-  marker. Re-run it after an agent-manager restart, which kills background runs.
+  marker. A session counts as gone only when a readable, non-empty list shows it dead
+  or omits it twice 5s apart; an unreadable or empty list keeps it waiting. An
+  unreadable list at start-up exits 2 ("agent-manager sessions failed").
+  Re-run it after an agent-manager restart, which kills background runs.
 - **zen-gate** scans only added lines (docs skipped). `shortcut:` markers print as
   follow-ups, not failures. `.zen-gate-allow` takes `<path glob> [rule]` per line.
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to

@@ -22,16 +22,17 @@ def agent_manager(*args: str) -> tuple[int, str]:
     return result.returncode, result.stdout
 
 
-def parse_sessions(out: str) -> list[dict[str, object]]:
+def parse_sessions(out: str) -> list[dict[str, object]] | None:
+    """Session dicts from JSON output; None when it is not a JSON list."""
     try:
         data = json.loads(out or "[]")
     except json.JSONDecodeError:
-        return []
-    return [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
+        return None
+    return [s for s in data if isinstance(s, dict)] if isinstance(data, list) else None
 
 
 def list_sessions() -> list[dict[str, object]] | None:
-    """Sessions from `sessions --json`; None when agent-manager is unavailable."""
+    """Sessions from `sessions --json`; None when agent-manager fails or lies."""
     code, out = agent_manager("sessions", "--json")
     return parse_sessions(out) if code == 0 else None
 
@@ -47,9 +48,14 @@ def is_live(session: dict[str, object]) -> bool:
 def find_session(
     key: str, sessions: list[dict[str, object]]
 ) -> dict[str, object] | None:
-    """Match by id, then by name; archived sessions keep names, so prefer live."""
+    """Match by id, then by name: live, then unarchived, then any (list order)."""
     for s in sessions:
         if s.get("id") == key:
             return s
     named = [s for s in sessions if s.get("name") == key]
-    return next((s for s in named if is_live(s)), None) or next(iter(named), None)
+    tiers = (is_live, lambda s: not s.get("archived"), lambda s: True)
+    for tier in tiers:
+        match = next((s for s in named if tier(s)), None)
+        if match is not None:
+            return match
+    return None

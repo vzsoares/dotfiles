@@ -348,7 +348,7 @@ def test_fresh_worker_dead_returns_at_once(
         {"archived": True},
         None,
     ],
-    ids=["dead", "errored", "not-running", "archived", "absent"],
+    ids=["dead", "errored", "not-running", "archived", "missing-twice"],
 )
 def test_wait_without_session_rereads_dead(
     projects: Path, fake_am: Path, current: dict[str, object] | None
@@ -356,10 +356,60 @@ def test_wait_without_session_rereads_dead(
     s = _session("/repo", status="working")
     _write_transcript(projects, s, [_assistant("half way")])
     _reached(fake_am, None)
-    listed = [] if current is None else [{**s, **current}]
+    other = _session("/other", sid="other1")
+    listed = [other] if current is None else [{**s, **current}]
     (fake_am / "sessions.json").write_text(json.dumps(listed))
     ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
     assert (ev.state, ev.exit_code) == ("dead", 20)
+
+
+@pytest.mark.parametrize("body", [None, "", "[]", "not json", '{"id": "x"}'])
+def test_wait_without_session_unreadable_list_keeps_waiting(
+    projects: Path, fake_am: Path, body: str | None
+) -> None:
+    s = _session("/repo", status="working")
+    _write_transcript(projects, s, [_assistant("half way")])
+    _reached(fake_am, None)
+    if body is not None:
+        (fake_am / "sessions.json").write_text(body)
+    ev = zen_await.await_sessions([s], timeout=0.5, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("timeout", 124)
+
+
+def test_wait_without_session_retries_until_readable(
+    projects: Path, fake_am: Path
+) -> None:
+    s = _session("/repo", status="working")
+    _write_transcript(projects, s, [_assistant("half way")])
+    _reached(fake_am, None)
+    timer = threading.Timer(
+        0.08,
+        (fake_am / "sessions.json").write_text,
+        (json.dumps([{**s, "status": "dead"}]),),
+    )
+    timer.start()
+    ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
+    timer.join()
+    assert (ev.state, ev.exit_code) == ("dead", 20)
+
+
+def test_wait_without_session_one_miss_is_not_dead(
+    projects: Path, fake_am: Path
+) -> None:
+    s = _session("/repo", status="working")
+    other = _session("/other", sid="other1")
+    _write_transcript(projects, s, [_assistant("half way")])
+    _reached(fake_am, None)
+    (fake_am / "sessions.json").write_text(json.dumps([other]))
+    timer = threading.Timer(
+        0.02,
+        (fake_am / "sessions.json").write_text,
+        (json.dumps([other, {**s, "status": "idle"}]),),
+    )
+    timer.start()
+    ev = zen_await.await_sessions([s], timeout=5, root=projects, poll=0.01)
+    timer.join()
+    assert (ev.state, ev.exit_code) == ("idle", 11)
 
 
 def test_wait_without_session_dead_with_marker_is_done(
@@ -430,6 +480,15 @@ def test_cli_summary_reports_every_session(
         "worker-ccc",
     ]
     assert text.exit_code == 11
+
+
+@pytest.mark.parametrize("body", ["not json", '{"id": "a"}'])
+def test_cli_bad_sessions_json_is_a_manager_failure(fake_am: Path, body: str) -> None:
+    (fake_am / "sessions.json").write_text(body)
+    out = CliRunner().invoke(zen_await.app, ["--summary", "worker-aaa"])
+    assert out.exit_code == 2
+    assert "agent-manager sessions failed" in out.output
+    assert "unknown session" not in out.output
 
 
 def test_cli_summary_unknown_among_several(

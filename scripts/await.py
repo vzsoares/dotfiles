@@ -40,9 +40,10 @@
 #      A live session that is not waiting and has no end_turn yet (a worker
 #      still reading its spec) keeps being waited on; after 10m without a reply
 #      it returns idle. A session that is archived, not running, dead or errored
-#      is dead unless its last message carries a done marker. Session parsing
-#      lives in lib/sessions.py. A background run dies with the shell that
-#      started it (e.g. on an agent-manager restart); re-run it.
+#      is dead unless its last message carries a done marker; an unreadable or
+#      empty sessions list never proves that (retried, then keeps waiting).
+#      Session parsing lives in lib/sessions.py. A background run dies with
+#      the shell that started it (e.g. on an agent-manager restart); re-run it.
 #
 #  EXIT CODES
 #      0    done: `WORKER_DONE <id>` or `SPEC_READY <id>`
@@ -92,6 +93,7 @@ STATE_EXIT = {
 
 WAIT_SLICE = "5m"
 STARTUP_GRACE = 600
+REREAD_TRIES = 4
 SUMMARY_MAX = 1500
 
 MARKER_RE = re.compile(r"\b(WORKER_DONE|SPEC_READY)\s+#?(\d+)\b")
@@ -268,13 +270,36 @@ def event_for(session: dict[str, object], root: Path | None = None) -> Event:
     return Event(session=name, task_id=task_id, state=state, summary=summarize(text))
 
 
-def session_alive(session_id: str) -> bool:
-    """True if the manager still lists the session as live (or is unreachable)."""
-    known = list_sessions()
-    if known is None:
-        return True
-    found = find_session(session_id, known)
-    return found is not None and is_live(found)
+def reread_session(session_id: str, gap: float) -> tuple[str, dict[str, object] | None]:
+    """Look a session up again: ("found", s), ("missing", None) or ("unknown", None).
+
+    Missing needs two consecutive readable, non-empty lists without it, `gap`
+    apart. A failed, unreadable or empty read never proves anything: it resets
+    that count and is retried, then the answer is unknown.
+    """
+    misses = 0
+    for attempt in range(REREAD_TRIES):
+        if attempt:
+            time.sleep(gap)
+        known = list_sessions()
+        if not known:
+            misses = 0
+            continue
+        found = find_session(session_id, known)
+        if found is not None:
+            return "found", found
+        misses += 1
+        if misses == 2:
+            return "missing", None
+    return "unknown", None
+
+
+def session_alive(session_id: str, gap: float = 5.0) -> bool:
+    """False only when the manager shows the session dead or gone."""
+    state, found = reread_session(session_id, gap)
+    if state == "found" and found is not None:
+        return is_live(found)
+    return state == "unknown"
 
 
 def fmt_duration(seconds: float) -> str:
@@ -323,7 +348,7 @@ def await_sessions(
                 if not out.strip().startswith("{"):
                     # Archived or deleted sessions get a refusal, not a JSON result;
                     # a manager hiccup also lands here, so confirm before calling it.
-                    if session_alive(sid):
+                    if session_alive(sid, poll * 5):
                         time.sleep(poll * 5)
                         continue
                     return Event(
@@ -338,8 +363,9 @@ def await_sessions(
                 current = result.get("session")
                 if not isinstance(current, dict):
                     # The startup snapshot cannot tell dead from idle.
-                    known = list_sessions()
-                    found = find_session(sid, known) if known is not None else s
+                    state, found = reread_session(sid, poll * 5)
+                    if state == "unknown":
+                        continue
                     current = found if found is not None else {**s, "running": False}
                 path = transcript_path(current, root)
                 uuid = last_end_turn(path)[0] if path else ""
@@ -397,7 +423,10 @@ def main(
     as_json: bool = typer.Option(False, "--json", help="JSON output."),
 ) -> None:
     """Wait for a session to stop; exit 0 done, 10 escalation, 11 idle, 20 dead, 124 timeout."""
-    known = list_sessions() or []
+    known = list_sessions()
+    if known is None:
+        print("zen-await: agent-manager sessions failed", file=sys.stderr)
+        raise typer.Exit(EXIT_USAGE)
     watched: list[dict[str, object]] = []
     for key in sessions:
         found = find_session(key, known)
