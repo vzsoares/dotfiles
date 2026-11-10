@@ -15,6 +15,10 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 |---|---|---|
 | `commit.py` | `zen-commit` | Conventional-Commit helper: stage → secret-scan → AI message (claude haiku) → commit. |
 | `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. |
+| `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
+| `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
+| `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable. |
+| `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
 | `env-build.py` | `zen-env` | Resolves `.env.example` parameters from AWS SSM Parameter Store. |
 | `hash.sh` | `zen-hash` | `sha256sum` helper: hashes files given as args, or gum-picks them. |
@@ -63,6 +67,31 @@ releases in place (no merge, no checkout). `--source`/`--target` override the
 saved config for one run. See `docs/wiki/architecture/release-tooling.md` for the
 full design, `BACKLOG.md` for future work.
 
+### Agent orchestration (zen-await, zen-gate, zen-merge, zen-sweep)
+
+Repeated orchestrator work as scripts, so an agent only wakes on a non-zero exit.
+All take `--json`; the header of each script is the full reference.
+
+```
+zen-await <session>... [--timeout 4h] [--new]   # 0 done · 10 escalation · 11 idle · 20 dead · 124 timeout
+zen-await --summary <session>                   # classify the last message now
+zen-gate [--base dev]                           # 0 clean · 1 hits (file:line rule)
+zen-merge <session> [--base dev] [--dry-run]    # 0 landed · 2 gate · 3 not ff · 4 dirty · 5 release · 6 refused
+zen-sweep                                       # 0 clean · 1 findings; never changes anything
+```
+
+- **zen-await** loops `agent-manager wait` and reads the last `end_turn` text from
+  `~/.claude/projects/<slug>/<agent_session_id>.jsonl`. `WORKER_DONE <id>` /
+  `SPEC_READY <id>` = done; `failing · tried · cause · needs` = escalation. Agents run
+  it from Bash with `run_in_background`; `--new` ignores a message already there.
+- **zen-gate** scans only added lines (docs skipped). `shortcut:` markers print as
+  follow-ups, not failures. `.zen-gate-allow` takes `<path glob> [rule]` per line.
+- **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
+  resume. A repo without `dev` lands on its main checkout's branch and reports
+  "push pending". It refuses prod, main and the zen-release target branch.
+- **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
+  `~/code/personal/*`, and every worktree of each.
+
 ### zen-pgp
 ```
 zen-pgp                    # interactive menu
@@ -108,6 +137,10 @@ zen-pgp decrypt [FILE]     # auto-detects symmetric vs. key-based
 ```
 uv run scripts/test_commit.py
 uv run scripts/test_release.py
+uv run scripts/test_await.py
+uv run scripts/test_gate.py
+uv run scripts/test_merge.py
+uv run scripts/test_sweep.py
 ```
 
 ### zen-config
