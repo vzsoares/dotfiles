@@ -21,6 +21,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
 | `inbox.py` | `zen-inbox` | Decision inbox: agents `ask`, a gum watcher answers by pick, free text or talk; batched delivery. |
+| `telemetry/` (Go) | `zen-telemetry` | Hook that logs every agent tool call to `zen-flow.db`; weekly time-sink report for chief. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
 | `env-build.py` | `zen-env` | Resolves `.env.example` parameters from AWS SSM Parameter Store. |
 | `hash.sh` | `zen-hash` | `sha256sum` helper: hashes files given as args, or gum-picks them. |
@@ -135,6 +136,22 @@ comes from the vault `config/zen-flow.json`. `NOTION_TOKEN` is read from the env
 else from the `export NOTION_TOKEN=` line in `~/.zshrc.local`. Exit 0 ok · 1 API ·
 2 usage or not found · 3 token/config missing. Block, reopen, triage and Won't Do
 stay on the Notion MCP (zen-flow skill).
+### zen-telemetry
+```
+zen-telemetry hook                              # PostToolUse/PostToolUseFailure hook; reads stdin, always exits 0
+zen-telemetry import [--days 31] [--dry-run]    # one-time import from ~/.claude/projects transcripts
+zen-telemetry report [--days 7] [--slow 30s] [--json] [--due]   # --due: exit 10 if this week is done
+zen-telemetry filed <week> <sink-key> <task-id> # chief records a filed task
+zen-telemetry mark-done <week>                  # chief closes the week
+```
+A Go module in `scripts/telemetry/` (modernc sqlite, no cgo), built by `./link-bin` to
+`scripts/telemetry/bin/` (gitignored), because it runs on every tool call. It logs
+only sessions with `AGENT_MANAGER_SESSION_ID` set, into the `tool_*`/`telemetry_*`
+tables of `zen-flow.db` beside zen-inbox, and never touches `user_version`. Secrets are
+redacted before storage; MCP inputs keep key names only; tool output keeps its size
+only. `report` ranks time sinks (Agent/Task, AskUserQuestion, ExitPlanMode and
+background runs excluded) and compares tools that do the same job per
+`scripts/telemetry/jobs.json`. See `docs/wiki/architecture/agent-telemetry.md`.
 
 ### zen-pgp
 ```
@@ -168,6 +185,7 @@ zen-pgp decrypt [FILE]     # auto-detects symmetric vs. key-based
 ## Dependencies
 
 - `uv` — runs the Python scripts
+- `go` — builds `zen-telemetry` (`./link-bin` runs `go build`)
 - `gum` — interactive UI (commit, release, pgp, run)
 - `fzf` — fuzzy matching in `run.sh`
 - `gpg` — `zen-pgp`
@@ -187,6 +205,7 @@ uv run scripts/test_merge.py
 uv run scripts/test_board.py
 uv run scripts/test_sweep.py
 uv run scripts/test_inbox.py
+(cd scripts/telemetry && gofmt -l . && go vet ./... && go test ./...)
 ```
 
 ### zen-config

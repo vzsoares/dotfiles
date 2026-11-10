@@ -1,0 +1,13 @@
+{
+  "jobs": {
+    "board": ["mcp__claude_ai_Notion__*", "bash:zen-board"],
+    "search": ["Grep", "Glob", "bash:rg", "bash:grep", "bash:find", "bash:fd"],
+    "read": ["Read", "bash:cat", "bash:sed", "bash:head", "bash:tail"],
+    "web": ["WebFetch", "WebSearch", "mcp__claude-in-chrome__*", "bash:curl"],
+    "agent control": ["mcp__agent-manager__*", "bash:agent-manager*"],
+    "waiting": ["bash:zen-await", "bash:agent-manager wait", "mcp__agent-manager__wait_for_session"],
+    "prompt UI": ["bash:gum"]
+  },
+  "subcommands": ["agent-manager"],
+  "exclude": ["Agent", "Task", "AskUserQuestion", "ExitPlanMode"]
+}

@@ -133,7 +133,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   decisions (see Decision inbox), keeps the `decisions` watcher running, records answers
   the user gives in chat with `zen-inbox answer`, and lists Human Only work. It never
   waits on sessions, merges or releases. After an agent-manager restart it revives the
-  orchestrator and the watcher.
+  orchestrator and the watcher. At its first start each ISO week it runs the telemetry
+  review (see Telemetry).
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
   scope, required tests, expected load, settled decisions, out of scope, Human Only
   steps. Open decisions go to the inbox, one `zen-inbox ask` each; the answers arrive
@@ -166,6 +167,18 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
   trees, unpushed work, stashes, orphan branches and worktrees.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
+- `zen-telemetry` (hook on every agent tool call; chief weekly): see Telemetry.
+
+### Telemetry
+
+A `PostToolUse`/`PostToolUseFailure` hook (`zen-telemetry hook`, async) logs every tool
+call of an agent-manager session into `zen-flow.db` (`tool_*` tables; secrets redacted,
+MCP inputs as key names only). Chief, at its first start each ISO week, runs
+`zen-telemetry report --due --json`: exit 10 means done, skip. Otherwise it files the
+first 3 `sinks` with no open task yet as To Do tasks under #588's project (title = the
+sink's `title`, body = its `markdown`), records each with `zen-telemetry filed <week>
+<sink key> <task id>`, then runs `zen-telemetry mark-done <week>`, also when there
+are fewer than 3 sinks or no data. The same-job map is `scripts/telemetry/jobs.json`.
 
 ### Decision inbox
 

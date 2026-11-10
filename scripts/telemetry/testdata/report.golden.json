@@ -1,0 +1,417 @@
+{
+  "week": "2026-W46",
+  "from": "2026-11-03T12:00:00Z",
+  "to": "2026-11-10T12:00:00Z",
+  "days": 7,
+  "note": "Totals are sums of call durations: parallel calls overlap, so they can exceed wall time. Import rows are approximate and include permission waits.",
+  "slow": {
+    "threshold_ms": 30000,
+    "count": 7,
+    "total_ms": 1976000,
+    "groups": [
+      {
+        "key": "bash:zen-await",
+        "calls": 1,
+        "total_ms": 900000,
+        "excluded_from_sinks": false,
+        "example": {
+          "input": "zen-await w1",
+          "session": "chief",
+          "repo": "code",
+          "duration_ms": 900000
+        }
+      },
+      {
+        "key": "Agent",
+        "calls": 1,
+        "total_ms": 600000,
+        "excluded_from_sinks": true,
+        "example": {
+          "input": "",
+          "session": "chief",
+          "repo": "code",
+          "duration_ms": 600000
+        }
+      },
+      {
+        "key": "AskUserQuestion",
+        "calls": 1,
+        "total_ms": 300000,
+        "excluded_from_sinks": true,
+        "example": {
+          "input": "command,run_in_background",
+          "session": "chief",
+          "repo": "code",
+          "duration_ms": 300000
+        }
+      },
+      {
+        "key": "bash:bun",
+        "calls": 2,
+        "total_ms": 85000,
+        "excluded_from_sinks": false,
+        "example": {
+          "input": "bun test",
+          "session": "worker-a",
+          "repo": "demo",
+          "duration_ms": 45000
+        }
+      },
+      {
+        "key": "bash:curl",
+        "calls": 1,
+        "total_ms": 60000,
+        "excluded_from_sinks": false,
+        "example": {
+          "input": "curl https://example.com",
+          "session": "worker-a",
+          "repo": "demo",
+          "duration_ms": 60000
+        }
+      },
+      {
+        "key": "bash:agent-manager wait",
+        "calls": 1,
+        "total_ms": 31000,
+        "excluded_from_sinks": false,
+        "example": {
+          "input": "agent-manager wait w1",
+          "session": "chief",
+          "repo": "code",
+          "duration_ms": 31000
+        }
+      }
+    ]
+  },
+  "tools": [
+    {
+      "key": "bash:zen-await",
+      "calls": 1,
+      "total_ms": 900000,
+      "median_ms": 900000,
+      "p90_ms": 900000,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "Agent",
+      "calls": 1,
+      "total_ms": 600000,
+      "median_ms": 600000,
+      "p90_ms": 600000,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "AskUserQuestion",
+      "calls": 1,
+      "total_ms": 300000,
+      "median_ms": 300000,
+      "p90_ms": 300000,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "bash:bun",
+      "calls": 3,
+      "total_ms": 105000,
+      "median_ms": 40000,
+      "p90_ms": 45000,
+      "fail_pct": 66.7,
+      "retry_pct": 66.7,
+      "timeouts": 0,
+      "median_out_bytes": 200,
+      "total_out_bytes": 600
+    },
+    {
+      "key": "bash:curl",
+      "calls": 1,
+      "total_ms": 60000,
+      "median_ms": 60000,
+      "p90_ms": 60000,
+      "fail_pct": 100,
+      "retry_pct": 0,
+      "timeouts": 1,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "bash:agent-manager wait",
+      "calls": 1,
+      "total_ms": 31000,
+      "median_ms": 31000,
+      "p90_ms": 31000,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "mcp__claude_ai_Notion__notion-fetch",
+      "calls": 1,
+      "total_ms": 3000,
+      "median_ms": 3000,
+      "p90_ms": 3000,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 9000,
+      "total_out_bytes": 9000
+    },
+    {
+      "key": "bash:make",
+      "calls": 1,
+      "total_ms": 2000,
+      "median_ms": 2000,
+      "p90_ms": 2000,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "bash:git",
+      "calls": 2,
+      "total_ms": 1500,
+      "median_ms": 500,
+      "p90_ms": 1000,
+      "fail_pct": 50,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 0,
+      "total_out_bytes": 0
+    },
+    {
+      "key": "bash:zen-board",
+      "calls": 1,
+      "total_ms": 800,
+      "median_ms": 800,
+      "p90_ms": 800,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 400,
+      "total_out_bytes": 400
+    },
+    {
+      "key": "Grep",
+      "calls": 1,
+      "total_ms": 300,
+      "median_ms": 300,
+      "p90_ms": 300,
+      "fail_pct": 0,
+      "retry_pct": 0,
+      "timeouts": 0,
+      "median_out_bytes": 5000,
+      "total_out_bytes": 5000
+    }
+  ],
+  "jobs": [
+    {
+      "job": "agent control",
+      "tools": [
+        {
+          "key": "bash:agent-manager wait",
+          "calls": 1,
+          "total_ms": 31000,
+          "median_ms": 31000,
+          "p90_ms": 31000,
+          "fail_pct": 0,
+          "retry_pct": 0,
+          "timeouts": 0,
+          "median_out_bytes": 0,
+          "total_out_bytes": 0
+        }
+      ]
+    },
+    {
+      "job": "board",
+      "tools": [
+        {
+          "key": "mcp__claude_ai_Notion__notion-fetch",
+          "calls": 1,
+          "total_ms": 3000,
+          "median_ms": 3000,
+          "p90_ms": 3000,
+          "fail_pct": 0,
+          "retry_pct": 0,
+          "timeouts": 0,
+          "median_out_bytes": 9000,
+          "total_out_bytes": 9000
+        },
+        {
+          "key": "bash:zen-board",
+          "calls": 1,
+          "total_ms": 800,
+          "median_ms": 800,
+          "p90_ms": 800,
+          "fail_pct": 0,
+          "retry_pct": 0,
+          "timeouts": 0,
+          "median_out_bytes": 400,
+          "total_out_bytes": 400
+        }
+      ]
+    },
+    {
+      "job": "search",
+      "tools": [
+        {
+          "key": "Grep",
+          "calls": 1,
+          "total_ms": 300,
+          "median_ms": 300,
+          "p90_ms": 300,
+          "fail_pct": 0,
+          "retry_pct": 0,
+          "timeouts": 0,
+          "median_out_bytes": 5000,
+          "total_out_bytes": 5000
+        }
+      ]
+    },
+    {
+      "job": "waiting",
+      "tools": [
+        {
+          "key": "bash:zen-await",
+          "calls": 1,
+          "total_ms": 900000,
+          "median_ms": 900000,
+          "p90_ms": 900000,
+          "fail_pct": 0,
+          "retry_pct": 0,
+          "timeouts": 0,
+          "median_out_bytes": 0,
+          "total_out_bytes": 0
+        },
+        {
+          "key": "bash:agent-manager wait",
+          "calls": 1,
+          "total_ms": 31000,
+          "median_ms": 31000,
+          "p90_ms": 31000,
+          "fail_pct": 0,
+          "retry_pct": 0,
+          "timeouts": 0,
+          "median_out_bytes": 0,
+          "total_out_bytes": 0
+        }
+      ]
+    },
+    {
+      "job": "web",
+      "tools": [
+        {
+          "key": "bash:curl",
+          "calls": 1,
+          "total_ms": 60000,
+          "median_ms": 60000,
+          "p90_ms": 60000,
+          "fail_pct": 100,
+          "retry_pct": 0,
+          "timeouts": 1,
+          "median_out_bytes": 0,
+          "total_out_bytes": 0
+        }
+      ]
+    }
+  ],
+  "background": [
+    {
+      "key": "bash:zen-await",
+      "calls": 1
+    }
+  ],
+  "sinks": [
+    {
+      "key": "bash:bun",
+      "title": "Cut agent time in bash:bun: 3 calls, 1m45s over 7 days",
+      "calls": 3,
+      "total_ms": 105000,
+      "jobs": [],
+      "filed": [],
+      "markdown": "### `bash:bun`\n\nCut agent time in bash:bun: 3 calls, 1m45s over 7 days\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:bun` | 3 | 1m45s | 40.0s | 45.0s | 66.7 | 66.7 | 0 | 200B | 600B |\n"
+    },
+    {
+      "key": "bash:curl",
+      "title": "Cut agent time in bash:curl: 1 calls, 1m00s over 7 days",
+      "calls": 1,
+      "total_ms": 60000,
+      "jobs": [
+        "web"
+      ],
+      "filed": [],
+      "markdown": "### `bash:curl`\n\nCut agent time in bash:curl: 1 calls, 1m00s over 7 days\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:curl` | 1 | 1m00s | 1m00s | 1m00s | 100.0 | 0.0 | 1 | 0B | 0B |\n\nSame job (web):\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:curl` | 1 | 1m00s | 1m00s | 1m00s | 100.0 | 0.0 | 1 | 0B | 0B |\n"
+    },
+    {
+      "key": "bash:agent-manager wait",
+      "title": "Cut agent time in bash:agent-manager wait: 1 calls, 31.0s over 7 days",
+      "calls": 1,
+      "total_ms": 31000,
+      "jobs": [
+        "agent control",
+        "waiting"
+      ],
+      "filed": [],
+      "markdown": "### `bash:agent-manager wait`\n\nCut agent time in bash:agent-manager wait: 1 calls, 31.0s over 7 days\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:agent-manager wait` | 1 | 31.0s | 31.0s | 31.0s | 0.0 | 0.0 | 0 | 0B | 0B |\n\nSame job (agent control):\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:agent-manager wait` | 1 | 31.0s | 31.0s | 31.0s | 0.0 | 0.0 | 0 | 0B | 0B |\n\nSame job (waiting):\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:zen-await` | 1 | 15m00s | 15m00s | 15m00s | 0.0 | 0.0 | 0 | 0B | 0B |\n| `bash:agent-manager wait` | 1 | 31.0s | 31.0s | 31.0s | 0.0 | 0.0 | 0 | 0B | 0B |\n"
+    },
+    {
+      "key": "mcp__claude_ai_Notion__notion-fetch",
+      "title": "Cut agent time in mcp__claude_ai_Notion__notion-fetch: 1 calls, 3.0s over 7 days",
+      "calls": 1,
+      "total_ms": 3000,
+      "jobs": [
+        "board"
+      ],
+      "filed": [],
+      "markdown": "### `mcp__claude_ai_Notion__notion-fetch`\n\nCut agent time in mcp__claude_ai_Notion__notion-fetch: 1 calls, 3.0s over 7 days\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `mcp__claude_ai_Notion__notion-fetch` | 1 | 3.0s | 3.0s | 3.0s | 0.0 | 0.0 | 0 | 8.8K | 8.8K |\n\nSame job (board):\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `mcp__claude_ai_Notion__notion-fetch` | 1 | 3.0s | 3.0s | 3.0s | 0.0 | 0.0 | 0 | 8.8K | 8.8K |\n| `bash:zen-board` | 1 | 800ms | 800ms | 800ms | 0.0 | 0.0 | 0 | 400B | 400B |\n"
+    },
+    {
+      "key": "bash:make",
+      "title": "Cut agent time in bash:make: 1 calls, 2.0s over 7 days",
+      "calls": 1,
+      "total_ms": 2000,
+      "jobs": [],
+      "filed": [],
+      "markdown": "### `bash:make`\n\nCut agent time in bash:make: 1 calls, 2.0s over 7 days\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:make` | 1 | 2.0s | 2.0s | 2.0s | 0.0 | 0.0 | 0 | 0B | 0B |\n"
+    },
+    {
+      "key": "bash:git",
+      "title": "Cut agent time in bash:git: 2 calls, 1.5s over 7 days",
+      "calls": 2,
+      "total_ms": 1500,
+      "jobs": [],
+      "filed": [],
+      "markdown": "### `bash:git`\n\nCut agent time in bash:git: 2 calls, 1.5s over 7 days\n\n| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n| `bash:git` | 2 | 1.5s | 500ms | 1.0s | 50.0 | 0.0 | 0 | 0B | 0B |\n"
+    }
+  ],
+  "unmapped": [
+    {
+      "key": "bash:bun",
+      "calls": 3,
+      "total_ms": 105000
+    },
+    {
+      "key": "bash:make",
+      "calls": 1,
+      "total_ms": 2000
+    },
+    {
+      "key": "bash:git",
+      "calls": 2,
+      "total_ms": 1500
+    }
+  ]
+}

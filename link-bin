@@ -31,6 +31,7 @@ LINKS=(
     "zen-doc:scripts/doc.sh"
     "zen-wrapup:scripts/wrapup.sh"
     "zen-diagram:mermaid/src/cli.ts"
+    "zen-telemetry:scripts/telemetry/bin/zen-telemetry"
 )
 
 usage() {
@@ -49,8 +50,20 @@ Reported as drift:
 EOF
 }
 
+# zen-telemetry runs as a hook on every agent tool call, so it is a compiled Go
+# binary; without go the link is still made and --check reports it missing.
+build_telemetry() {
+    if ! command -v go >/dev/null 2>&1; then
+        echo "  go not found: install it (brew install go / sudo pacman -S go), then rerun ./link-bin to build zen-telemetry" >&2
+        return 0
+    fi
+    (cd "$SCRIPT_DIR/scripts/telemetry" && go build -trimpath -ldflags "-s -w" -o bin/zen-telemetry .)
+    echo "built zen-telemetry"
+}
+
 do_link() {
     local entry name src
+    build_telemetry
     for entry in "${LINKS[@]}"; do
         name=${entry%%:*}
         src=${entry#*:}
