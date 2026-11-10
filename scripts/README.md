@@ -18,7 +18,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
-| `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note. |
+| `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note, priority, relate. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees and `branch-model` drift. |
 | `../inbox/` (Go) | `zen-inbox` | Decision inbox: agents `ask`, a Bubble Tea watcher answers by pick, free text or talk; batched delivery. See `inbox/README.md`. |
 | `telemetry/` (Go) | `zen-telemetry` | Hook that logs every agent tool call to `zen-flow.db`; weekly time-sink report for chief. |
@@ -144,14 +144,18 @@ source changed (see `inbox/README.md`). See `docs/wiki/architecture/decision-inb
 
 ### zen-board
 ```
-zen-board check [--json]                          # open tasks, Urgent → Inbox
-zen-board next [--json]                           # one pick + why
+zen-board check [--json]                          # open tasks with Priority, In Progress → Inbox
+zen-board next [--json]                           # In Progress, then To Do by Priority, due, age
 zen-board start <task>                            # In Progress
 zen-board done <task> [--note TEXT]               # Done + Conclusion Date, one PATCH
 zen-board add <title> --project P [--inbox] [--human-only]   # prints the new ID
+          [--priority low|medium] [--related <task>]...
+zen-board priority <task> low|medium|none         # refuses High and tasks already High (exit 2)
+zen-board relate <task> <task>...                 # adds to Related Tasks, keeps old links
 zen-board note <task> <text>                      # appends **YYYY-MM-DD:** text
 ```
-`<task>` is `570`, `#570`, a page URL or a page UUID. Calls the Notion REST API
+`<task>` is `570`, `#570`, a page URL or a page UUID. `--json` lists `related` as
+page UUIDs (no dashes) and `priority` as null when unset. Calls the Notion REST API
 (`Notion-Version: 2025-09-03`) on the vault's `board.tasks_data_source`; every ID
 comes from the vault `config/zen-flow.json`. `NOTION_TOKEN` is read from the env,
 else from the `export NOTION_TOKEN=` line in `~/.zshrc.local`. Exit 0 ok · 1 API ·

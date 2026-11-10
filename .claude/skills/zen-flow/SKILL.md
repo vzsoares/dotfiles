@@ -34,7 +34,9 @@ Never write project names or Notion IDs into this file or any other public repo 
 ### Schema
 
 - `Write a task` (title), `Status` (select), `☢️ Projeto` (relation, limit 1),
-  `Due Date`, `Conclusion Date`, `Tags` (`Has Data`), `Created time`, `Last Edited`
+  `Due Date`, `Conclusion Date`, `Tags` (`Has Data`), `Priority` (select),
+  `Related Tasks` (two-way self-relation: link one side, both show it),
+  `Created time`, `Last Edited`
 - `Do` / `Undo` are Notion buttons — not callable via API; replicate their effect with
   property updates (below). They're excluded from SQL.
 
@@ -45,10 +47,21 @@ Never write project names or Notion IDs into this file or any other public repo 
 | *(empty)* | Inbox — untriaged idea. Leave alone unless triaging. |
 | `🧱 To Do` | Committed, not started |
 | `In Progress` | Being worked on now |
-| `💥Urgent` | Drop-everything priority |
 | `✅ Done` | Finished — always set `Conclusion Date` = today |
 | `🗑️ Won't Do` | Dropped |
 | `Blocked` | **Blocked on someone else** (a colleague, a partner, an external approval). The task page says who and since when. Not the user's own pending steps — those are `🧱 To Do` + `Human Only`. |
+
+### Priority
+
+`High`, `Medium`, `Low`, or empty. Agents set `Low` or `Medium` freely; only the user
+sets `High` (it replaces the old Urgent status). Never set `High`, and never change or
+clear a task that is already `High`; `zen-board priority` refuses both (exit 2).
+
+### Related Tasks
+
+Follow-ups (review findings, Human Only steps, shortcuts) link to the task they came
+from, and a folded task links to the one it folded into. A dated note still says why.
+The relation is two-way, so one write links both pages.
 
 ### Tags (labels)
 
@@ -65,22 +78,25 @@ Never write project names or Notion IDs into this file or any other public repo 
 **check, next, start, done, add and note run `zen-board` first** (Bash; see
 `scripts/README.md`): `zen-board check`, `next`, `start <id>`,
 `done <id> --note "…"`, `add "<title>" --project <name or group> [--inbox]
-[--human-only]` (prints the new ID), `note <id> "…"`. It reads the IDs from the vault
+[--human-only] [--priority low|medium] [--related <id>]...` (prints the new ID),
+`priority <id> low|medium|none`, `relate <id> <id>...` (adds to the existing links,
+never drops one), `note <id> "…"`. It reads the IDs from the vault
 config and `NOTION_TOKEN` from the env or `~/.zshrc.local`. When it exits non-zero
 (1 API, 2 not found, 3 token/config missing), fall back to the MCP steps below.
 Triage, block, reopen, title/body edits and Won't Do stay on MCP.
 
-- **check** — list open tasks (Urgent, In Progress, To Do, empty), grouped by project:
+- **check** — list open tasks (In Progress, To Do, Blocked, empty) with Priority, grouped by project:
   ```sql
-  SELECT "Write a task", Status, "☢️ Projeto", "date:Due Date:start" AS due, "Last Edited", url
+  SELECT "Write a task", Status, Priority, "☢️ Projeto", "date:Due Date:start" AS due, "Last Edited", url
   FROM "<board.tasks_data_source>"
-  WHERE Status IN ('💥Urgent','🧱 To Do','In Progress','Blocked') OR Status IS NULL
+  WHERE Status IN ('🧱 To Do','In Progress','Blocked') OR Status IS NULL
   ORDER BY "Last Edited" DESC
   ```
-  Map project URLs to names via `projects[].page_id`. Present Urgent → In Progress → To Do →
+  Map project URLs to names via `projects[].page_id`. Present In Progress → To Do (High first) →
   Blocked (with who) → Inbox.
-- **next** — recommend one task: Urgent first, then an existing In Progress (finish before
-  starting), then To Do with nearest due date. Give one reason. Blocked tasks are listed
+- **next** — recommend one task: an existing In Progress first (finish before starting),
+  then To Do by Priority (High, Medium, Low, none), then nearest due date, then oldest.
+  Give one reason. Blocked tasks are listed
   separately ("waiting on …") and never recommended; nudge if blocked for more than a week.
 - **block** — set `Status` = `Blocked` and append "Aguardando <quem> desde <data>" to the
   page. When the user says the blocker cleared, move it back to `In Progress`.
@@ -89,7 +105,10 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   then **note** with the release tag and commits.
 - **add** — create a page in the Tasks data source with title, `☢️ Projeto` (ask if
   ambiguous; default Approva when working in an Approva repo), `Status` = `🧱 To Do`
-  unless the user says it's just an idea (leave empty).
+  unless the user says it's just an idea (leave empty). A follow-up gets `--related
+  <origin id>`; `Priority` only `low` or `medium`.
+- **relate** — `zen-board relate <id> <id>...` links tasks in Related Tasks. On MCP,
+  read the existing relation first and write the union.
 - **triage** — walk Inbox items one at a time; for each propose To Do / Won't Do / leave.
 - **id** — a task's numeric `userDefined:ID`; create-pages doesn't return it and
   `zen-commit --task` needs it. Query with params `["%<page id: 32 hex, no dashes>%"]`:
@@ -150,7 +169,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   together in one message. Its only board write is that
   page body. Ends with `SPEC_READY <id>`.
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
-  cross-cutting work, Sonnet for pattern or spec work; max 3; `list_reservations`
+  cross-cutting work, Sonnet for pattern or spec work; max 3 core workers, plus up to 2
+  dotfiles workers (light: unit tests, no browsers or dev servers); `list_reservations`
   before a second worker in one repo) and waits on them. A stuck Sonnet worker gets one
   relaunch on Opus on the same branch; anything else becomes a gate in the inbox
   (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
@@ -224,7 +244,7 @@ orchestrator:
   `zen-gate` on the branch diff, `git merge --ff-only` into the base (`dev`, or the
   single branch) in the repo's main checkout, `zen-release --dev --yes --bump patch`
   on `dev` only, then cleanup (below); each
-  shortcut follow-up it prints becomes a To Do task
+  shortcut follow-up it prints becomes a To Do task linked with `--related <origin id>`
 - leaves **done** to `zen-merge`'s board phase (tag and shas in the note); on
   exit 7 it reruns `zen-merge` or marks it Done via MCP, and on `board skipped`
   (no `Task:` trailer) it marks it Done itself

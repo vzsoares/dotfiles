@@ -38,6 +38,7 @@ PAGE = "ab" * 16
 DASHED = "-".join((PAGE[:8], PAGE[8:12], PAGE[12:16], PAGE[16:20], PAGE[20:]))
 ME = "11" * 16
 WORK = "22" * 16
+OTHER = "cd" * 16
 TOKEN = "secret-token-value"
 TODAY = date.today().isoformat()
 
@@ -106,6 +107,8 @@ def page(
     edited: str = "2026-11-01T00:00:00.000Z",
     created: str = "2026-10-01T00:00:00.000Z",
     tags: tuple[str, ...] = (),
+    priority: str = "",
+    related: tuple[str, ...] = (),
 ) -> Json:
     return {
         "id": page_id,
@@ -119,16 +122,10 @@ def page(
             board.PROJECT: {"relation": [{"id": project}]},
             board.TAGS: {"multi_select": [{"name": t} for t in tags]},
             board.DUE: {"date": {"start": due} if due else None},
+            board.PRIORITY: {"select": {"name": priority} if priority else None},
+            board.RELATED: {"relation": [{"id": r} for r in related]},
         },
     }
-
-
-def schema(urgent: bool) -> Json:
-    names = ["Blocked", board.TODO, board.DONE, board.IN_PROGRESS]
-    if urgent:
-        names.append("💥Urgent")
-    options = [{"name": n} for n in names]
-    return {"properties": {board.STATUS: {"select": {"options": options}}}}
 
 
 def results(*pages: Json, cursor: str = "") -> Json:
@@ -193,25 +190,22 @@ def statuses_in(filter_: object) -> list[object]:
     ]
 
 
-@pytest.mark.parametrize("urgent", [False, True])
-def test_check_filter_follows_schema_urgent(fake: Fake, urgent: bool) -> None:
-    fake.push(schema(urgent))
+def test_check_filters_open_statuses_without_urgent(fake: Fake) -> None:
     fake.push(results())
     code, out, _ = run("check")
     assert (code, out.strip()) == (0, "nothing open")
-    names = statuses_in(fake.calls[1][2]["filter"])
-    assert ("💥Urgent" in names) is urgent
+    names = statuses_in(fake.calls[0][2]["filter"])
     assert {board.IN_PROGRESS, board.TODO, board.BLOCKED, None} <= set(names)
+    assert len(fake.calls) == 1
 
 
 def test_check_follows_pagination(fake: Fake) -> None:
-    fake.push(schema(False))
     fake.push(results(page(1, board.TODO, due="2026-12-01"), cursor="c2"))
     fake.push(results(page(2, board.IN_PROGRESS, project=WORK)))
     code, out, _ = run("check")
     assert code == 0
-    assert fake.calls[2][2]["start_cursor"] == "c2"
-    assert "start_cursor" not in fake.calls[1][2]
+    assert fake.calls[1][2]["start_cursor"] == "c2"
+    assert "start_cursor" not in fake.calls[0][2]
     assert out.splitlines() == [
         "#2  In Progress  Work  task 2",
         f"#1  {board.TODO}  Me  task 1  (due 2026-12-01)",
@@ -219,7 +213,6 @@ def test_check_follows_pagination(fake: Fake) -> None:
 
 
 def test_check_json_shape_and_unmapped_project(fake: Fake) -> None:
-    fake.push(schema(False))
     fake.push(results(page(3, project="33" * 16, tags=("Human Only",))))
     code, out, _ = run("check", "--json")
     assert code == 0
@@ -230,6 +223,8 @@ def test_check_json_shape_and_unmapped_project(fake: Fake) -> None:
         "status",
         "project",
         "tags",
+        "priority",
+        "related",
         "due",
         "last_edited",
         "url",
@@ -239,13 +234,22 @@ def test_check_json_shape_and_unmapped_project(fake: Fake) -> None:
         "?",
         ["Human Only"],
     )
+    assert (task["priority"], task["related"]) == (None, [])
+
+
+def test_check_shows_priority_and_related_ids(fake: Fake) -> None:
+    fake.push(results(page(4, board.TODO, priority="High", related=(WORK,))))
+    code, out, _ = run("check")
+    assert (code, out.strip()) == (0, f"#4  {board.TODO}  Me  [High]  task 4")
+    fake.push(results(page(4, board.TODO, priority="Low", related=(WORK, ME))))
+    (task,) = json.loads(run("check", "--json")[1])
+    assert (task["priority"], task["related"]) == ("Low", [WORK, ME])
 
 
 # == next ==================================================================== #
 
 
-def pick(fake: Fake, *pages: Json, urgent: bool = True) -> tuple[int, str]:
-    fake.push(schema(urgent))
+def pick(fake: Fake, *pages: Json) -> tuple[int, str]:
     fake.push(results(*pages))
     code, out, _ = run("next", "--json")
     assert code == 0
@@ -255,12 +259,27 @@ def pick(fake: Fake, *pages: Json, urgent: bool = True) -> tuple[int, str]:
     return (num if isinstance(num, int) else 0), board.text(data.get("reason"))
 
 
-def test_next_urgent_beats_in_progress_beats_todo(fake: Fake) -> None:
-    todo = page(1, board.TODO, due="2026-11-11")
+def test_next_in_progress_beats_todo_even_when_high(fake: Fake) -> None:
+    todo = page(1, board.TODO, due="2026-11-11", priority="High")
     doing = page(2, board.IN_PROGRESS)
-    hot = page(3, "💥Urgent")
-    assert pick(fake, todo, doing, hot) == (3, "urgent")
     assert pick(fake, todo, doing)[0] == 2
+
+
+def test_next_todo_orders_by_priority_then_due_then_oldest(fake: Fake) -> None:
+    none = page(1, board.TODO, due="2026-11-01")
+    low = page(2, board.TODO, priority="Low", due="2026-11-01")
+    med_late = page(3, board.TODO, priority="Medium", due="2026-12-01")
+    med_soon = page(4, board.TODO, priority="Medium", due="2026-11-05")
+    high = page(5, board.TODO, priority="High")
+    assert pick(fake, none, low, med_late, med_soon)[0] == 4
+    assert pick(fake, none, low, med_late)[0] == 3
+    assert pick(fake, none, low)[0] == 2
+    assert pick(fake, none, low, high) == (
+        5,
+        "High priority; oldest To Do; none has a due date",
+    )
+    old = page(6, board.TODO, priority="Low", created="2026-01-01T00:00:00.000Z")
+    assert pick(fake, low, old)[0] == 2
 
 
 def test_next_in_progress_prefers_latest_edit(fake: Fake) -> None:
@@ -285,7 +304,6 @@ def test_next_never_picks_blocked_or_inbox(fake: Fake) -> None:
 
 
 def test_next_empty_board_prints_nothing_open(fake: Fake) -> None:
-    fake.push(schema(False))
     fake.push(results())
     assert run("next") == (0, "nothing open\n", "")
 
@@ -377,6 +395,29 @@ def test_add_inbox_and_human_only(fake: Fake) -> None:
     assert props["Tags"] == {"multi_select": [{"name": "Human Only"}]}
 
 
+def test_add_priority_and_related(fake: Fake) -> None:
+    fake.push(results(page(570, page_id=PAGE)))
+    fake.push(results(page(571, page_id=WORK)))
+    fake.push(page(602, board.TODO))
+    code, _, _ = run(
+        "add", "follow-up", "--project", "Me",
+        "--priority", "Medium", "--related", "570", "--related", "#571",
+    )  # fmt: skip
+    assert code == 0
+    props = board.obj(fake.calls[2][2]["properties"])
+    assert props["Priority"] == {"select": {"name": "Medium"}}
+    assert props["Related Tasks"] == {"relation": [{"id": PAGE}, {"id": WORK}]}
+
+
+@pytest.mark.parametrize("value", ["high", "HIGH", "urgent"])
+def test_add_refuses_high_and_junk_before_any_call(fake: Fake, value: str) -> None:
+    code, _, err = run("add", "x", "--project", "Me", "--priority", value)
+    assert code == board.EXIT_USAGE
+    assert fake.calls == []
+    if value != "urgent":
+        assert "High is the user's; set it in Notion" in err
+
+
 def test_add_unknown_project_lists_valid_names(fake: Fake) -> None:
     code, _, err = run("add", "x", "--project", "nope")
     assert code == board.EXIT_USAGE
@@ -393,6 +434,71 @@ def test_add_without_agent_groups_takes_names_only(
     assert cfg.project_id("work") == WORK
     with pytest.raises(board.BoardError):
         cfg.project_id("office")
+
+
+# == priority and relate ===================================================== #
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("low", {"name": "Low"}), ("Medium", {"name": "Medium"}), ("none", None)],
+)
+def test_priority_sets_or_clears(fake: Fake, value: str, expected: Json | None) -> None:
+    fake.push(page(5, board.TODO, priority="Low"))
+    fake.push(page(5, board.TODO))
+    code, _, _ = run("priority", PAGE, value)
+    assert code == 0
+    assert fake.calls[0][:2] == ("GET", f"/pages/{PAGE}")
+    assert fake.calls[1] == (
+        "PATCH",
+        f"/pages/{PAGE}",
+        {"properties": {"Priority": {"select": expected}}},
+    )
+
+
+def test_priority_refuses_high_without_calls(fake: Fake) -> None:
+    code, _, err = run("priority", PAGE, "high")
+    assert code == board.EXIT_USAGE
+    assert "High is the user's; set it in Notion" in err
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize("value", ["low", "none"])
+def test_priority_will_not_touch_a_high_task(fake: Fake, value: str) -> None:
+    fake.push(page(5, board.TODO, priority="High"))
+    code, _, err = run("priority", PAGE, value)
+    assert code == board.EXIT_USAGE
+    assert "#5 is High" in err
+    assert [c[0] for c in fake.calls] == ["GET"]
+
+
+def test_relate_writes_the_union_and_keeps_old_links(fake: Fake) -> None:
+    fake.push(results(page(570, page_id=WORK)))
+    fake.push(page(5, board.TODO, related=(OTHER, WORK)))
+    fake.push(page(5, board.TODO))
+    code, _, _ = run("relate", PAGE, "570", OTHER)
+    assert code == 0
+    method, path, body = fake.calls[2]
+    assert (method, path) == ("PATCH", f"/pages/{PAGE}")
+    assert body == {
+        "properties": {"Related Tasks": {"relation": [{"id": OTHER}, {"id": WORK}]}}
+    }
+
+
+def test_relate_skips_self_and_refuses_truncated_links(fake: Fake) -> None:
+    fake.push(page(5, board.TODO))
+    fake.push(page(5, board.TODO))
+    assert run("relate", PAGE, PAGE)[0] == 0
+    assert fake.calls[1][2] == {"properties": {"Related Tasks": {"relation": []}}}
+    truncated = page(5, board.TODO)
+    props = board.obj(truncated["properties"])
+    props[board.RELATED] = {"relation": [], "has_more": True}
+    truncated["properties"] = props
+    fake.push(truncated)
+    code, _, err = run("relate", PAGE, OTHER)
+    assert code == board.EXIT_API
+    assert "too many" in err
+    assert len(fake.calls) == 3
 
 
 # == Token and config ======================================================== #

@@ -24,7 +24,10 @@
 #      zen-board next [--json]
 #      zen-board start <task> [--json]
 #      zen-board done <task> [--note TEXT] [--json]
-#      zen-board add <title> --project P [--inbox] [--human-only] [--json]
+#      zen-board add <title> --project P [--inbox] [--human-only]
+#                    [--priority low|medium] [--related <task>]... [--json]
+#      zen-board priority <task> low|medium|none [--json]
+#      zen-board relate <task> <task>... [--json]
 #      zen-board note <task> <text> [--json]
 #
 #  OPTIONS
@@ -32,17 +35,23 @@
 #      --project P    A vault projects[].name or agent_groups key (any case).
 #      --inbox        add: leave Status empty instead of To Do.
 #      --human-only   add: set the Human Only tag.
+#      --priority P   add: set Priority (low or medium; High is the user's).
+#      --related T    add: link T in Related Tasks (repeatable).
 #      --note TEXT    done: append a dated note after the status change.
 #      --json         Print the outcome as JSON.
 #
 #  DESCRIPTION
-#      check   open tasks: Urgent, In Progress, To Do, Blocked, Inbox
-#      next    one recommendation and why: Urgent, then In Progress (latest
-#              edit), then To Do (nearest due, then oldest); never Blocked/Inbox
+#      check   open tasks: In Progress, To Do, Blocked, Inbox; with Priority
+#      next    one recommendation and why: In Progress (latest edit), then
+#              To Do by Priority (High, Medium, Low, none), nearest due, oldest;
+#              never Blocked/Inbox
 #      start   Status = In Progress
 #      done    Status = Done and Conclusion Date = today in one PATCH
 #      add     new task (To Do unless --inbox); prints its numeric ID
 #      note    appends "**YYYY-MM-DD:** text" to the page body
+#      priority  sets Low, Medium or none; refuses High, and refuses to change
+#              a task that is already High (exit 2)
+#      relate  links the tasks in Related Tasks, keeping the existing links
 #
 #      NOTION_TOKEN comes from the env, else from ~/.zshrc.local. Board and
 #      project IDs come from the vault config/zen-flow.json, never this repo.
@@ -55,7 +64,7 @@
 #      vzsoares.
 #
 # ==============================================================================
-"""Run the everyday zen-flow board ops (check, next, start, done, add, note)."""
+"""Run the everyday zen-flow board ops (check, next, start, done, add, note, ...)."""
 
 from __future__ import annotations
 
@@ -90,6 +99,8 @@ PROJECT = "☢️ Projeto"
 TAGS = "Tags"
 DUE = "Due Date"
 CONCLUSION = "Conclusion Date"
+PRIORITY = "Priority"
+RELATED = "Related Tasks"
 
 IN_PROGRESS = "In Progress"
 TODO = "🧱 To Do"
@@ -97,6 +108,9 @@ BLOCKED = "Blocked"
 DONE = "✅ Done"
 INBOX = ""
 HUMAN_ONLY = "Human Only"
+HIGH = "High"
+AGENT_PRIORITIES = {"low": "Low", "medium": "Medium"}
+PRIORITY_ORDER = [HIGH, "Medium", "Low"]
 
 Json = dict[str, object]
 Transport = Callable[
@@ -274,6 +288,8 @@ class Task:
     status: str
     project: str
     tags: list[str]
+    priority: str
+    related: list[str]  # page IDs without dashes
     due: str
     last_edited: str
     created: str
@@ -283,13 +299,25 @@ class Task:
     def line(self) -> str:
         num = f"#{self.id}" if self.id is not None else "#?"
         due = f"  (due {self.due})" if self.due else ""
-        return f"{num}  {self.status or 'Inbox'}  {self.project}  {self.title}{due}"
+        prio = f"  [{self.priority}]" if self.priority else ""
+        return (
+            f"{num}  {self.status or 'Inbox'}  {self.project}{prio}  {self.title}{due}"
+        )
 
     def to_json(self) -> Json:
         out: Json = asdict(self)
         out["status"] = self.status or "Inbox"
+        out["priority"] = self.priority or None
         del out["created"], out["page_id"]
         return out
+
+
+def relation_ids(prop: object) -> list[str]:
+    return [
+        text(obj(r).get("id")).replace("-", "")
+        for r in arr(obj(prop).get("relation"))
+        if text(obj(r).get("id"))
+    ]
 
 
 def parse_task(page: Json, cfg: Config) -> Task:
@@ -309,6 +337,8 @@ def parse_task(page: Json, cfg: Config) -> Task:
             text(obj(t).get("name"))
             for t in arr(obj(props.get(TAGS)).get("multi_select"))
         ],
+        priority=text(obj(obj(props.get(PRIORITY)).get("select")).get("name")),
+        related=relation_ids(props.get(RELATED)),
         due=text(obj(obj(props.get(DUE)).get("date")).get("start"))[:10],
         last_edited=text(page.get("last_edited_time")),
         created=text(page.get("created_time")),
@@ -331,18 +361,7 @@ def query(client: Notion, cfg: Config, filter_: Json) -> list[Json]:
             return pages
 
 
-def urgent_option(client: Notion, cfg: Config) -> str:
-    """The Urgent status option, or "" when the schema has none (filtering on it 400s)."""
-    schema = client.request("GET", f"/data_sources/{cfg.data_source}")
-    status = obj(obj(schema.get("properties")).get(STATUS))
-    names = [
-        text(obj(o).get("name")) for o in arr(obj(status.get("select")).get("options"))
-    ]
-    return next((n for n in names if "urgent" in n.lower()), "")
-
-
-def status_order(urgent: str) -> list[str]:
-    return [*([urgent] if urgent else []), IN_PROGRESS, TODO, BLOCKED, INBOX]
+STATUS_ORDER = [IN_PROGRESS, TODO, BLOCKED, INBOX]
 
 
 def open_filter(order: list[str]) -> Json:
@@ -360,32 +379,43 @@ def timestamp(iso: str) -> float:
         return 0.0
 
 
-def rank(task: Task, order: list[str]) -> tuple[int, str, float]:
-    group = order.index(task.status) if task.status in order else len(order)
+def priority_rank(priority: str) -> int:
+    return (
+        PRIORITY_ORDER.index(priority)
+        if priority in PRIORITY_ORDER
+        else len(PRIORITY_ORDER)
+    )
+
+
+def rank(task: Task) -> tuple[int, int, str, float]:
+    group = (
+        STATUS_ORDER.index(task.status)
+        if task.status in STATUS_ORDER
+        else len(STATUS_ORDER)
+    )
     if task.status == TODO:
-        return group, task.due or "9999-99-99", timestamp(task.created)
-    return group, "", -timestamp(task.last_edited)
+        due = task.due or "9999-99-99"
+        return group, priority_rank(task.priority), due, timestamp(task.created)
+    return group, 0, "", -timestamp(task.last_edited)
 
 
-def open_tasks(client: Notion, cfg: Config) -> tuple[list[Task], str]:
-    urgent = urgent_option(client, cfg)
-    order = status_order(urgent)
-    tasks = [parse_task(p, cfg) for p in query(client, cfg, open_filter(order))]
-    return sorted(tasks, key=lambda t: rank(t, order)), urgent
+def open_tasks(client: Notion, cfg: Config) -> list[Task]:
+    tasks = [parse_task(p, cfg) for p in query(client, cfg, open_filter(STATUS_ORDER))]
+    return sorted(tasks, key=rank)
 
 
-def recommend(tasks: list[Task], urgent: str) -> tuple[Task | None, str]:
+def recommend(tasks: list[Task]) -> tuple[Task | None, str]:
     """`tasks` must already be in rank order."""
     pick = next((t for t in tasks if t.status not in (BLOCKED, INBOX)), None)
     if pick is None:
         return None, "nothing open"
-    if urgent and pick.status == urgent:
-        return pick, "urgent"
     if pick.status == IN_PROGRESS:
         return pick, "already in progress: finish it before starting new work"
     if pick.due:
-        return pick, f"nearest due date ({pick.due})"
-    return pick, "oldest To Do; none has a due date"
+        reason = f"nearest due date ({pick.due})"
+    else:
+        reason = "oldest To Do; none has a due date"
+    return pick, f"{pick.priority} priority; {reason}" if pick.priority else reason
 
 
 UUID = re.compile(r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}")
@@ -453,6 +483,44 @@ def append_note(client: Notion, page_id: str, note: str) -> None:
     client.request("PATCH", f"/blocks/{page_id}/children", {"children": [block]})
 
 
+def agent_priority(value: str) -> str:
+    """Option name for `value`; "" clears. High is the user's to set."""
+    key = value.strip().lower()
+    if key == HIGH.lower():
+        raise BoardError(EXIT_USAGE, "High is the user's; set it in Notion")
+    if key == "none":
+        return ""
+    if key not in AGENT_PRIORITIES:
+        raise BoardError(EXIT_USAGE, f"priority must be low, medium or none: {value!r}")
+    return AGENT_PRIORITIES[key]
+
+
+def relation(page_ids: list[str]) -> Json:
+    return {"relation": [{"id": i} for i in page_ids]}
+
+
+def set_priority(client: Notion, cfg: Config, page_id: str, value: str) -> Task:
+    name = agent_priority(value)
+    current = parse_task(client.request("GET", f"/pages/{page_id}"), cfg)
+    if current.priority == HIGH:
+        raise BoardError(
+            EXIT_USAGE, f"#{current.id} is High: only the user changes it in Notion"
+        )
+    props: Json = {PRIORITY: {"select": {"name": name} if name else None}}
+    return set_status(client, cfg, page_id, props)
+
+
+def relate_tasks(client: Notion, cfg: Config, page_id: str, others: list[str]) -> Task:
+    page = client.request("GET", f"/pages/{page_id}")
+    links = obj(obj(page.get("properties")).get(RELATED))
+    if links.get("has_more") is True:
+        raise BoardError(EXIT_API, "too many Related Tasks to read; link in Notion")
+    existing = parse_task(page, cfg).related
+    union = [*existing, *(o for o in others if o != page_id)]
+    props: Json = {RELATED: relation(list(dict.fromkeys(union)))}
+    return set_status(client, cfg, page_id, props)
+
+
 def add_task(
     client: Notion,
     cfg: Config,
@@ -460,7 +528,11 @@ def add_task(
     project: str,
     inbox: bool,
     human_only: bool,
+    priority: str = "",
+    related: list[str] | None = None,
 ) -> Task:
+    name = agent_priority(priority) if priority else ""
+    links = [resolve(client, cfg, ref) for ref in related or []]
     props: Json = {
         TITLE: {"title": [{"type": "text", "text": {"content": title}}]},
         PROJECT: {"relation": [{"id": cfg.project_id(project)}]},
@@ -469,6 +541,10 @@ def add_task(
         props[STATUS] = {"select": {"name": TODO}}
     if human_only:
         props[TAGS] = {"multi_select": [{"name": HUMAN_ONLY}]}
+    if name:
+        props[PRIORITY] = {"select": {"name": name}}
+    if links:
+        props[RELATED] = relation(list(dict.fromkeys(links)))
     body: Json = {
         "parent": {"type": "data_source_id", "data_source_id": cfg.data_source},
         "properties": props,
@@ -501,13 +577,15 @@ def emit(data: object) -> None:
 
 
 JSON_OPT = typer.Option(False, "--json", help="JSON output.")
+RELATED_OPT = typer.Option([], "--related", help="Task to link (repeatable).")
+OTHERS_ARG = typer.Argument(..., help="Tasks to link.")
 
 
 @app.command()
 def check(as_json: bool = JSON_OPT) -> None:
-    """List open tasks: Urgent, In Progress, To Do, Blocked, Inbox."""
+    """List open tasks: In Progress, To Do, Blocked, Inbox."""
     try:
-        tasks, _ = open_tasks(*connect())
+        tasks = open_tasks(*connect())
     except BoardError as exc:
         raise fail(exc) from exc
     if as_json:
@@ -523,10 +601,10 @@ def check(as_json: bool = JSON_OPT) -> None:
 def next_(as_json: bool = JSON_OPT) -> None:
     """Recommend one task and say why."""
     try:
-        tasks, urgent = open_tasks(*connect())
+        tasks = open_tasks(*connect())
     except BoardError as exc:
         raise fail(exc) from exc
-    pick, reason = recommend(tasks, urgent)
+    pick, reason = recommend(tasks)
     if as_json:
         emit({"task": pick.to_json() if pick else None, "reason": reason})
     elif pick is None:
@@ -582,15 +660,47 @@ def add(
     project: str = typer.Option(..., "--project", help="Project name or group."),
     inbox: bool = typer.Option(False, "--inbox", help="Leave Status empty."),
     human_only: bool = typer.Option(False, "--human-only", help="Tag Human Only."),
+    priority: str = typer.Option("", "--priority", help="low or medium."),
+    related: list[str] = RELATED_OPT,
     as_json: bool = JSON_OPT,
 ) -> None:
     """Create a task and print its numeric ID."""
     try:
         client, cfg = connect()
-        created = add_task(client, cfg, title, project, inbox, human_only)
+        created = add_task(
+            client, cfg, title, project, inbox, human_only, priority, related
+        )
     except BoardError as exc:
         raise fail(exc) from exc
     emit(created.to_json()) if as_json else print(created.id)
+
+
+@app.command("priority")
+def priority_(task: str, value: str, as_json: bool = JSON_OPT) -> None:
+    """Set Priority to low, medium or none; High is the user's."""
+    try:
+        client, cfg = connect()
+        updated = set_priority(client, cfg, resolve(client, cfg, task), value)
+    except BoardError as exc:
+        raise fail(exc) from exc
+    emit(updated.to_json()) if as_json else print(updated.line())
+
+
+@app.command()
+def relate(
+    task: str,
+    others: list[str] = OTHERS_ARG,
+    as_json: bool = JSON_OPT,
+) -> None:
+    """Link tasks in Related Tasks, keeping the existing links."""
+    try:
+        client, cfg = connect()
+        page_id = resolve(client, cfg, task)
+        linked = [resolve(client, cfg, o) for o in others]
+        updated = relate_tasks(client, cfg, page_id, linked)
+    except BoardError as exc:
+        raise fail(exc) from exc
+    emit(updated.to_json()) if as_json else print(updated.line())
 
 
 @app.command("note")
