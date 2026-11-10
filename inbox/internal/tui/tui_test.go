@@ -795,6 +795,7 @@ func (d *drv) startSend() tea.Cmd {
 }
 
 func TestBusyScreenGolden(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	for _, sz := range [][2]int{{60, 12}, {28, 8}} {
 		d := newDrv(t, sz[0], sz[1])
 		d.ask("7", "s1", "Which way?", "left", "right")
@@ -866,6 +867,7 @@ func TestSpinnerTicksOnlyWhileBusy(t *testing.T) {
 }
 
 func TestSentFlashShowsThenExpires(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	d := newDrv(t, 60, 12)
 	d.ask("7", "s1", "Which way?", "left", "right")
 	d.run(d.startSend())
@@ -882,6 +884,7 @@ func TestSentFlashShowsThenExpires(t *testing.T) {
 }
 
 func TestFailedSendKeepsErrorAndRetryHint(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	d := newDrv(t, 80, 12)
 	d.ask("7", "s1", "Which way?", "left", "right")
 	if err := d.other.CloseRaw("7.1", "answered", "pick", "a", "", "failed"); err != nil {
@@ -899,6 +902,7 @@ func TestFailedSendKeepsErrorAndRetryHint(t *testing.T) {
 }
 
 func TestStatusLineStates(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	d := newDrv(t, 60, 10)
 	golden(t, "status-empty", d.view())
 	d.ask("7", "s1", "Q?", "a", "b")
