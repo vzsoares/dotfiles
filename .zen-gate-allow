@@ -6,3 +6,5 @@ scripts/await.py timeout-bump
 scripts/telemetry/parse_test.go timeout-bump
 # #587: ported to inbox/ (Go) and removed with inbox.py
 scripts/test_inbox.py test-deleted
+# worker-rules text defines the shortcut marker; not a code shortcut
+agent-manager/config.json shortcut
