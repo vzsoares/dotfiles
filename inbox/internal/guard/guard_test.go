@@ -47,13 +47,40 @@ func TestEnvVarRefuses(t *testing.T) {
 	}
 }
 
-func TestAgentAncestorRefuses(t *testing.T) {
-	for _, comm := range []string{"claude", "/usr/local/bin/codex"} {
-		parent := tree(map[int]proc{40: {35, "-zsh"}, 35: {30, comm}})
-		ok, reason := Check(env(nil), parent, 40)
-		if ok || reason != fmt.Sprintf("inside %s (pid 35)", comm[strings.LastIndex(comm, "/")+1:]) {
-			t.Fatalf("%s: %v %q", comm, ok, reason)
-		}
+func TestAgentAncestor(t *testing.T) {
+	cases := []struct {
+		name  string
+		args  string
+		agent string // empty: the chain must pass
+	}{
+		{"plain claude", "claude", "claude"},
+		{"claude with flags", "claude --resume", "claude"},
+		{"codex path", "/usr/local/bin/codex", "codex"},
+		{"native versioned", "/Users/x/.local/share/claude/versions/2.1.50", "claude"},
+		{"native versioned with args", "/Users/x/.local/share/claude/versions/2.1.50 --foo", "claude"},
+		{"node-run", "node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js", "claude-code"},
+		{"node-run after flag", "/usr/bin/node --no-warnings /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js", "claude-code"},
+		{"login shell", "-zsh", ""},
+		{"tmux", "tmux", ""},
+		{"coincidental name", "/usr/bin/claude-notes-viewer", ""},
+		{"agent name as file argument", "vim claude.txt", ""},
+		{"agent dir as plain argument", "vim /home/x/claude/notes.md", ""},
+		{"node running unrelated script", "node /srv/app/server.js", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			parent := tree(map[int]proc{40: {35, "-zsh"}, 35: {30, c.args}})
+			ok, reason := Check(env(nil), parent, 40)
+			if c.agent == "" {
+				if !ok || reason != "" {
+					t.Fatalf("%v %q", ok, reason)
+				}
+				return
+			}
+			if want := fmt.Sprintf("inside %s (pid 35)", c.agent); ok || reason != want {
+				t.Fatalf("%v %q, want %q", ok, reason, want)
+			}
+		})
 	}
 }
 
