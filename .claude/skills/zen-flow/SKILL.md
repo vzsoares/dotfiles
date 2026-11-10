@@ -163,7 +163,7 @@ Agents never message chief with decisions. They run `zen-inbox ask <task> -q ...
 --rec <letter>` (gates: `--gate`), passing `--title "<task title>" --brief "<1-3 lines>"`
 on the first ask, and end the turn; `zen-inbox brief` sets that context later. A
 terminal named `decisions` in group `chief` runs `zen-inbox watch`: one row per asking
-session (zen-bell rings once per session). Opening one shows the task context, then
+session (zen-bell rings once per session per poll). Opening one shows the task context, then
 its questions; the user walks them (pick, free text, skip) and sends them from a
 review screen, or talks (a tmux popup on `tmux -L agentmgr attach -t am_<session>`,
 then a pick of which decisions it settled; those close and send nothing).

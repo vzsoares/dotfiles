@@ -970,7 +970,7 @@ def test_session_screen_talk_then_resolve(fake: Path, conn: sqlite3.Connection) 
     ask(conn)
     ask(conn)
     ui = ScriptedUI(["talk"], picks=[["7.2"]])
-    assert inbox.session_flow(conn, ui, "s1") == "resolved 7.2"
+    assert inbox.session_flow(conn, ui, "s1", inbox.am_sessions()) == "resolved 7.2"
     assert statuses(conn) == {"7.1": "open", "7.2": "answered"}
 
 
@@ -1051,6 +1051,14 @@ def test_overflowing_options_keep_the_question(conn: sqlite3.Connection) -> None
     assert layout.lines[0] == "7.1  Which way?"
     assert layout.lines[-1].endswith(inbox.MORE)
     assert len(layout.lines) + inbox.menu_rows(8, layout.menu_height, False) <= 15
+
+
+def test_fit_pages_menu_before_dropping_lines() -> None:
+    lines = [f"line {i}" for i in range(5)]
+    layout = inbox.fit(lines, ["compact"], 6, 11)
+    assert layout.lines == lines and layout.show_help
+    assert 1 <= layout.menu_height < 6
+    assert len(lines) + inbox.menu_rows(6, layout.menu_height, True) <= 11
 
 
 def test_review_screen_fits(conn: sqlite3.Connection) -> None:

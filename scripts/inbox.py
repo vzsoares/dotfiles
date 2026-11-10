@@ -75,6 +75,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -82,6 +83,7 @@ import sys
 import textwrap
 import threading
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -336,10 +338,12 @@ def get(conn: sqlite3.Connection, decision_id: str) -> Decision:
     return found[0]
 
 
+def session_open(conn: sqlite3.Connection, session_id: str) -> list[Decision]:
+    return select(conn, "session_id = ? AND status = 'open'", (session_id,))
+
+
 def open_ids(conn: sqlite3.Connection, session_id: str) -> list[str]:
-    return [
-        d.id for d in select(conn, "session_id = ? AND status = 'open'", (session_id,))
-    ]
+    return [d.id for d in session_open(conn, session_id)]
 
 
 def fingerprint(conn: sqlite3.Connection) -> tuple[tuple[str, int], ...]:
@@ -961,29 +965,29 @@ def screen(d: Decision, brief: Brief, width: int, height: int) -> Layout:
     ctx = context_lines(d, width)
     opts = option_lines(d, width)
     # (cuts, lines above the question, context clipped?, help shown, menu heights)
-    stages: list[tuple[list[str], list[str], bool, bool, range]] = [
-        ([], [*head, *text, *asked, ""], False, True, range(items, items - 1, -1)),
-        (["brief"], [*head, *asked, ""], False, True, range(items, items - 1, -1)),
+    stages: list[tuple[list[str], list[str], bool, bool, Sequence[int]]] = [
+        ([], [*head, *text, *asked, ""], False, True, [items]),
+        (["brief"], [*head, *asked, ""], False, True, [items]),
         (
             ["brief", "context"],
             [*head, *asked],
             True,
             True,
-            range(items, items - 1, -1),
+            [items],
         ),
         (
             ["brief", "context", "asked-by"],
             head,
             True,
             True,
-            range(items, items - 1, -1),
+            [items],
         ),
         (
             ["brief", "context", "asked-by", "help"],
             head,
             True,
             False,
-            range(items, items - 1, -1),
+            [items],
         ),
         (
             ["brief", "context", "asked-by", "help", "menu"],
@@ -1014,8 +1018,9 @@ def screen(d: Decision, brief: Brief, width: int, height: int) -> Layout:
 def fit(lines: list[str], compact: list[str], items: int, height: int) -> Layout:
     """lines if they fit above the menu, else compact, else compact with no help."""
     for text, show_help in ((lines, True), (compact, True), (compact, False)):
-        h = min(items, max(height - len(text) - (3 if show_help else 1), 1))
-        if len(text) + menu_rows(items, h, show_help) <= height:
+        room = height - len(text) - (3 if show_help else 1)
+        h = items if room >= items else room - 1
+        if h >= 1:
             return Layout(text, h, show_help)
     return Layout(compact, 1, False)
 
@@ -1227,7 +1232,7 @@ def tmux_socket(tmux_env: str | None) -> str:
 
 def attach_command(session_id: str) -> str:
     """Sessions live on agent-manager's own server, whatever $TMUX names."""
-    return f"tmux -L {AM_SOCKET} attach -t am_{session_id}"
+    return f"tmux -L {AM_SOCKET} attach -t {shlex.quote(f'am_{session_id}')}"
 
 
 def popup_argv(session_id: str, tmux_env: str | None) -> list[str] | None:
@@ -1267,10 +1272,10 @@ def talk(session_id: str, tmux_env: str | None) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def gum(*args: str, stdin: str | None = None) -> tuple[int, str]:
+def gum(*args: str) -> tuple[int, str]:
     # stdout only: gum draws on stderr (README gotcha).
     result = subprocess.run(
-        ["gum", *args], stdout=subprocess.PIPE, input=stdin, text=True, check=False
+        ["gum", *args], stdout=subprocess.PIPE, text=True, check=False
     )
     return result.returncode, result.stdout.strip()
 
@@ -1407,10 +1412,6 @@ def full_text(d: Decision, brief: Brief) -> str:
     lines += [f"{d.id}  {d.question}", *([d.context] if d.context else [])]
     lines += [f"{ltr}) {t}{REC_MARK if ltr == d.rec else ''}" for ltr, t in d.options]
     return "\n".join(lines)
-
-
-def session_open(conn: sqlite3.Connection, session_id: str) -> list[Decision]:
-    return select(conn, "session_id = ? AND status = 'open'", (session_id,))
 
 
 def talk_resolve(
@@ -1573,8 +1574,12 @@ def answer_pass(
         return p.stopped("cancelled")
 
 
-def session_flow(conn: sqlite3.Connection, ui: UI, session_id: str) -> str:
-    sessions = am_sessions()
+def session_flow(
+    conn: sqlite3.Connection,
+    ui: UI,
+    session_id: str,
+    sessions: list[dict[str, object]] | None,
+) -> str:
     opened = session_open(conn, session_id)
     if not opened:
         return "nothing open for that session"
@@ -1620,6 +1625,11 @@ class Poller(threading.Thread):
         self.sessions_at = time.monotonic()
         self.changed.clear()
 
+    def cached_sessions(self) -> list[dict[str, object]] | None:
+        if time.monotonic() - self.sessions_at < SESSIONS_SECONDS:
+            return self.sessions
+        return am_sessions()
+
     def ring(self, conn: sqlite3.Connection) -> None:
         opened = select(conn, "status = 'open'")
         if self.seen is not None:
@@ -1663,7 +1673,7 @@ def watch_loop(path: Path) -> None:
     ui = GumUI()
     flash = ""
     while True:
-        sessions = am_sessions()
+        sessions = poller.cached_sessions()
         at = datetime.now(UTC)
         poller.sync(list_fingerprint(conn, sessions, at), sessions)
         width, height = ui.size()
@@ -1689,7 +1699,7 @@ def watch_loop(path: Path) -> None:
             if kind == "r":
                 flash = describe(retry(conn, session_id), conn, session_id)
             else:
-                flash = session_flow(conn, ui, session_id)
+                flash = session_flow(conn, ui, session_id, sessions)
         except InboxError as e:
             flash = str(e)
 
