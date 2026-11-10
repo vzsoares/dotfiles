@@ -9,9 +9,10 @@
 #   ZEN_BELL_VOLUME     0.0 - 1.0            (read by zen-bell)
 #   ZEN_BELL_IGNORE     commands that never chime (interactive / long-lived)
 #   ZEN_BELL_WHEN_FOCUSED  1 = chime even while you are looking at the terminal
-#   ZEN_BELL_OFF        1 = silence zen-bell entirely (also the Claude hooks)
+#   ZEN_BELL_OFF        1 = silence zen-bell entirely, Claude hooks too (default)
 
 : ${ZEN_BELL_THRESHOLD:=10}
+export ZEN_BELL_OFF=${ZEN_BELL_OFF:-1}
 typeset -ga ZEN_BELL_IGNORE
 (( $#ZEN_BELL_IGNORE )) || ZEN_BELL_IGNORE=(
   nvim vim vi less man ssh tmux btop htop watch watchexec viddy
