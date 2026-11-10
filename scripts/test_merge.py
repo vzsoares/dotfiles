@@ -354,10 +354,6 @@ def test_cli_json(setup: Setup) -> None:
     assert out["board"] == "done"
 
 
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-q"]))
-
-
 def test_no_dev_explicit_base_skips_release(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -366,3 +362,7 @@ def test_no_dev_explicit_base_skips_release(
     assert (state.base, state.tag, state.release) == ("master", "push pending", False)
     assert s.fake.releases == 0
     assert (s.main / "b.txt").exists()
+
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__, "-q"]))
