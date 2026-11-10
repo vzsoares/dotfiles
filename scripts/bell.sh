@@ -25,6 +25,8 @@
 #            Overrides the dunst per-urgency timeout (urgency_normal is 10s).
 #            Ignored on macOS, where Notification Center owns the timing.
 #
+# ZEN_BELL_OFF=1 silences everything: no sound, no notification, even with -f.
+#
 # The notification is gated by the same focus check as the sound: if you are
 # looking at the terminal, neither fires. Pass -f to always notify.
 #
@@ -62,11 +64,13 @@ while [[ $# -gt 0 ]]; do
         -b | --body) need_arg "$@"; body="$2"; shift 2 ;;
         -u | --urgency) need_arg "$@"; urgency="$2"; shift 2 ;;
         -t | --timeout) need_arg "$@"; timeout_ms="$2"; shift 2 ;;
-        -h | --help) sed -n '2,33p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        -h | --help) sed -n '2,35p' "$0" | sed 's/^# \?//'; exit 0 ;;
         -*) echo "zen-bell: unknown option $1" >&2; exit 2 ;;
         *) sound="$1"; shift ;;
     esac
 done
+
+[[ ${ZEN_BELL_OFF:-0} == 1 ]] && exit 0
 
 if [[ -z $sound ]]; then
     echo "zen-bell: no sound given (try: zen-bell complete)" >&2
