@@ -146,7 +146,7 @@ func upsertSession(db *sql.DB, m sessionMeta, now time.Time) error {
 			am_session = CASE WHEN excluded.am_session != '' THEN excluded.am_session ELSE am_session END,
 			name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END,
 			grp = CASE WHEN excluded.grp != '' THEN excluded.grp ELSE grp END,
-			role = excluded.role,
+			role = CASE WHEN excluded.name != '' OR name = '' THEN excluded.role ELSE role END,
 			model = CASE WHEN excluded.model != '' THEN excluded.model ELSE model END,
 			repo = CASE WHEN excluded.repo != '' THEN excluded.repo ELSE repo END,
 			updated = excluded.updated`,

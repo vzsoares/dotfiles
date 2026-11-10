@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -67,8 +66,6 @@ func callFromHook(raw []byte, am string, now time.Time) (call, bool) {
 		return call{}, false
 	}
 	failed := p.Event == "PostToolUseFailure"
-	host, _ := os.Hostname()
-	host, _, _ = strings.Cut(host, ".")
 	c := call{
 		SessionID:      p.SessionID,
 		ToolUseID:      p.ToolUseID,
@@ -76,7 +73,7 @@ func callFromHook(raw []byte, am string, now time.Time) (call, bool) {
 		AgentID:        p.AgentID,
 		AgentType:      p.AgentType,
 		PromptID:       p.PromptID,
-		Host:           host,
+		Host:           shortHost(),
 		Cwd:            p.Cwd,
 		Effort:         effortString(p.Effort),
 		PermissionMode: p.PermissionMode,

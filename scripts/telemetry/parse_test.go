@@ -27,6 +27,9 @@ func TestCommandExes(t *testing.T) {
 		{"(cd sub && just) || exit 1", "just", []string{"just", "exit"}},
 		{"git log --oneline # | not this", "git", []string{"git"}},
 		{"export A=1 B=2 && make test", "make", []string{"make"}},
+		{"sudo -n apt update", "apt", []string{"apt"}},
+		{"time -p make build", "make", []string{"make"}},
+		{"timeout -s KILL 5 make", "make", []string{"make"}},
 		{"", "", nil},
 	}
 	for _, c := range cases {
@@ -68,7 +71,9 @@ var secrets = []struct{ in, secret string }{
 	{"mysql --password hunter3pw -u x", "hunter3pw"},
 	{"tool --password=hunter4pw", "hunter4pw"},
 	{`curl -H "Authorization: Basic dXNlcjpwYXNz" https://x`, "dXNlcjpwYXNz"}, // gitleaks:allow
-	{"curl -u bob:bobspassword https://x", "bobspassword"}, // gitleaks:allow
+	{"curl -u bob:bobspassword https://x", "bobspassword"},                    // gitleaks:allow
+	{"curl -H 'X-Api-Key: hdrkey123' https://x", "hdrkey123"},                 // gitleaks:allow
+	{`curl -d '{"token": "jsontok123"}' https://x`, "jsontok123"},             // gitleaks:allow
 }
 
 func TestRedact(t *testing.T) {

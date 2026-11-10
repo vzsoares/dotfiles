@@ -16,8 +16,14 @@ var (
 	assignRe   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 	durationRe = regexp.MustCompile(`^[0-9.]+[smhd]?$`)
 	wrappers   = map[string]bool{"sudo": true, "env": true, "timeout": true, "nice": true, "command": true, "exec": true, "time": true}
-	// Wrapper flags that take a separate value, e.g. `sudo -u root`, `nice -n 5`.
-	wrapperArgFlags = map[string]bool{"-u": true, "-g": true, "-C": true, "-D": true, "-h": true, "-p": true, "-r": true, "-t": true, "-U": true, "-n": true, "-k": true, "-s": true}
+	// Per-wrapper flags that take a separate value, e.g. `sudo -u root`, `nice -n 5`.
+	wrapperArgFlags = map[string]map[string]bool{
+		"sudo":    {"-u": true, "-g": true, "-C": true, "-D": true, "-h": true, "-p": true, "-r": true, "-t": true, "-U": true},
+		"env":     {"-u": true, "-C": true},
+		"timeout": {"-s": true, "-k": true},
+		"nice":    {"-n": true},
+		"exec":    {"-a": true},
+	}
 )
 
 // parseCommand splits a shell command into simple commands. It skips env
@@ -39,6 +45,7 @@ func segmentOf(words []string) (segment, bool) {
 		i++
 	}
 	for i < len(words) && wrappers[path.Base(words[i])] {
+		valueFlags := wrapperArgFlags[path.Base(words[i])]
 		i++
 		for i < len(words) {
 			w := words[i]
@@ -47,7 +54,7 @@ func segmentOf(words []string) (segment, bool) {
 				i++
 			case strings.HasPrefix(w, "-"):
 				i++
-				if wrapperArgFlags[w] && i < len(words) {
+				if valueFlags[w] && i < len(words) {
 					i++
 				}
 			default:

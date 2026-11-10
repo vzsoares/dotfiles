@@ -57,7 +57,10 @@ build_telemetry() {
         echo "  go not found: install it (brew install go / sudo pacman -S go), then rerun ./link-bin to build zen-telemetry" >&2
         return 0
     fi
-    (cd "$SCRIPT_DIR/scripts/telemetry" && go build -trimpath -ldflags "-s -w" -o bin/zen-telemetry .)
+    if ! (cd "$SCRIPT_DIR/scripts/telemetry" && go build -trimpath -ldflags "-s -w" -o bin/zen-telemetry .); then
+        echo "  zen-telemetry build failed; linking the rest" >&2
+        return 0
+    fi
     echo "built zen-telemetry"
 }
 

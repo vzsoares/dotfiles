@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
@@ -101,6 +102,13 @@ func dbPath(home string) (string, error) {
 	}
 	return filepath.Join(config, "zen-flow.db"), nil
 }
+
+// shortHost is the hostname up to its first dot, looked up once per process.
+var shortHost = sync.OnceValue(func() string {
+	host, _ := os.Hostname()
+	host, _, _ = strings.Cut(host, ".")
+	return host
+})
 
 func expandHome(p, home string) string {
 	if p == "~" {

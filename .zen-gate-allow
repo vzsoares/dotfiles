@@ -3,3 +3,4 @@ scripts/gate.py
 scripts/test_gate.py
 scripts/test_merge.py skip-focus
 scripts/await.py timeout-bump
+scripts/telemetry/parse_test.go timeout-bump

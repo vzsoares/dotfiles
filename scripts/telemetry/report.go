@@ -135,7 +135,7 @@ type row struct {
 }
 
 func isoWeek(t time.Time) string {
-	y, w := t.UTC().ISOWeek()
+	y, w := t.ISOWeek()
 	return fmt.Sprintf("%d-W%02d", y, w)
 }
 
@@ -237,7 +237,7 @@ func runReport(home string, o reportOpts, stdout io.Writer, now time.Time) (int,
 }
 
 func fillSessions(db *sql.DB, home string, from, to time.Time) error {
-	q, err := db.Query(`SELECT c.session_id, MIN(c.cwd) FROM tool_calls c
+	q, err := db.Query(`SELECT c.session_id, c.cwd, MIN(c.ts) FROM tool_calls c
 		LEFT JOIN tool_sessions s ON s.session_id = c.session_id
 		WHERE c.ts >= ? AND c.ts <= ? AND s.session_id IS NULL
 		GROUP BY c.session_id`, from.UTC().Format(tsLayout), to.UTC().Format(tsLayout))
@@ -248,7 +248,8 @@ func fillSessions(db *sql.DB, home string, from, to time.Time) error {
 	var missing []miss
 	for q.Next() {
 		var m miss
-		if err := q.Scan(&m.id, &m.cwd); err != nil {
+		var first string
+		if err := q.Scan(&m.id, &m.cwd, &first); err != nil {
 			q.Close()
 			return err
 		}
@@ -381,8 +382,12 @@ func totalMS(rows []row) int64 {
 
 // sortByTotal orders keys by summed duration, then name, so output is stable.
 func sortByTotal(keys []string, m map[string][]row) {
+	totals := make(map[string]int64, len(m))
+	for k, rows := range m {
+		totals[k] = totalMS(rows)
+	}
 	sort.Slice(keys, func(i, j int) bool {
-		ti, tj := totalMS(m[keys[i]]), totalMS(m[keys[j]])
+		ti, tj := totals[keys[i]], totals[keys[j]]
 		if ti != tj {
 			return ti > tj
 		}
@@ -532,9 +537,8 @@ func fmtBytes(b int64) string {
 }
 
 func cell(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "|", `\|`)
-	return truncate(s, 120)
+	s = strings.ReplaceAll(truncate(s, 120), "\n", " ")
+	return strings.ReplaceAll(s, "|", `\|`)
 }
 
 const toolHeader = "| tool | calls | total | median | p90 | fail % | retry % | timeouts | median out | total out |\n|---|---|---|---|---|---|---|---|---|---|\n"

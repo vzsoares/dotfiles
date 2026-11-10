@@ -200,8 +200,6 @@ func importedCall(p pending, b block, e entry, t transcript, am string) call {
 	if sessionID == "" {
 		sessionID = t.sessionID
 	}
-	host, _ := os.Hostname()
-	host, _, _ = strings.Cut(host, ".")
 	c := call{
 		SessionID:      sessionID,
 		ToolUseID:      b.ToolUseID,
@@ -209,7 +207,7 @@ func importedCall(p pending, b block, e entry, t transcript, am string) call {
 		AgentID:        e.AgentID,
 		AgentType:      t.agentType,
 		PromptID:       p.promptID,
-		Host:           host,
+		Host:           shortHost(),
 		Cwd:            p.cwd,
 		Effort:         p.effort,
 		PermissionMode: p.mode,

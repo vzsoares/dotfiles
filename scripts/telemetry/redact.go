@@ -14,6 +14,8 @@ type redaction struct {
 var redactions = []redaction{
 	{regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@'"]+:[^/\s@'"]+@`), "${1}" + redacted + "@"},
 	{regexp.MustCompile(`(?i)(authorization:\s*)[^"'\n]+`), "${1}" + redacted},
+	{regexp.MustCompile(`(?i)\b([a-z-]*(?:api-?key|token|secret|password)[a-z-]*:\s*)[^\s"']+`), "${1}" + redacted},
+	{regexp.MustCompile(`(?i)("[a-z0-9_-]*(?:token|secret|password|passwd|key)[a-z0-9_-]*"\s*:\s*)"[^"]*"`), "${1}\"" + redacted + "\""},
 	{regexp.MustCompile(`(?i)\b(bearer\s+)[a-z0-9._~+/=-]+`), "${1}" + redacted},
 	{regexp.MustCompile(`(?i)\b([a-z0-9_]*(?:token|secret|password|passwd|key)[a-z0-9_]*\s*=\s*)("[^"]*"|'[^']*'|[^\s;&|]+)`), "${1}" + redacted},
 	{regexp.MustCompile(`(?i)(--?(?:password|passwd|pass|token|secret|api-?key)(?:=|\s+))("[^"]*"|'[^']*'|[^\s;&|]+)`), "${1}" + redacted},
