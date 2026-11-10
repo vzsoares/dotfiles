@@ -41,6 +41,9 @@ zsh/          # zsh aliases, plugins, themes
               #   output-styles/adhd.md — commands + why, numbered
               #   decisions; select with /output-style adhd
 scripts/      # utility scripts (release.py, commit.py, run.sh, ...)
+zen.json      # personal settings (bell, git fetch, wrapup) read via
+              #   `zen-config`; per-machine overrides go in
+              #   ~/.config/zen/config.json (untracked)
 ```
 
 Config dirs (agent-manager, aerospace, alacritty, cava, flameshot, gnupg, i3,

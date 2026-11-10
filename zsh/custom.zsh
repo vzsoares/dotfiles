@@ -4,20 +4,14 @@
 # The sound + "am I looking at this window?" logic lives in `zen-bell`
 # (scripts/bell.sh), shared with the Claude Code hooks in .claude/settings.json.
 #
-# Tunables (override in ~/.zshrc.local):
+# Settings live in zen.json under "bell" (see `zen-config`). An env var of the
+# same meaning overrides it for one shell or call:
 #   ZEN_BELL_THRESHOLD  seconds a command must run before it chimes
-#   ZEN_BELL_VOLUME     0.0 - 1.0            (read by zen-bell)
 #   ZEN_BELL_IGNORE     commands that never chime (interactive / long-lived)
-#   ZEN_BELL_WHEN_FOCUSED  1 = chime even while you are looking at the terminal
-#   ZEN_BELL_OFF        1 = silence zen-bell entirely, Claude hooks too (default)
+#   ZEN_BELL_VOLUME, ZEN_BELL_WHEN_FOCUSED, ZEN_BELL_OFF   read by zen-bell
 
 : ${ZEN_BELL_THRESHOLD:=10}
-export ZEN_BELL_OFF=${ZEN_BELL_OFF:-1}
 typeset -ga ZEN_BELL_IGNORE
-(( $#ZEN_BELL_IGNORE )) || ZEN_BELL_IGNORE=(
-  nvim vim vi less man ssh tmux btop htop watch watchexec viddy
-  claude c lazygit git-commit fzf top journalctl
-)
 
 if (( $+commands[zen-bell] )); then
   autoload -Uz add-zsh-hook
@@ -69,8 +63,8 @@ fi
 # --no-write-fetch-head: a concurrent `git pull` also writes FETCH_HEAD (no
 # lock); a doubled for-merge line makes its rebase fail.
 #
-# Tunables (override in ~/.zshrc.local):
-#   ZEN_FETCH_INTERVAL  minutes between fetches per repo (0 disables)
+# zen.json git.fetchIntervalMinutes, or env ZEN_FETCH_INTERVAL: minutes between
+# fetches per repo (0 disables)
 
 : ${ZEN_FETCH_INTERVAL:=10}
 

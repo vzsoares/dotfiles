@@ -16,7 +16,7 @@
 #   -f       play even if the terminal is focused
 #   -N       raise the notification even if the terminal is focused;
 #            the sound stays gated
-#   -v N     volume, 0.0 - 1.0 (default 0.4, or $ZEN_BELL_VOLUME)
+#   -v N     volume, 0.0 - 1.0 (default: $ZEN_BELL_VOLUME, bell.volume, 0.4)
 #   -n TEXT  also raise a desktop notification with this summary
 #   -b TEXT  body text for the notification (needs -n)
 #   -u LEVEL notification urgency: low | normal | critical  (Linux only)
@@ -25,7 +25,8 @@
 #            Overrides the dunst per-urgency timeout (urgency_normal is 10s).
 #            Ignored on macOS, where Notification Center owns the timing.
 #
-# ZEN_BELL_OFF=1 silences everything: no sound, no notification, even with -f.
+# bell.enabled=false in zen.json (see zen-config), or ZEN_BELL_OFF=1, silences
+# everything: no sound, no notification, even with -f.
 #
 # The notification is gated by the same focus check as the sound: if you are
 # looking at the terminal, neither fires. Pass -f to always notify.
@@ -38,8 +39,8 @@
 
 set -euo pipefail
 
-volume="${ZEN_BELL_VOLUME:-0.4}"
-force="${ZEN_BELL_WHEN_FOCUSED:-0}"
+volume="${ZEN_BELL_VOLUME:-}"
+force="${ZEN_BELL_WHEN_FOCUSED:-}"
 notify_always=0
 sound=""
 summary=""
@@ -48,6 +49,9 @@ urgency=""
 timeout_ms=""
 
 [[ $(uname -s) == Darwin ]] && macos=1 || macos=0
+
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+cfg() { "$here/config.sh" get "bell.$1" 2>/dev/null || true; }
 
 # Options taking a value must actually have one; `shift 2` past the end would
 # abort under `set -u` with a confusing error.
@@ -64,13 +68,22 @@ while [[ $# -gt 0 ]]; do
         -b | --body) need_arg "$@"; body="$2"; shift 2 ;;
         -u | --urgency) need_arg "$@"; urgency="$2"; shift 2 ;;
         -t | --timeout) need_arg "$@"; timeout_ms="$2"; shift 2 ;;
-        -h | --help) sed -n '2,35p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        -h | --help) sed -n '2,36p' "$0" | sed 's/^# \?//'; exit 0 ;;
         -*) echo "zen-bell: unknown option $1" >&2; exit 2 ;;
         *) sound="$1"; shift ;;
     esac
 done
 
-[[ ${ZEN_BELL_OFF:-0} == 1 ]] && exit 0
+if [[ -n ${ZEN_BELL_OFF:-} ]]; then
+    [[ $ZEN_BELL_OFF == 1 ]] && exit 0
+elif [[ $(cfg enabled) == false ]]; then
+    exit 0
+fi
+[[ -n $volume ]] || volume=$(cfg volume)
+volume=${volume:-0.4}
+if [[ -z $force ]]; then
+    [[ $(cfg whenFocused) == true ]] && force=1 || force=0
+fi
 
 if [[ -z $sound ]]; then
     echo "zen-bell: no sound given (try: zen-bell complete)" >&2

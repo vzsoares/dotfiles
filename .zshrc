@@ -77,6 +77,9 @@ fpath=(~/.zsh/completions ~/.oh-my-zsh/completions $fpath)
 # this a no-op there. Must precede oh-my-zsh, which runs compinit.
 [ -d "$HOME/.docker/completions" ] && fpath=("$HOME/.docker/completions" $fpath)
 
+# Shell-side zen.json settings; must precede oh-my-zsh, which sources zsh/*.zsh
+eval "$("$ZSH_CUSTOM/../scripts/config.sh" env)"
+
 source $ZSH/oh-my-zsh.sh
 
 # User configuration

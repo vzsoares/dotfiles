@@ -1,0 +1,19 @@
+{
+  "bell": {
+    "enabled": false,
+    "volume": 0.4,
+    "whenFocused": false,
+    "threshold": 10,
+    "ignore": [
+      "nvim", "vim", "vi", "less", "man", "ssh", "tmux", "btop", "htop",
+      "watch", "watchexec", "viddy", "claude", "c", "lazygit", "git-commit",
+      "fzf", "top", "journalctl"
+    ]
+  },
+  "git": {
+    "fetchIntervalMinutes": 10
+  },
+  "wrapup": {
+    "model": "sonnet"
+  }
+}

@@ -20,6 +20,7 @@ LINKS=(
     "zen-env:scripts/env-build.py"
     "zen-ytdl:scripts/ytdl.py"
     "zen-bell:scripts/bell.sh"
+    "zen-config:scripts/config.sh"
     "zen-cava:scripts/cava.sh"
     "zen-doc:scripts/doc.sh"
     "zen-wrapup:scripts/wrapup.sh"

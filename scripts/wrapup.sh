@@ -11,7 +11,8 @@ set -e
 
 CONFIG="$HOME/.claude/second-brain.json"
 STATE_DIR="$HOME/.cache/zen-wrapup"
-MODEL="${ZEN_WRAPUP_MODEL:-sonnet}"
+MODEL="${ZEN_WRAPUP_MODEL:-$("$(dirname "$(readlink -f "$0")")/config.sh" get wrapup.model 2>/dev/null || true)}"
+MODEL="${MODEL:-sonnet}"
 MIN_USER_TURNS=3
 
 usage() {
@@ -24,7 +25,7 @@ usage: zen-wrapup hook
   run      wrap up one transcript in the foreground (cwd defaults to $PWD)
   digest   print the condensed transcript the skill reads
 
-  env: ZEN_WRAPUP_MODEL (default: sonnet)
+  model: $ZEN_WRAPUP_MODEL, else zen.json wrapup.model, else sonnet
 EOF
 }
 

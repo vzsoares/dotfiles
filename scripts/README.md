@@ -22,6 +22,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `doc.sh` | `zen-doc` | Adds PDFs/docs to the second-brain vault as Markdown (markitdown/docling) and refreshes the qmd index. |
 | `wrapup.sh` | `zen-wrapup` | SessionEnd hook: digests the transcript and runs the `wrapup` skill headless (memories, vault session log, consolidation). |
 | `bell.sh` | `zen-bell` | Plays a feedback sound / desktop notification, unless the terminal is focused. |
+| `config.sh` | `zen-config` | Reads personal settings from `zen.json` (+ untracked `~/.config/zen/config.json`). |
 | `run.sh` | — | Fuzzy picker that lists & runs the scripts in this dir (and aliases). |
 | `screenkey.sh` | — | Loops `screenkey` for on-screen keystroke display (demos/screencasts). |
 
@@ -108,3 +109,15 @@ zen-pgp decrypt [FILE]     # auto-detects symmetric vs. key-based
 uv run scripts/test_commit.py
 uv run scripts/test_release.py
 ```
+
+### zen-config
+```
+zen-config show                 # merged settings
+zen-config get bell.enabled     # one key
+zen-config edit                 # shared zen.json (both machines)
+zen-config edit --local         # ~/.config/zen/config.json (this machine)
+```
+`zen.json` at the repo root is tracked and public, so it holds no secrets. The
+machine file is deep-merged on top. Env vars (`ZEN_BELL_OFF=1 …`) win over both.
+Scripts read keys at runtime; shell-side keys (`bell.threshold`, `bell.ignore`,
+`git.fetchIntervalMinutes`) apply to new shells.
