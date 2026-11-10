@@ -60,6 +60,8 @@ func TestAgentAncestor(t *testing.T) {
 		{"native versioned with args", "/Users/x/.local/share/claude/versions/2.1.50 --foo", "claude"},
 		{"node-run", "node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js", "claude-code"},
 		{"node-run after flag", "/usr/bin/node --no-warnings /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js", "claude-code"},
+		{"node with flag value", "node --require ./preload.js /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js", "claude-code"},
+		{"bun run", "bun run /x/node_modules/@anthropic-ai/claude-code/cli.js", "claude-code"},
 		{"login shell", "-zsh", ""},
 		{"tmux", "tmux", ""},
 		{"coincidental name", "/usr/bin/claude-notes-viewer", ""},

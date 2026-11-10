@@ -58,8 +58,9 @@ func walk(parent Parent, pid int) (bool, string) {
 }
 
 // agentIn returns the agent named by a command line's executable path, or
-// by the script a runtime executes; segments must equal a name, not contain it.
-// Paths containing spaces are split at the space.
+// by any argument of a runtime (node --require x cli.js, bun run cli.js); segments must equal a name, not contain it.
+// shortcut: an executable path containing spaces is split at the space and
+// missed; read /proc or use ps -o comm= as well if that install shows up.
 func agentIn(args string) string {
 	fields := strings.Fields(args)
 	if len(fields) == 0 {
@@ -73,8 +74,8 @@ func agentIn(args string) string {
 		return ""
 	}
 	for _, f := range fields[1:] {
-		if !strings.HasPrefix(f, "-") {
-			return agentSegment(f)
+		if a := agentSegment(f); a != "" {
+			return a
 		}
 	}
 	return ""
