@@ -77,7 +77,7 @@ var secrets = []struct{ in, secret string }{
 	{"curl -H 'X: y' --oauth Bearer abc.def-ghi_jkl123 x", "abc.def-ghi_jkl123"},
 	{"jwt " + jwtToken, jwtToken},
 	{"psql postgres://admin:" + dbPass + "@db.local:5432/app", dbPass},
-	{"GITHUB_TOKEN=plaintoken123 gh pr list", "plaintoken123"},
+	{"GITHUB_TOKEN=plaintoken123 gh pr list", "plaintoken123"}, // gitleaks:allow
 	{"export MY_SECRET='s3cr3t value'", "s3cr3t value"},
 	{"DB_PASSWORD=\"pw-123-xyz\" ./run", "pw-123-xyz"},
 	{"STRIPE_KEY=" + stripeKey + " node app", stripeKey},
@@ -86,7 +86,7 @@ var secrets = []struct{ in, secret string }{
 	{`curl -H "Authorization: Basic dXNlcjpwYXNz" https://x`, "dXNlcjpwYXNz"}, // gitleaks:allow
 	{"curl -u bob:bobspassword https://x", "bobspassword"},                    // gitleaks:allow
 	{"curl -H 'X-Api-Key: hdrkey123' https://x", "hdrkey123"},                 // gitleaks:allow
-	{`curl -d '{"token": "jsontok123"}' https://x`, "jsontok123"},
+	{`curl -d '{"token": "jsontok123"}' https://x`, "jsontok123"},             // gitleaks:allow
 }
 
 func TestRedact(t *testing.T) {
