@@ -1,0 +1,10 @@
+version: 2
+
+# Backstop: these files hold synthetic secrets that exercise redaction and
+# scanner tests. Fixtures are built at runtime, so nothing here should match.
+secret:
+  ignored_paths:
+    - scripts/telemetry/parse_test.go
+    - scripts/telemetry/testdata/**
+    - scripts/test_commit.py
+    - scripts/test_board.py

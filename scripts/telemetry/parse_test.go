@@ -53,27 +53,40 @@ func TestGroupKeySubcommand(t *testing.T) {
 	}
 }
 
-// Synthetic secrets only: none of these are real credentials.
+// Synthetic secrets only, assembled from parts so no source line matches a
+// real token format.
+var (
+	awsKey    = "AK" + "IA" + "ABCDEFGHIJKLMNOP"
+	ghToken   = "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz0123"
+	ghPAT     = "github" + "_pat_" + "11ABCDEFG0123456789_abcdefghijklmnop"
+	antKey    = "sk" + "-ant-" + "api03-abcdefghijklmnop-qrstuv"
+	oaiKey    = "sk" + "-proj" + "0123456789abcdefXYZ"
+	slackTok  = "xo" + "xb-" + "123456789012-abcdefghij"
+	jwtToken  = "ey" + "JhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiIxIn0." + "c2lnbmF0dXJl" + "LXZhbHVl"
+	dbPass    = "hunter" + "2pass"
+	stripeKey = "rk" + "_live_" + "abc123"
+)
+
 var secrets = []struct{ in, secret string }{
-	{"aws s3 ls --profile x AKIAABCDEFGHIJKLMNOP", "AKIAABCDEFGHIJKLMNOP"}, // gitleaks:allow
-	{"git clone https://ghp_abcdefghijklmnopqrstuvwxyz0123@github.com/x/y", "ghp_abcdefghijklmnopqrstuvwxyz0123"},
-	{"echo github_pat_11ABCDEFG0123456789_abcdefghijklmnop", "github_pat_11ABCDEFG0123456789_abcdefghijklmnop"},
-	{"curl -d key=sk-ant-api03-abcdefghijklmnop-qrstuv x", "sk-ant-api03-abcdefghijklmnop-qrstuv"},
-	{"openai --api sk-proj0123456789abcdefXYZ", "sk-proj0123456789abcdefXYZ"},
-	{"slack post xoxb-123456789012-abcdefghij", "xoxb-123456789012-abcdefghij"},
+	{"aws s3 ls --profile x " + awsKey, awsKey},
+	{"git clone https://" + ghToken + "@github.com/x/y", ghToken},
+	{"echo " + ghPAT, ghPAT},
+	{"curl -d key=" + antKey + " x", antKey},
+	{"openai --api " + oaiKey, oaiKey},
+	{"slack post " + slackTok, slackTok},
 	{"curl -H 'X: y' --oauth Bearer abc.def-ghi_jkl123 x", "abc.def-ghi_jkl123"},
-	{"jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXZhbHVl", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXZhbHVl"},
-	{"psql postgres://admin:hunter2pass@db.local:5432/app", "hunter2pass"},
-	{"GITHUB_TOKEN=plaintoken123 gh pr list", "plaintoken123"}, // gitleaks:allow
+	{"jwt " + jwtToken, jwtToken},
+	{"psql postgres://admin:" + dbPass + "@db.local:5432/app", dbPass},
+	{"GITHUB_TOKEN=plaintoken123 gh pr list", "plaintoken123"},
 	{"export MY_SECRET='s3cr3t value'", "s3cr3t value"},
 	{"DB_PASSWORD=\"pw-123-xyz\" ./run", "pw-123-xyz"},
-	{"STRIPE_KEY=rk_live_abc123 node app", "rk_live_abc123"}, // gitleaks:allow
+	{"STRIPE_KEY=" + stripeKey + " node app", stripeKey},
 	{"mysql --password hunter3pw -u x", "hunter3pw"},
 	{"tool --password=hunter4pw", "hunter4pw"},
 	{`curl -H "Authorization: Basic dXNlcjpwYXNz" https://x`, "dXNlcjpwYXNz"}, // gitleaks:allow
 	{"curl -u bob:bobspassword https://x", "bobspassword"},                    // gitleaks:allow
 	{"curl -H 'X-Api-Key: hdrkey123' https://x", "hdrkey123"},                 // gitleaks:allow
-	{`curl -d '{"token": "jsontok123"}' https://x`, "jsontok123"},             // gitleaks:allow
+	{`curl -d '{"token": "jsontok123"}' https://x`, "jsontok123"},
 }
 
 func TestRedact(t *testing.T) {

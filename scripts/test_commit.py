@@ -266,16 +266,20 @@ def test_scan_secrets_flags_plaintext_under_encrypted_name(git_repo: Path) -> No
     assert any("plaintext contents" in v for v in commit.scan_secrets())
 
 
-def test_scan_secrets_content(
-    git_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    (git_repo / "app.py").write_text("KEY = 'AKIAIOSFODNN7EXAMPLE'\n")
+# Built at runtime so no literal AWS-shaped key sits in this public file.
+AWS_KEY = "AK" + "IA" + "IOSFODNN7EXAMPLE"
+
+
+def test_scan_secrets_content(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (git_repo / "app.py").write_text(f"KEY = '{AWS_KEY}'\n")
     _git("add", "app.py")
     _real_run = subprocess.run
 
     def _mock_run(cmd, **kwargs):
         if isinstance(cmd, list) and cmd[:1] == ["gitleaks"]:
-            return subprocess.CompletedProcess(cmd, 1, "Finding: aws-access-key-id\n", "")
+            return subprocess.CompletedProcess(
+                cmd, 1, "Finding: aws-access-key-id\n", ""
+            )
         return _real_run(cmd, **kwargs)
 
     monkeypatch.setattr(commit.subprocess, "run", _mock_run)
@@ -286,9 +290,7 @@ def test_scan_secrets_honors_gitleaks_allow(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # gitleaks returning 0 means no findings (it handles gitleaks:allow natively).
-    (git_repo / "app.py").write_text(
-        "KEY = 'AKIAIOSFODNN7EXAMPLE'  # gitleaks:allow\n"
-    )
+    (git_repo / "app.py").write_text(f"KEY = '{AWS_KEY}'  # gitleaks:allow\n")
     _git("add", "app.py")
     _real_run = subprocess.run
 

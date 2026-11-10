@@ -39,7 +39,7 @@ DASHED = "-".join((PAGE[:8], PAGE[8:12], PAGE[12:16], PAGE[16:20], PAGE[20:]))
 ME = "11" * 16
 WORK = "22" * 16
 OTHER = "cd" * 16
-TOKEN = "secret-token-value"
+TOKEN = "secret-" + "token-value"
 TODAY = date.today().isoformat()
 
 

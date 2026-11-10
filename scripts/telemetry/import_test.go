@@ -73,7 +73,7 @@ func TestImport(t *testing.T) {
 	if err := db.QueryRow(`SELECT ok, exit_code, error, exe FROM tool_calls WHERE tool_use_id = 'toolu_a3'`).Scan(&ok, &code, &errText, &exe); err != nil {
 		t.Fatal(err)
 	}
-	if ok != 0 || code != 1 || exe != "bun" || strings.Contains(errText, "supersecretvalue123") {
+	if ok != 0 || code != 1 || exe != "bun" || strings.Contains(errText, "fixturevalue123") {
 		t.Fatalf("error row: ok=%d code=%d exe=%q err=%q", ok, code, exe, errText)
 	}
 	var agentID, agentType string
