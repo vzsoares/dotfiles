@@ -1,0 +1,23 @@
+#!/bin/bash
+# Global core.hooksPath hides each repo's own hooks dir; every hook name here
+# links to this script, which execs <git-common-dir>/hooks/<name> when present.
+set -e
+# Resolved without spawning git: reference-transaction fires several times per
+# commit. Git runs hooks from the work tree root, or from $GIT_DIR when bare.
+gd=${GIT_DIR:-.git}
+if [ -f "$gd" ]; then
+	read -r _ gd <"$gd" || true
+fi
+[ -d "$gd" ] || gd=.
+if [ -f "$gd/commondir" ]; then
+	read -r common <"$gd/commondir" || true
+	case $common in
+	/*) gd=$common ;;
+	*) gd=$gd/$common ;;
+	esac
+fi
+[ -d "$gd/objects" ] || gd=$(git rev-parse --path-format=absolute --git-common-dir) || exit 0
+hook=$gd/hooks/${0##*/}
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+	exec "$hook" "$@"
+fi

@@ -107,7 +107,8 @@ Repos follow one of two models (zen-flow skill, Branch model section):
 
 Every push, tag, release or deploy on `prod`/`main`/`master` needs the user's
 approval for that one action, filed as a `zen-inbox ask`. `zen-sweep` reports
-`branch-model` drift in personal repos.
+`branch-model` drift in personal repos and `hooks-path` repos that skip the
+global pre-push hook.
 
 ## Prod approval gate (#680)
 
@@ -135,8 +136,46 @@ closed on it. Right after branch resolution, before hooks or any mutating phase:
   an id, else prints that a real run needs one.
 - **Exit codes.** 3 = approval missing, rejected or used; every other failure stays
   1. `--dev` is unchanged and needs no approval, so `zen-merge` is unaffected.
-- **Not covered.** `git push` of single-branch repos (`zen-merge`'s `push pending`),
-  deploys, and an agent that edits `zen-flow.db` or the state file by hand.
+- **Push phase.** `phase_push` runs its `git push origin <target> --follow-tags`
+  with `ZEN_PROD_RELEASE=<state.approval_id>` (a resumed run uses the stored id; a
+  `--dev` push or an unapproved TTY release sets nothing). The manual-push hint
+  after a failed push carries the same prefix.
+- **Not covered.** Deploys, the `rebase_source` push of the source branch, and an
+  agent that edits `zen-flow.db` or the state file by hand.
+
+## Prod push hook (#703)
+
+`git/hooks/pre-push`, installed through the global `core.hooksPath =
+~/code/personal/dotfiles/git/hooks` in the tracked `.gitconfig`, gates every push
+that updates `refs/heads/{prod,main,master}` on any remote. Tags and other branches
+pass without calling zen-inbox. It is a guard rail for agents: `--no-verify` skips it.
+
+- **Binding.** action `push`, repo = the main checkout's folder (as above), branch =
+  the remote ref minus `refs/heads/`, sha = the full local sha pushed. A ref whose
+  local sha equals the remote sha passes; creating a gated branch needs an ask.
+- **Deletion and force** to a gated ref are always refused (`run it yourself with
+  git push --no-verify`). Force = remote sha not all zeros and not an ancestor of
+  the pushed sha, including a remote sha unknown locally.
+- **Who.** With `AGENT_MANAGER_SESSION_ID` or `CLAUDECODE` set, or `/dev/tty`
+  unopenable, it runs `zen-inbox approval check --match` for every gated ref, then
+  `use --match` for each only when all pass; a refusal prints the reason and the
+  `zen-inbox ask <task> --prod push …` line. Otherwise a default-No `gum confirm`
+  on `/dev/tty` per ref; no gum refuses. `ZEN_PREPUSH_TTY` overrides the tty path
+  (tests only).
+- **Fail closed.** zen-inbox missing, or exiting other than 0/1, refuses the push.
+- **zen-release.** With `ZEN_PROD_RELEASE=<id>`, a gated ref passes when `zen-inbox
+  approval used <id> --action release --repo R --branch B` prints a sha that is an
+  ancestor of the pushed sha; otherwise the ref falls through to the rules above.
+- **Known limits.** `git push --dry-run` runs the hook and consumes (preview with
+  `approval check --match`). A push that fails after the hook consumed has burned
+  its approval.
+- **Dispatchers.** A global hooksPath hides each repo's `.git/hooks`, so every
+  other standard hook name in `git/hooks/` links to `dispatch`, which execs
+  `<git-common-dir>/hooks/<name>` with args and stdin; pre-push chains to the
+  repo's own pre-push with the buffered stdin. `push-to-checkout` replays git's
+  built-in `updateInstead` when the repo has none. A repo with its own local
+  `core.hooksPath` (husky) skips all of this; `zen-sweep` reports it as
+  `hooks-path`.
 
 ## State & resume
 

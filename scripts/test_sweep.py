@@ -89,6 +89,15 @@ def test_dirty_unpushed_and_stash(remote_repo: Path) -> None:
     ]
 
 
+def test_local_hooks_path_reported(remote_repo: Path, tmp_path: Path) -> None:
+    other = _init(tmp_path / "plain")
+    assert sweep.sweep_repo(other, live_dirs=set()).findings == []
+    _git("config", "core.hooksPath", ".husky/_", cwd=remote_repo)
+    assert _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()).findings) == [
+        ("hooks-path", ".husky/_ (skips the global prod-push hook)")
+    ]
+
+
 def test_no_upstream_and_merged(remote_repo: Path) -> None:
     _git("branch", "feature", cwd=remote_repo)
     kinds = _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()).findings)
@@ -236,7 +245,7 @@ def test_branch_model_origin_head(remote_repo: Path) -> None:
     assert _models(remote_repo) == []
     _git("remote", "set-head", "origin", "--delete", cwd=remote_repo)
     assert _models(remote_repo)[0].startswith("origin/HEAD is unset, not origin/dev")
-    _git("push", "-q", "origin", "prod", cwd=remote_repo)
+    _git("push", "-q", "--no-verify", "origin", "prod", cwd=remote_repo)
     _git("remote", "set-head", "origin", "prod", cwd=remote_repo)
     assert _models(remote_repo)[0].startswith("origin/HEAD is origin/prod")
 

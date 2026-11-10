@@ -1,0 +1,18 @@
+#!/bin/bash
+# Its presence replaces git's built-in updateInstead, so without a repo hook
+# this replays that default (as in git's push-to-checkout.sample).
+set -e
+hook="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/push-to-checkout"
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+	exec "$hook" "$@"
+fi
+die() {
+	echo >&2 "$*"
+	exit 1
+}
+git update-index -q --ignore-submodules --refresh || die "Up-to-date check failed"
+git diff-files --quiet --ignore-submodules -- || die "Working directory has unstaged changes"
+head=HEAD
+git cat-file -e HEAD 2>/dev/null || head=$(git hash-object -t tree --stdin </dev/null)
+git diff-index --quiet --cached --ignore-submodules "$head" -- || die "Working directory has staged changes"
+git read-tree -u -m "$1" || die "Could not update working tree to new HEAD"

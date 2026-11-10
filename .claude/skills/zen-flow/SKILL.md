@@ -141,7 +141,8 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   `master` is filed as `zen-inbox ask <task> --prod <push|tag|release|deploy>
   --repo <repo> --branch <branch> --sha <40-char sha>`, approved once per action in the
   panel, in every repo (Approva included). `zen-release --approval <id>` consumes
-  it; file the ask before any such `git push`. Agents never answer a `--prod` ask. Workers
+  it; the global pre-push hook (`git/hooks`) consumes a `--prod push` ask for that
+  repo, branch and sha, so file it before any such `git push`. Agents never answer a `--prod` ask. Workers
   never run one; chief or the orchestrator may after my approval. Never ff-merge a
   worker branch into `prod`.
 

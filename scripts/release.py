@@ -422,17 +422,21 @@ def gum_confirm(prompt: str, default: bool = True) -> bool:
     return result.returncode == 0
 
 
-def run(cmd: list[str], *, title: str = "") -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run a command, optionally under `gum spin`. Honors --dry-run."""
     if DRY_RUN:
         info(f"[dry-run] {' '.join(cmd)}")
         return subprocess.CompletedProcess(cmd, 0, "", "")
     if title:
         spin = subprocess.run(
-            ["gum", "spin", "--show-error", "--title", title, "--", *cmd], check=False
+            ["gum", "spin", "--show-error", "--title", title, "--", *cmd],
+            check=False,
+            env=env,
         )
         return subprocess.CompletedProcess(cmd, spin.returncode, "", "")
-    return subprocess.run(cmd, text=True, capture_output=True, check=False)
+    return subprocess.run(cmd, text=True, capture_output=True, check=False, env=env)
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -1463,12 +1467,19 @@ def phase_push(state: State) -> None:
     if not gum_confirm(f"Push {target} and tags to origin?"):
         info("Skipped push. Don't forget to push later.")
         return
+    # The global pre-push hook accepts the target push on this used approval.
+    env, prefix = None, ""
+    if state.approval_id and not state.dev:
+        env = {**os.environ, "ZEN_PROD_RELEASE": state.approval_id}
+        prefix = f"ZEN_PROD_RELEASE={state.approval_id} "
     result = run(
-        ["git", "push", "origin", target, "--follow-tags"], title=f"Pushing {target}..."
+        ["git", "push", "origin", target, "--follow-tags"],
+        title=f"Pushing {target}...",
+        env=env,
     )
     if result.returncode != 0:
         fail("Push failed. Resolve the issue and push manually:")
-        info(f"  git push origin {target} --follow-tags")
+        info(f"  {prefix}git push origin {target} --follow-tags")
         raise typer.Exit(1)
     good(f"Pushed {target}")
 

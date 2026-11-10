@@ -56,3 +56,7 @@ Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
 ## [2026-11-10] update | zen-inbox: only the user answers a prod ask (#691)
 The store refuses `answer`/`resolve` on a prod-action ask unless `Inbox.User`, an in-process bit only the panel sets after `internal/guard` passes (agent env vars and a `ps` walk for claude/codex ancestors, fail closed). A refused panel shows a notice and offers no answer; a passing one confirms Approve on a y/N screen with the full sha.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-10] update | Prod push hook (#703)
+Global `core.hooksPath` = `git/hooks`: pre-push refuses an agent push to prod/main/master unless `zen-inbox approval use --match --action push` consumes an approved ask for that repo, branch and sha; deletion and force are refused; a human push gets a default-No gum confirm; zen-release's push passes via `ZEN_PROD_RELEASE` + read-only `approval used`. Every other hook name dispatches to the repo's own `.git/hooks`. zen-sweep reports `hooks-path` repos that skip it.
+Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md

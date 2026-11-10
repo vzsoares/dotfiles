@@ -19,7 +19,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note, priority, relate. |
-| `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees and `branch-model` drift. |
+| `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees, `branch-model` drift and `hooks-path` repos that skip the global pre-push hook. |
 | `lock.sh` | `zen-lock` | `zen-lock <name> [--wait SECS] -- <cmd>` runs cmd holding `~/.cache/zen/<name>.lock` (mkdir, owner file, released on exit/INT/TERM; stale owner taken over; a takeover guard left by a killed waiter expires after 60 s or when its pid dies; exit 75 on timeout). `status <name>` (also reports a leftover guard), `break <name>` (also removes it). Tests: `bash scripts/test_lock.sh`. |
 | `../inbox/` (Go) | `zen-inbox` | Decision inbox: agents `ask`, a Bubble Tea watcher answers by pick, free text or talk; batched delivery. See `inbox/README.md`. |
 | `telemetry/` (Go) | `zen-telemetry` | Hook that logs every agent tool call to `zen-flow.db`; weekly time-sink report for chief. |
@@ -68,7 +68,8 @@ first mutating phase, and must match the repo (main checkout name), target branc
 and full tip sha of the chain's first branch; otherwise it exits 3 and prints the ask
 to file. A TTY run in your own terminal may go without one after a default-No
 confirm. `--resume` reuses the consumed id unless the branch moved before the
-merge; `--dry-run` never consumes. `--dev` needs no approval.
+merge; `--dry-run` never consumes. `--dev` needs no approval. The target push runs
+with `ZEN_PROD_RELEASE=<id>` so the global pre-push hook accepts it.
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them.
 
@@ -134,6 +135,8 @@ zen-inbox ask <task> -q "<question>" -o a -o b --rec a   # prints 580.1 (--gate:
           [--title "<task title>"] [--brief "<1-3 lines>"]  # session+task context
 zen-inbox ask <task> --prod release --repo R --branch B --sha <40 hex>  # Approve/Hold
 zen-inbox approval use|check <id> --action A --repo R --branch B --sha S [--by who]
+zen-inbox approval use|check --match --action A --repo R --branch B --sha S  # oldest approved unused
+zen-inbox approval used <id> --action A --repo R --branch B  # read-only: prints the used ask's sha
 zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
 zen-inbox list [--all] | show <id>                      # --json on both
@@ -150,7 +153,13 @@ open decision gets the held answers printed on stdout instead of a send to itsel
 Exit codes: 0 ok · 1 not found or wrong state · 2 usage · 3 recorded, delivery
 failed · 4 vault, db or Go unavailable. `approval use` consumes a prod-action ask
 once (exit 1 with the reason when it does not match); `check` never consumes; amend
-of a prod-action ask is refused. `watch` is a Bubble Tea panel: one row per
+of a prod-action ask is refused. `--match` takes no id and picks the oldest approved
+unused ask bound to all four fields. `git/hooks/pre-push` (global `core.hooksPath`
+in `.gitconfig`) runs `check --match` then `use --match --action push` before an
+agent push to `prod`/`main`/`master` lands, refuses deletion and force push, asks a
+default-No `gum confirm` in your own terminal, and accepts zen-release's push via
+`ZEN_PROD_RELEASE=<id>` and `approval used`. `--no-verify` skips it; see
+`docs/wiki/architecture/release-tooling.md`. `watch` is a Bubble Tea panel: one row per
 asking session; opening one shows each task's title, brief and asker, then its
 questions. Answer walks them (`a`-`d` pick, `f` free text, `s` skip, `t` talk, `v`
 view full, `esc` back), a review screen sends them; nothing is recorded before Send.
@@ -248,6 +257,7 @@ uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_board.py
 uv run scripts/test_sweep.py
+uv run scripts/test_prepush.py
 (cd scripts/telemetry && gofmt -l . && go vet ./... && go test ./...)
 uv run scripts/lib/test_sessions.py
 ```

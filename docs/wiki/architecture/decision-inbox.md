@@ -119,6 +119,23 @@ one-line reason on stderr, 2 usage, 4 db. `--by` defaults to
 `$AGENT_MANAGER_SESSION_ID`, else `user`. zen-release is the consumer; see
 [[release-tooling]].
 
+`approval use|check --match --action A --repo R --branch B --sha S` takes no id
+(an id together with `--match`, or neither, is exit 2). In one `BEGIN IMMEDIATE`
+it picks the oldest decision whose `prod_actions` row matches all four fields and
+that is answered `pick` = `Approve` and unused; `use` consumes it, `check` never
+does. None → exit 1, `no approved unused ask for <action> <repo> <branch>@<sha12>`.
+Concurrent `use --match` calls on one approval: exactly one wins.
+
+`approval used <id> --action A --repo R --branch B` is read-only: exit 0 and the
+approved sha on stdout when the ask was answered `Approve`, has been used, and its
+action, repo and branch match; else 1 with the reason (`not used`, `answered Hold`,
+`branch mismatch …`, unknown id, not a prod ask), 2 usage, 4 db.
+
+Both serve the global `git/hooks/pre-push` gate (#703): an agent push to
+`prod`/`main`/`master` runs `check --match` for every gated ref, then `use --match`
+for each; zen-release's own push passes via `ZEN_PROD_RELEASE=<id>` and `approval
+used`. See [[release-tooling]].
+
 ### Only the user answers one (#691)
 
 - **CLI refusal.** The store refuses every close as `answered` (`answer` pick or

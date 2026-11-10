@@ -49,7 +49,8 @@ and must work on the first try:
 Commits by hand (`feat:`, `fix:`, `chore:` …), scan the diff for secrets before
 committing, and never create release tags from a cloud session. A push, tag,
 release or deploy that targets `prod`, `main` or `master` needs my approval for that
-one action; the cloud has no `zen-inbox`, so ask me in chat and wait for it.
+one action; the cloud has no `zen-inbox` and no pre-push hook, so ask me in chat
+and wait for it before any such `git push`.
 
 # Task workflow — `/zen-flow`
 

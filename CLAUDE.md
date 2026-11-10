@@ -22,6 +22,9 @@ aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
               #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
 i3/           # i3 window manager config (linux)
+git/hooks/    # global core.hooksPath (.gitconfig): pre-push refuses an agent
+              #   push to prod/main/master without an approved zen-inbox
+              #   --prod push ask; every other hook name runs the repo's own
 flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+Print
 gnupg/        # gpg-agent.conf; macos.conf / linux.conf are full per-OS files
               #   (gpg-agent.conf has no import directive, unlike alacritty's

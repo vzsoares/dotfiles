@@ -1,0 +1,127 @@
+#!/bin/bash
+# Refuses an agent push to prod/main/master unless it consumes an approved,
+# unused `zen-inbox ask --prod push` for that repo, branch and sha, then runs
+# the repo's own pre-push. A guard rail, not a boundary: --no-verify skips it.
+# Known limit: git push --dry-run runs this hook too, so it consumes.
+set -e
+
+zen_say() { echo "pre-push: $*" >&2; }
+
+input=$(
+	cat
+	echo .
+)
+input=${input%.}
+
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+repo=$(basename "$(dirname "$common")")
+bypass="run it yourself with git push --no-verify"
+
+refuse() {
+	zen_say "$*"
+	exit 1
+}
+
+ask_line() {
+	echo "  zen-inbox ask <task> --prod push --repo $repo --branch $1 --sha $2" >&2
+}
+
+zero() { [ -z "${1//0/}" ]; }
+
+# Runs zen-inbox into $out; returns 0, 1, or 5 when it is missing or failed
+# for any other reason (go, vault or db unavailable).
+inbox() {
+	if ! command -v zen-inbox >/dev/null 2>&1; then
+		out="zen-inbox not found on PATH"
+		return 5
+	fi
+	local rc=0
+	out=$(zen-inbox "$@" 2>&1) || rc=$?
+	case $rc in
+	0 | 1) return $rc ;;
+	*)
+		out="zen-inbox exited $rc: $out"
+		return 5
+		;;
+	esac
+}
+
+gated=""
+while read -r _ lsha rref rsha; do
+	case $rref in
+	refs/heads/prod | refs/heads/main | refs/heads/master) ;;
+	*) continue ;;
+	esac
+	branch=${rref#refs/heads/}
+	[ "$lsha" = "$rsha" ] && continue
+	if zero "$lsha"; then
+		refuse "deleting $branch is refused; $bypass"
+	fi
+	if ! zero "$rsha" && ! git merge-base --is-ancestor "$rsha" "$lsha" 2>/dev/null; then
+		refuse "force push to $branch is refused; $bypass"
+	fi
+	gated="$gated$branch $lsha
+"
+done <<EOF
+$input
+EOF
+
+if [ -n "$ZEN_PROD_RELEASE" ] && [ -n "$gated" ]; then
+	pending=""
+	while read -r branch sha; do
+		[ -n "$branch" ] || continue
+		if inbox approval used "$ZEN_PROD_RELEASE" --action release --repo "$repo" --branch "$branch" &&
+			git merge-base --is-ancestor "$out" "$sha" 2>/dev/null; then
+			continue
+		fi
+		pending="$pending$branch $sha
+"
+	done <<EOF
+$gated
+EOF
+	gated=$pending
+fi
+
+if [ -n "$gated" ]; then
+	tty=${ZEN_PREPUSH_TTY:-/dev/tty}
+	if [ -z "$AGENT_MANAGER_SESSION_ID" ] && [ -z "$CLAUDECODE" ] && { : <"$tty"; } 2>/dev/null; then
+		command -v gum >/dev/null 2>&1 || refuse "gum not found to confirm the push; $bypass"
+		while read -r branch sha; do
+			[ -n "$branch" ] || continue
+			gum confirm --default=false "Push $repo $branch@${sha:0:12} without an inbox approval?" <"$tty" ||
+				refuse "push to $branch cancelled"
+		done <<EOF
+$gated
+EOF
+	else
+		failed=""
+		while read -r branch sha; do
+			[ -n "$branch" ] || continue
+			rc=0
+			inbox approval check --match --action push --repo "$repo" --branch "$branch" --sha "$sha" || rc=$?
+			if [ "$rc" = 5 ]; then
+				refuse "$out; $bypass"
+			elif [ "$rc" != 0 ]; then
+				zen_say "refused $branch: $out"
+				ask_line "$branch" "$sha"
+				failed=1
+			fi
+		done <<EOF
+$gated
+EOF
+		[ -z "$failed" ] || refuse "file the ask above, wait for Approve in the panel, then push again"
+		while read -r branch sha; do
+			[ -n "$branch" ] || continue
+			inbox approval use --match --action push --repo "$repo" --branch "$branch" --sha "$sha" ||
+				refuse "refused $branch: $out"
+			zen_say "$out"
+		done <<EOF
+$gated
+EOF
+	fi
+fi
+
+hook="$common/hooks/pre-push"
+if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+	exec "$hook" "$@" < <(printf '%s' "$input")
+fi

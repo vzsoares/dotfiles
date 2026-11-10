@@ -122,7 +122,7 @@ def zen_inbox(*args: str, session: str = "") -> subprocess.CompletedProcess[str]
 def file_approval(
     branch: str, sha: str, *, repo: str = "repo", answer: str = "a"
 ) -> str:
-    """A prod-action ask from session s1, answered inside s1 so nothing is sent."""
+    """A prod-action ask from session s1, answered as the panel would."""
     asked = zen_inbox(
         "ask", "680", "--session", "s1", "--prod", "release",
         "--repo", repo, "--branch", branch, "--sha", sha,
@@ -130,9 +130,19 @@ def file_approval(
     assert asked.returncode == 0, asked.stderr
     approval = asked.stdout.strip()
     if answer:
-        answered = zen_inbox("answer", approval, answer, session="s1")
-        assert answered.returncode == 0, answered.stderr
+        panel_answer(approval, "talk" if answer == "talk" else "pick", answer)
     return approval
+
+
+def panel_answer(approval: str, kind: str, option: str) -> None:
+    """Only the user answers a prod-action ask (#691); write the panel's close."""
+    with sqlite3.connect(os.environ["ZEN_FLOW_DB"]) as db:
+        db.execute(
+            "UPDATE decisions SET status = 'answered', answer_kind = ?,"
+            " answer_option = ?, delivery = 'sent',"
+            " answered_at = '2026-01-01T00:00:00', rev = rev + 1 WHERE id = ?",
+            (kind, "" if kind == "talk" else option, approval),
+        )
 
 
 def approval_use(approval: str) -> tuple[str, str]:
@@ -157,11 +167,11 @@ def offline_gum(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(release, "gum_style", lambda *a, **k: None)
 
     def plain_run(
-        cmd: list[str], *, title: str = ""
+        cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         if release.DRY_RUN:
             return subprocess.CompletedProcess(cmd, 0, "", "")
-        return subprocess.run(cmd, text=True, capture_output=True, check=False)
+        return subprocess.run(cmd, text=True, capture_output=True, check=False, env=env)
 
     monkeypatch.setattr(release, "run", plain_run)
 
@@ -1795,11 +1805,7 @@ def test_approval_not_approve_refuses(
     dev_prod: Path, failures: list[str], answer: str, reason: str
 ) -> None:
     prod = _git("rev-parse", "prod").strip()
-    approval = file_approval(
-        "prod", dev_tip(), answer="" if answer == "talk" else answer
-    )
-    if answer == "talk":
-        assert zen_inbox("resolve", approval, session="s1").returncode == 0
+    approval = file_approval("prod", dev_tip(), answer=answer)
     assert refused(approval=approval) == release.APPROVAL_EXIT
     assert_untouched(prod)
     assert any(reason in m for m in failures)
@@ -1901,6 +1907,77 @@ def test_dry_run_checks_but_never_consumes(dev_prod: Path) -> None:
     full_release(dry_run=True)  # no approval: still runs
     assert _git("tag") == ""
     assert not release.state_path().exists()
+
+
+class _PushRecorder:
+    def __init__(self, code: int = 0) -> None:
+        self.code = code
+        self.envs: list[dict[str, str] | None] = []
+
+    def __call__(
+        self, cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        self.envs.append(env)
+        return subprocess.CompletedProcess(cmd, self.code, "", "")
+
+
+@pytest.fixture
+def push_recorder(monkeypatch: pytest.MonkeyPatch) -> _PushRecorder:
+    rec = _PushRecorder()
+    monkeypatch.setattr(release, "run", rec)
+    monkeypatch.setattr(release, "gum_confirm", lambda *a, **k: True)
+    monkeypatch.setattr(release, "good", lambda *a: None)
+    return rec
+
+
+def test_phase_push_passes_approval_to_hook(push_recorder: _PushRecorder) -> None:
+    release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
+    env = push_recorder.envs[0]
+    assert env is not None and env["ZEN_PROD_RELEASE"] == "680.1"
+    assert env["PATH"] == os.environ["PATH"]
+
+
+def test_phase_push_without_approval_or_dev_sets_nothing(
+    push_recorder: _PushRecorder,
+) -> None:
+    release.phase_push(release.State(target_branch="prod"))
+    release.phase_push(release.State(target_branch="dev", dev=True, approval_id="x"))
+    assert push_recorder.envs == [None, None]
+
+
+def test_phase_push_manual_hint_has_prefix(
+    push_recorder: _PushRecorder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    push_recorder.code = 1
+    hints: list[str] = []
+    monkeypatch.setattr(release, "info", hints.append)
+    monkeypatch.setattr(release, "fail", lambda *a: None)
+    with pytest.raises(typer.Exit):
+        release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
+    assert hints == ["  ZEN_PROD_RELEASE=680.1 git push origin prod --follow-tags"]
+
+
+def test_resumed_push_uses_stored_approval(
+    dev_prod: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    approval = file_approval("prod", dev_tip())
+    _push_fails_once(monkeypatch)
+    with pytest.raises(typer.Exit):
+        full_release(approval=approval)
+    rec = _PushRecorder()
+    real_run = release.run
+
+    def spy(
+        cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        if cmd[:2] == ["git", "push"]:
+            rec.envs.append(env)
+        return real_run(cmd, title=title, env=env)
+
+    monkeypatch.setattr(release, "run", spy)
+    full_release(resume=True)
+    assert rec.envs and rec.envs[0] is not None
+    assert rec.envs[0]["ZEN_PROD_RELEASE"] == approval
 
 
 def _push_fails_once(monkeypatch: pytest.MonkeyPatch) -> None:

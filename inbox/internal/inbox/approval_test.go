@@ -3,9 +3,11 @@ package inbox
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -262,5 +264,191 @@ func TestPlainAskAnswersWithoutUser(t *testing.T) {
 	}
 	if d := get(t, ib, id); d.Status != "answered" || d.Prod != nil || len(fake.sends) != 1 {
 		t.Fatalf("%+v %v", d, fake.sends)
+	}
+}
+
+func pushWant() ProdAction {
+	return ProdAction{Action: "push", Repo: "dotfiles", Branch: "master", Sha: testSha}
+}
+
+func askPush(t *testing.T, ib *Inbox, sid string, p ProdAction) string {
+	t.Helper()
+	d, err := ib.AskProd(AskInput{Task: "703", SessionID: sid}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d.ID
+}
+
+func TestApprovalMatchUsesOldestApprovedUnused(t *testing.T) {
+	ib, _, _ := open(t)
+	ib.User = true
+	want := pushWant()
+	used := askPush(t, ib, "s1", want)
+	approve(ib, used)
+	if _, err := ib.Approval(used, want, "earlier"); err != nil {
+		t.Fatal(err)
+	}
+	hold, text, talk, opened, withdrawn := askPush(t, ib, "s1", want), askPush(t, ib, "s1", want),
+		askPush(t, ib, "s1", want), askPush(t, ib, "s1", want), askPush(t, ib, "s1", want)
+	_, _ = ib.Answer(hold, p("b"), nil, "", nil)
+	_, _ = ib.Answer(text, nil, p("Approve"), "", nil)
+	_, _ = ib.Resolve(talk, "")
+	_, _ = ib.Withdraw(withdrawn, "s1", false)
+	other := want
+	other.Sha = strings.Repeat("f", 40)
+	others := []string{askPush(t, ib, "s1", other)}
+	for _, f := range []func(*ProdAction){
+		func(w *ProdAction) { w.Action = "release" },
+		func(w *ProdAction) { w.Repo = "core" },
+		func(w *ProdAction) { w.Branch = "main" },
+	} {
+		w := want
+		f(&w)
+		others = append(others, askPush(t, ib, "s1", w))
+	}
+	for _, id := range others {
+		approve(ib, id)
+	}
+	first, second := askPush(t, ib, "s1", want), askPush(t, ib, "s1", want)
+	approve(ib, second)
+	approve(ib, first)
+
+	id, _, err := ib.ApprovalMatch(want, "")
+	if err != nil || id != first {
+		t.Fatalf("check: %s %v", id, err)
+	}
+	if at, _ := usedAt(t, ib, first); at != "" {
+		t.Fatalf("check consumed %s", first)
+	}
+	for _, wantID := range []string{first, second} {
+		id, got, err := ib.ApprovalMatch(want, "hook")
+		if err != nil || id != wantID || got.UsedBy != "hook" {
+			t.Fatalf("use: %s %+v %v", id, got, err)
+		}
+	}
+	_, _, err = ib.ApprovalMatch(want, "hook")
+	if code(err) != 1 || err.Error() != "no approved unused ask for push dotfiles master@0123456789ab" {
+		t.Fatalf("%v", err)
+	}
+	if _, by := usedAt(t, ib, used); by != "earlier" {
+		t.Fatalf("used row rewritten: %s", by)
+	}
+	for _, id := range append([]string{hold, text, talk, opened, withdrawn}, others...) {
+		if at, _ := usedAt(t, ib, id); at != "" {
+			t.Fatalf("%s consumed", id)
+		}
+	}
+	if d := get(t, ib, opened); d.Status != "open" {
+		t.Fatalf("%+v", d)
+	}
+}
+
+func TestApprovalMatchValidation(t *testing.T) {
+	ib, _, _ := open(t)
+	bad := pushWant()
+	bad.Sha = testSha[:12]
+	if _, _, err := ib.ApprovalMatch(bad, ""); code(err) != 2 {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestConcurrentApprovalMatchOneWins(t *testing.T) {
+	ib, _, path := open(t)
+	ib.User = true
+	id := askPush(t, ib, "s1", pushWant())
+	approve(ib, id)
+	const n = 8
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		other, err := Open(path, &fakeAM{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = other.Close() })
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, err := other.ApprovalMatch(pushWant(), fmt.Sprintf("w%d", i))
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	won := 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			won++
+		case code(err) != 1 || !strings.Contains(err.Error(), "no approved unused ask"):
+			t.Fatalf("%v", err)
+		}
+	}
+	if won != 1 {
+		t.Fatalf("%d calls consumed one approval", won)
+	}
+}
+
+func TestApprovalUsed(t *testing.T) {
+	release := ProdAction{Action: "release", Repo: "dotfiles", Branch: "prod"}
+	other := func(f func(*ProdAction)) ProdAction { w := release; f(&w); return w }
+	consume := func(ib *Inbox, id string) {
+		approve(ib, id)
+		if _, err := ib.Approval(id, prodWant(), "rel"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := []struct {
+		name   string
+		setup  func(ib *Inbox, id string)
+		want   ProdAction
+		reason string
+	}{
+		{"unused", approve, release, "not used"},
+		{"open", func(*Inbox, string) {}, release, "not answered"},
+		{"hold", func(ib *Inbox, id string) { _, _ = ib.Answer(id, p("b"), nil, "", nil) }, release, "answered Hold"},
+		{"text", func(ib *Inbox, id string) { _, _ = ib.Answer(id, nil, p("Approve"), "", nil) }, release, "free text"},
+		{"talk", func(ib *Inbox, id string) { _, _ = ib.Resolve(id, "") }, release, "resolved in talk"},
+		{"action", consume, other(func(w *ProdAction) { w.Action = "push" }), "action mismatch"},
+		{"repo", consume, other(func(w *ProdAction) { w.Repo = "core" }), "repo mismatch"},
+		{"branch", consume, other(func(w *ProdAction) { w.Branch = "main" }), "branch mismatch"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ib, _, _ := open(t)
+			ib.User = true
+			id := askProd(t, ib, "s1")
+			c.setup(ib, id)
+			before, _ := usedAt(t, ib, id)
+			if _, err := ib.ApprovalUsed(id, c.want); code(err) != 1 || !strings.Contains(err.Error(), c.reason) {
+				t.Fatalf("%v", err)
+			}
+			if after, _ := usedAt(t, ib, id); after != before {
+				t.Fatalf("used changed: %q -> %q", before, after)
+			}
+		})
+	}
+	ib, _, _ := open(t)
+	ib.User = true
+	id := askProd(t, ib, "s1")
+	consume(ib, id)
+	at, _ := usedAt(t, ib, id)
+	if sha, err := ib.ApprovalUsed(id, release); err != nil || sha != testSha {
+		t.Fatalf("%s %v", sha, err)
+	}
+	if again, _ := usedAt(t, ib, id); again != at {
+		t.Fatal("used rewrote the row")
+	}
+	if _, err := ib.ApprovalUsed("703.9", release); code(err) != 1 || !strings.Contains(err.Error(), "unknown id") {
+		t.Fatalf("%v", err)
+	}
+	plain := ask(t, ib, "7", "s1", false, "Ship?", "Approve", "Hold")
+	approve(ib, plain)
+	if _, err := ib.ApprovalUsed(plain, release); code(err) != 1 || !strings.Contains(err.Error(), "not a prod-action ask") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := ib.ApprovalUsed(id, ProdAction{Action: "release", Repo: "dotfiles"}); code(err) != 2 {
+		t.Fatalf("%v", err)
 	}
 }

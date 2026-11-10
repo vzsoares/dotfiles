@@ -33,6 +33,8 @@
 #        orphan-branch   am/* branch with no worktree
 #        orphan-worktree linked worktree with no live agent-manager session
 #        merged          branch already merged into its base (dev, else main/master)
+#        hooks-path      a local core.hooksPath (e.g. husky) that skips the
+#                        global git/hooks prod-push gate
 #        branch-model    personal repos only: dev without prod (or the reverse),
 #                        a main/master left beside dev+prod, or a dev+prod
 #                        origin/HEAD that is not dev. main/master-only is valid.
@@ -281,6 +283,12 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None, personal: bool = False) -
                 and branch not in live_branches
             ):
                 found.append(Finding(name, "merged", f"{branch} (into {base})"))
+
+    hooks = git(repo, "config", "--local", "--get", "core.hooksPath").stdout.strip()
+    if hooks:
+        found.append(
+            Finding(name, "hooks-path", f"{hooks} (skips the global prod-push hook)")
+        )
 
     if personal:
         found += [Finding(name, "branch-model", p) for p in branch_model(repo)]

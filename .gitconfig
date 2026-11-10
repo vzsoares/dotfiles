@@ -11,6 +11,8 @@
 	helper = store
 [core]
 	editor = nvim
+	; pre-push gates prod/main/master on a zen-inbox ask; other names run the repo's own hooks
+	hooksPath = ~/code/personal/dotfiles/git/hooks
 [init]
 	defaultBranch = main
 [merge]

@@ -202,3 +202,81 @@ func TestCLIPlainAskFromAgentStillAnswers(t *testing.T) {
 		t.Fatal(sends)
 	}
 }
+
+func matchArgs(verb string) []string {
+	return []string{"approval", verb, "--match", "--action", "push", "--repo", "dotfiles", "--branch", "master", "--sha", sha40}
+}
+
+var pushArgs = []string{"--prod", "push", "--repo", "dotfiles", "--branch", "master", "--sha", sha40}
+
+func TestApprovalMatchCLI(t *testing.T) {
+	f := newFake(t)
+	f.zen(nil, append([]string{"ask", "703", "--session", "s1"}, pushArgs...)...)
+	noMatch := "zen-inbox: no approved unused ask for push dotfiles master@0123456789ab\n"
+	if r := f.zen(nil, matchArgs("check")...); r.code != 1 || r.stderr != noMatch {
+		t.Fatalf("%+v", r)
+	}
+	f.approve("703.1")
+	if r := f.zen(nil, matchArgs("check")...); r.code != 0 || r.stdout != "approved 703.1\n" {
+		t.Fatalf("%+v", r)
+	}
+	if got := f.sqlite("SELECT used_at FROM prod_actions"); got != "\n" {
+		t.Fatalf("check consumed: %q", got)
+	}
+	r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=w1"}, matchArgs("use")...)
+	if r.code != 0 || r.stdout != "used 703.1 by w1\n" {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(nil, matchArgs("use")...); r.code != 1 || r.stderr != noMatch {
+		t.Fatalf("%+v", r)
+	}
+}
+
+func TestApprovalMatchUsageErrors(t *testing.T) {
+	f := newFake(t)
+	fields := []string{"--action", "push", "--repo", "dotfiles", "--branch", "master", "--sha", sha40}
+	for _, args := range [][]string{
+		append([]string{"approval", "use", "703.1", "--match"}, fields...),
+		append([]string{"approval", "check", "703.1", "--match"}, fields...),
+		append([]string{"approval", "use"}, fields...),
+		append([]string{"approval", "check"}, fields...),
+		{"approval", "use", "--match", "--action", "push", "--repo", "dotfiles", "--branch", "master"},
+	} {
+		if r := f.zen(nil, args...); r.code != 2 {
+			t.Fatalf("%v: %+v", args, r)
+		}
+	}
+}
+
+func TestApprovalUsedCLI(t *testing.T) {
+	f := newFake(t)
+	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
+	used := []string{"approval", "used", "680.1", "--action", "release", "--repo", "dotfiles", "--branch", "prod"}
+	if r := f.zen(nil, used...); r.code != 1 || r.stderr != "zen-inbox: approval 680.1: not answered\n" {
+		t.Fatalf("%+v", r)
+	}
+	f.approve("680.1")
+	if r := f.zen(nil, used...); r.code != 1 || r.stderr != "zen-inbox: approval 680.1: not used\n" {
+		t.Fatalf("%+v", r)
+	}
+	f.zen(nil, approvalArgs("use", "680.1")...)
+	before := f.sqlite("SELECT * FROM prod_actions")
+	if r := f.zen(nil, used...); r.code != 0 || r.stdout != sha40+"\n" {
+		t.Fatalf("%+v", r)
+	}
+	if after := f.sqlite("SELECT * FROM prod_actions"); after != before {
+		t.Fatalf("used wrote: %q -> %q", before, after)
+	}
+	for _, args := range [][]string{
+		{"approval", "used", "680.1", "--action", "release", "--repo", "dotfiles"},
+		{"approval", "used", "680.1", "--action", "release", "--branch", "prod"},
+		{"approval", "used", "--action", "release", "--repo", "dotfiles", "--branch", "prod"},
+	} {
+		if r := f.zen(nil, args...); r.code != 2 {
+			t.Fatalf("%v: %+v", args, r)
+		}
+	}
+	if r := f.zen(nil, "approval", "used", "680.1", "--action", "push", "--repo", "dotfiles", "--branch", "prod"); r.code != 1 {
+		t.Fatalf("%+v", r)
+	}
+}
