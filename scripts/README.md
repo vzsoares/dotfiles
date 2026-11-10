@@ -20,7 +20,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note, priority, relate. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees and `branch-model` drift. |
-| `lock.sh` | `zen-lock` | `zen-lock <name> [--wait SECS] -- <cmd>` runs cmd holding `~/.cache/zen/<name>.lock` (mkdir, owner file, released on exit/INT/TERM; stale owner taken over; exit 75 on timeout). `status <name>`, `break <name>`. Tests: `bash scripts/test_lock.sh`. |
+| `lock.sh` | `zen-lock` | `zen-lock <name> [--wait SECS] -- <cmd>` runs cmd holding `~/.cache/zen/<name>.lock` (mkdir, owner file, released on exit/INT/TERM; stale owner taken over; a takeover guard left by a killed waiter expires after 60 s or when its pid dies; exit 75 on timeout). `status <name>` (also reports a leftover guard), `break <name>` (also removes it). Tests: `bash scripts/test_lock.sh`. |
 | `../inbox/` (Go) | `zen-inbox` | Decision inbox: agents `ask`, a Bubble Tea watcher answers by pick, free text or talk; batched delivery. See `inbox/README.md`. |
 | `telemetry/` (Go) | `zen-telemetry` | Hook that logs every agent tool call to `zen-flow.db`; weekly time-sink report for chief. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |

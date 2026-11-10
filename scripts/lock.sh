@@ -50,17 +50,40 @@ is_stale() {
     [ -n "$pid" ] && [ "$host" = "$(hostname)" ] && ! kill -0 "$pid" 2>/dev/null
 }
 
+GUARD_TTL=60
+
+# A reap guard is stale when its owner is gone or it outlived the milliseconds the
+# reap section takes. Without an owner file (killed right after mkdir) use its mtime.
+guard_stale() {
+    local pid started
+    pid=$(owner_field "$1" pid)
+    started=$(owner_field "$1" started)
+    if [ -n "$pid" ] && [ "$(owner_field "$1" host)" = "$(hostname)" ] && ! kill -0 "$pid" 2>/dev/null; then
+        return 0
+    fi
+    case "$started" in
+        "" | *[!0-9]*) [ -z "$pid" ] && [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ] ;;
+        *) [ $(($(date +%s) - started)) -gt "$GUARD_TTL" ] ;;
+    esac
+}
+
 # Serialised by a second mkdir lock so two waiters cannot remove a fresh lock.
+# Remaining race: a stale guard removed by two waiters in the instant one re-creates it.
 reap_stale() {
     local lock=$1 guard=$1.reap
     local reaped=1
-    mkdir "$guard" 2>/dev/null || return 1
+    if ! mkdir "$guard" 2>/dev/null; then
+        guard_stale "$guard" || return 1
+        rm -rf "$guard"
+        mkdir "$guard" 2>/dev/null || return 1
+    fi
+    printf 'pid=%s\nhost=%s\nstarted=%s\n' "$$" "$(hostname)" "$(date +%s)" >"$guard/owner"
     if [ -d "$lock" ] && is_stale "$lock"; then
         echo "zen-lock: taking over stale lock: $(describe "$lock") (pid $(owner_field "$lock" pid) gone)" >&2
         rm -rf "$lock"
         reaped=0
     fi
-    rmdir "$guard"
+    rm -rf "$guard"
     return "$reaped"
 }
 
@@ -90,25 +113,28 @@ on_signal() {
 cmd_status() {
     check_name "$1"
     local lock="$BASE/$1.lock"
-    if [ ! -d "$lock" ]; then
+    if [ -d "$lock" ]; then
+        cat "$lock/owner" 2>/dev/null || echo "held, no owner file"
+        if is_stale "$lock"; then
+            echo "stale: pid $(owner_field "$lock" pid) is gone"
+        fi
+    else
         echo "free"
-        return 0
     fi
-    cat "$lock/owner" 2>/dev/null || echo "held, no owner file"
-    if is_stale "$lock"; then
-        echo "stale: pid $(owner_field "$lock" pid) is gone"
+    if [ -d "$lock.reap" ]; then
+        echo "reap guard present$(guard_stale "$lock.reap" && echo " (stale)")"
     fi
 }
 
 cmd_break() {
     check_name "$1"
     local lock="$BASE/$1.lock"
-    if [ ! -d "$lock" ]; then
+    if [ -d "$lock" ]; then
+        echo "zen-lock: breaking $1 held by: $(describe "$lock")"
+    else
         echo "zen-lock: $1 is not held"
-        return 0
     fi
-    echo "zen-lock: breaking $1 held by: $(describe "$lock")"
-    rm -rf "$lock"
+    rm -rf "$lock" "$lock.reap"
 }
 
 cmd_run() {

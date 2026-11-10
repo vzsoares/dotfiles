@@ -85,6 +85,75 @@ bash "$LOCK" t --wait 1 -- true 2>/dev/null
 [ $? = 75 ]
 check "lock held by a live pid is not taken over" $?
 
+make_stale_lock() {
+    reset
+    mkdir "$ZEN_LOCK_DIR/t.lock"
+    sleep 0 &
+    DEAD=$!
+    wait "$DEAD"
+    printf 'old %s\npid=%s\nhost=%s\n' "$(date)" "$DEAD" "$(hostname)" >"$ZEN_LOCK_DIR/t.lock/owner"
+}
+make_guard() { # started offset in seconds, pid
+    mkdir "$ZEN_LOCK_DIR/t.lock.reap"
+    printf 'pid=%s\nhost=%s\nstarted=%s\n' "$2" "$(hostname)" "$(($(date +%s) - $1))" >"$ZEN_LOCK_DIR/t.lock.reap/owner"
+}
+
+# waiter SIGKILLed mid-takeover: a stub rm holds it inside the reap section
+# (it sleeps only on the lock removal, not the guard removal)
+mkdir "$TMP/fakebin"
+{
+    echo '#!/bin/sh'
+    echo "case \"\$*\" in *t.lock) echo \$\$ >\"$TMP/rmpid\"; sleep 30 ;; esac"
+    echo 'exec /bin/rm "$@"'
+} >"$TMP/fakebin/rm"
+chmod +x "$TMP/fakebin/rm"
+make_stale_lock
+PATH="$TMP/fakebin:$PATH" bash "$LOCK" t --wait 30 -- true 2>/dev/null &
+KILLED=$!
+wait_for "$TMP/rmpid"
+kill -9 "$KILLED"
+wait "$KILLED" 2>/dev/null
+kill "$(cat "$TMP/rmpid")" 2>/dev/null
+[ -d "$ZEN_LOCK_DIR/t.lock.reap" ]
+check "SIGKILL mid-takeover leaves the reap guard" $?
+bash "$LOCK" status t | grep -q 'reap guard present (stale)'
+check "status reports the stale guard" $?
+bash "$LOCK" t --wait 5 -- true 2>/dev/null
+check "stale lock is taken over despite the leftover guard" $?
+[ ! -d "$ZEN_LOCK_DIR/t.lock.reap" ]
+check "reap guard is gone after the takeover" $?
+
+# guard older than 60s held by a live pid
+make_stale_lock
+make_guard 120 "$$"
+bash "$LOCK" t --wait 5 -- true 2>/dev/null
+check "guard older than 60s is removed" $?
+
+# guard with no owner file (killed right after mkdir) and an old mtime
+make_stale_lock
+mkdir "$ZEN_LOCK_DIR/t.lock.reap"
+touch -t 200001010000 "$ZEN_LOCK_DIR/t.lock.reap"
+bash "$LOCK" t --wait 5 -- true 2>/dev/null
+check "ownerless guard with an old mtime is removed" $?
+
+# fresh guard held by a live process is never removed
+make_stale_lock
+make_guard 0 "$$"
+bash "$LOCK" t --wait 1 -- true 2>/dev/null
+[ $? = 75 ]
+check "fresh live guard blocks the takeover (exit 75)" $?
+[ -d "$ZEN_LOCK_DIR/t.lock.reap" ] && [ -d "$ZEN_LOCK_DIR/t.lock" ]
+check "fresh live guard and stale lock are left alone" $?
+
+# a stale guard never makes a hand-made lock stale
+reset
+mkdir "$ZEN_LOCK_DIR/t.lock"
+echo "task-3 $(date)" >"$ZEN_LOCK_DIR/t.lock/owner"
+make_guard 120 999999
+bash "$LOCK" t --wait 1 -- true 2>/dev/null
+[ $? = 75 ] && [ -d "$ZEN_LOCK_DIR/t.lock" ]
+check "hand-made lock stays with a stale guard around" $?
+
 # status and break
 reset
 bash "$LOCK" status t | grep -q free
@@ -96,6 +165,15 @@ check "status shows the holder" $?
 bash "$LOCK" break t >/dev/null
 [ ! -d "$ZEN_LOCK_DIR/t.lock" ]
 check "break removes the lock" $?
+mkdir "$ZEN_LOCK_DIR/t.lock" "$ZEN_LOCK_DIR/t.lock.reap"
+bash "$LOCK" break t >/dev/null
+[ ! -d "$ZEN_LOCK_DIR/t.lock" ] && [ ! -d "$ZEN_LOCK_DIR/t.lock.reap" ]
+check "break removes the reap guard too" $?
+reset
+mkdir "$ZEN_LOCK_DIR/t.lock.reap"
+bash "$LOCK" break t >/dev/null
+[ ! -d "$ZEN_LOCK_DIR/t.lock.reap" ]
+check "break removes a guard when the lock is free" $?
 
 # release on signals. Job control: an async job in a plain script ignores SIGINT.
 set -m
