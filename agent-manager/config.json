@@ -5,7 +5,7 @@
     "default_tool": "claude",
     "editor": "nvim",
     "hidden_tools": "opencode,grok,gemini,pi,antigravity,command-code,cursor,hermes,kiro,muse,omp",
-    "notify_finished": "on",
+    "notify_finished": "off",
     "theme": "rosé pine",
     "worktree_default": "on"
   },
