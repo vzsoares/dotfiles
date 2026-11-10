@@ -160,10 +160,13 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 ### Decision inbox
 
 Agents never message chief with decisions. They run `zen-inbox ask <task> -q ... -o ...
---rec <letter>` (gates: `--gate`) and end the turn. A terminal named `decisions` in group
-`chief` runs `zen-inbox watch`: open decisions appear live (zen-bell rings), and the
-user answers by pick, free text, or talk (a tmux popup attached to `am_<session>`;
-after detaching, `resolved?` closes it with an optional note and sends nothing).
+--rec <letter>` (gates: `--gate`), passing `--title "<task title>" --brief "<1-3 lines>"`
+on the first ask, and end the turn; `zen-inbox brief` sets that context later. A
+terminal named `decisions` in group `chief` runs `zen-inbox watch`: one row per asking
+session (zen-bell rings once per session). Opening one shows the task context, then
+its questions; the user walks them (pick, free text, skip) and sends them from a
+review screen, or talks (a tmux popup on `tmux -L agentmgr attach -t am_<session>`,
+then a pick of which decisions it settled; those close and send nothing).
 Answers are held until the asking session has no open decision, then go out as one
 `agent-manager send <session> ... --from zen-inbox` message. A failed delivery stays
 listed until `zen-inbox retry <session>`.
@@ -173,8 +176,9 @@ listed until `zen-inbox retry <session>`.
 - Storage: `<vault>/config/zen-flow.db` (SQLite, gitignored in the vault).
 - Chief keeps the watcher up: `agent-manager terminal list --json` shows a running
   `decisions` terminal in `chief`, else `agent-manager terminal create --name decisions
-  --group chief --nest=false --json` and `agent-manager terminal send <id> --command
-  "zen-inbox watch"`.
+  --group chief --nest=false --json` and `tmux -L agentmgr send-keys -t am_<terminal id>
+  'zen-inbox watch' Enter` (agent-manager refuses `terminal send` to an un-nested
+  terminal from inside a session).
 
 The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
 orchestrator:

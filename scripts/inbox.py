@@ -21,7 +21,10 @@
 #
 #  SYNOPSIS
 #      zen-inbox ask <task> -q "<question>" [-o "<option>"]... [--rec <letter>]
-#                [--context "<text>"] [--gate] [--session <id>] [--json]
+#                [--context "<text>"] [--gate] [--title "<task title>"]
+#                [--brief "<text>"] [--session <id>] [--json]
+#      zen-inbox brief <task> [--title "<text>"] [--text "<text>"] [--session <id>]
+#                [--json]
 #      zen-inbox amend <id> [-q ...] [-o ...]... [--rec ...] [--context ...] [--force]
 #      zen-inbox withdraw <id> [--force]
 #      zen-inbox list [--all] [--json]
@@ -36,14 +39,19 @@
 #                 $AGENT_MANAGER_SESSION_ID. Options are lettered a-d in order;
 #                 0 (free text only) or 2-4. IDs are <task>.<n>, gates <task>.g,
 #                 <task>.g2, ...; numbers are never reused, withdrawn included.
+#                 --title/--brief upsert the session+task context; empty keeps it.
+#      brief      set or replace that context alone (given flags only).
 #      amend      change an open decision; asking session only unless --force.
 #      withdraw   close an open decision unanswered; same ownership rule.
 #      answer     record a pick or free text; delivery is held while the
 #                 session still has an open decision.
 #      resolve    close a decision settled in talk; nothing is sent for it.
 #      retry      resend a session's failed delivery as one message.
-#      watch      live gum view of open decisions: pick, free text or talk
-#                 (tmux popup attached to am_<session>).
+#      watch      live gum view, one row per asking session. A session shows its
+#                 task context, then its questions; Answer walks them (pick, free
+#                 text, skip), then Send records them. Talk opens a tmux popup on
+#                 `tmux -L agentmgr attach -t am_<session>`, then asks which
+#                 decisions it settled.
 #
 #      When a session's last open decision closes, its held answers go out as
 #      one `agent-manager send <session> "<msg>" --from zen-inbox` message.
@@ -67,24 +75,26 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Protocol
 
 import typer
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 LETTERS = "abcd"
 SEND_LIMIT = 8000
 SEND_MARGIN = 200
 POLL_SECONDS = 2.0
+SESSIONS_SECONDS = 10.0
 SEND_TIMEOUT = 30
 # A 'sending' row older than this is a crashed send, not one in flight.
 STALE_SECONDS = 2 * SEND_TIMEOUT
@@ -125,11 +135,29 @@ CREATE TABLE decision_options (
 CREATE INDEX decisions_session ON decisions (session_id, status);
 """
 
+BRIEFS = """
+CREATE TABLE decision_briefs (
+    session_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    brief TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, task)
+);
+"""
+
+MIGRATIONS = {1: SCHEMA, 2: BRIEFS}
+
 
 class InboxError(Exception):
     def __init__(self, message: str, code: int) -> None:
         super().__init__(message)
         self.code = code
+
+
+class Amended(InboxError):
+    def __init__(self, decision_id: str) -> None:
+        super().__init__(f"{decision_id} was amended", 1)
 
 
 @dataclass
@@ -156,6 +184,9 @@ class Decision:
     message_id: str
     delivery_error: str
     options: list[tuple[str, str]] = field(default_factory=list)
+    rev: int = 0
+    title: str = ""
+    brief: str = ""
 
     def option_text(self, letter: str) -> str:
         return next((t for ltr, t in self.options if ltr == letter), "")
@@ -210,18 +241,20 @@ def connect(path: Path) -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode = WAL")
         if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
             conn.execute("BEGIN IMMEDIATE")
-            if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
-                _init_schema(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < SCHEMA_VERSION:
+                _migrate(conn, version)
             conn.execute("COMMIT")
     except (OSError, sqlite3.Error) as e:
         raise InboxError(f"db unavailable: {path}: {e}", 4) from e
     return conn
 
 
-def _init_schema(conn: sqlite3.Connection) -> None:
-    for statement in SCHEMA.split(";"):
-        if statement.strip():
-            conn.execute(statement)
+def _migrate(conn: sqlite3.Connection, version: int) -> None:
+    for target in range(version + 1, SCHEMA_VERSION + 1):
+        for statement in MIGRATIONS[target].split(";"):
+            if statement.strip():
+                conn.execute(statement)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -248,6 +281,10 @@ def _decision(conn: sqlite3.Connection, row: sqlite3.Row) -> Decision:
             (row["id"],),
         )
     ]
+    brief = conn.execute(
+        "SELECT title, brief FROM decision_briefs WHERE session_id = ? AND task = ?",
+        (row["session_id"], row["task"]),
+    ).fetchone()
     return Decision(
         id=row["id"],
         task=row["task"],
@@ -271,6 +308,9 @@ def _decision(conn: sqlite3.Connection, row: sqlite3.Row) -> Decision:
         message_id=row["message_id"],
         delivery_error=row["delivery_error"],
         options=options,
+        rev=row["rev"],
+        title=brief["title"] if brief else "",
+        brief=brief["brief"] if brief else "",
     )
 
 
@@ -308,7 +348,13 @@ def fingerprint(conn: sqlite3.Connection) -> tuple[tuple[str, int], ...]:
         "SELECT id, rev FROM decisions WHERE status = 'open'"
         " OR delivery IN ('held', 'sending', 'failed') ORDER BY id"
     ).fetchall()
-    return tuple((str(r["id"]), int(r["rev"])) for r in rows)
+    briefs = conn.execute(
+        "SELECT session_id, task, title, brief FROM decision_briefs"
+        " ORDER BY session_id, task"
+    ).fetchall()
+    return tuple((str(r["id"]), int(r["rev"])) for r in rows) + tuple(
+        ("\x1f".join(str(v) for v in b), 0) for b in briefs
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -461,9 +507,10 @@ def ask(
     gate: bool,
     session_id: str,
     session_name: str,
+    title: str = "",
+    brief: str = "",
 ) -> Decision:
-    if not TASK_RE.match(task):
-        raise InboxError(f"bad task {task!r}: letters, digits, - or _", 2)
+    check_task(task)
     if not question.strip():
         raise InboxError("a question is required", 2)
     check_options(options, rec)
@@ -502,7 +549,59 @@ def ask(
             "INSERT INTO decision_options (decision_id, letter, text) VALUES (?, ?, ?)",
             [(decision_id, LETTERS[i], o) for i, o in enumerate(options)],
         )
+        if title or brief:
+            _upsert_brief(conn, session_id, task, title or None, brief or None)
     return get(conn, decision_id)
+
+
+def check_task(task: str) -> None:
+    if not TASK_RE.match(task):
+        raise InboxError(f"bad task {task!r}: letters, digits, - or _", 2)
+
+
+def _upsert_brief(
+    conn: sqlite3.Connection,
+    session_id: str,
+    task: str,
+    title: str | None,
+    text: str | None,
+) -> None:
+    """None keeps the stored value; a string replaces it."""
+    conn.execute(
+        "INSERT INTO decision_briefs (session_id, task, title, brief, updated_at)"
+        " VALUES (?, ?, ?, ?, ?) ON CONFLICT (session_id, task) DO UPDATE SET"
+        " title = CASE WHEN ? THEN excluded.title ELSE title END,"
+        " brief = CASE WHEN ? THEN excluded.brief ELSE brief END,"
+        " updated_at = excluded.updated_at",
+        (
+            session_id,
+            task,
+            title or "",
+            text or "",
+            now(),
+            title is not None,
+            text is not None,
+        ),
+    )
+
+
+def set_brief(
+    conn: sqlite3.Connection,
+    session_id: str,
+    task: str,
+    title: str | None,
+    text: str | None,
+) -> dict[str, str]:
+    check_task(task)
+    if title is None and text is None:
+        raise InboxError("give --title or --text", 2)
+    with immediate(conn):
+        _upsert_brief(conn, session_id, task, title, text)
+        row = conn.execute(
+            "SELECT * FROM decision_briefs WHERE session_id = ? AND task = ?",
+            (session_id, task),
+        ).fetchone()
+    return dict(zip(row.keys(), map(str, row), strict=True))
 
 
 def _open_owned(
@@ -573,10 +672,13 @@ def _close(
     delivery: str = "none",
     caller: str | None = None,
     force: bool = True,
+    rev: int | None = None,
 ) -> Decision:
     stamp = now()
     with immediate(conn):
         d = _open_owned(conn, decision_id, caller or "", force)
+        if rev is not None and d.rev != rev:
+            raise Amended(decision_id)
         if kind == "pick" and not d.option_text(option):
             raise InboxError(f"{decision_id} has no option {option!r}", 2)
         conn.execute(
@@ -601,7 +703,9 @@ def answer(
     letter: str | None,
     text: str | None,
     note: str = "",
+    rev: int | None = None,
 ) -> Delivery | None:
+    """rev, when given, refuses the answer (Amended) if the decision changed."""
     if (letter is None) == (text is None):
         raise InboxError("give an option letter or --text, not both", 2)
     if text is not None and not text.strip():
@@ -615,6 +719,7 @@ def answer(
         text=text or "",
         note=note,
         delivery="held",
+        rev=rev,
     )
     return flush(conn, d.session_id)
 
@@ -698,8 +803,14 @@ def retry(conn: sqlite3.Connection, session: str) -> Delivery:
 
 
 # --------------------------------------------------------------------------- #
-# Rendering                                                                    #
+# Layout                                                                       #
 # --------------------------------------------------------------------------- #
+
+MIN_WIDTH = 20
+REC_MARK = "  ← rec"
+MORE = "… (View full)"
+CUT_ORDER = ("brief", "context", "asked-by", "help", "menu", "title", "options")
+Item = tuple[str, str]
 
 
 def age(stamp: str, at: datetime | None = None) -> str:
@@ -714,26 +825,324 @@ def age(stamp: str, at: datetime | None = None) -> str:
     return f"{max(secs, 0)}s"
 
 
-def render(conn: sqlite3.Connection, sessions: list[dict[str, object]] | None) -> str:
-    lines: list[str] = []
-    opened = select(conn, "status = 'open'")
-    tasks: dict[str, list[Decision]] = {}
-    for d in sorted(opened, key=lambda d: d.created_at):
-        tasks.setdefault(d.task, []).append(d)
-    for task, decisions in tasks.items():
-        lines.append(f"── task {task}")
-        for d in decisions:
-            status = session_status(find_session(sessions, d.session_id))
-            mark = " (amended)" if d.amended else ""
-            lines.append(
-                f"  {d.id}{mark}  {d.session_name} [{status}]  {age(d.created_at)}"
+def wrap(text: str, width: int, first: str = "", rest: str | None = None) -> list[str]:
+    """Word-wrap at width with a hanging indent; words longer than a line split."""
+    width = max(width, MIN_WIDTH)
+    hang = " " * len(first) if rest is None else rest
+    out: list[str] = []
+    for para in text.splitlines() or [""]:
+        lead = hang if out else first
+        out += textwrap.wrap(
+            para,
+            width,
+            initial_indent=lead,
+            subsequent_indent=hang,
+            break_on_hyphens=False,
+        ) or [lead.rstrip()]
+    return out
+
+
+def menu_rows(items: int, height: int, show_help: bool) -> int:
+    """Rows gum choose (empty header) takes: list, help footer, paging dots."""
+    return height + (3 if show_help else 1) + (1 if height < items else 0)
+
+
+@dataclass
+class Brief:
+    task: str
+    title: str = ""
+    text: str = ""
+    asked_by: str = ""
+
+    def head(self) -> str:
+        return f"#{self.task} {self.title}".rstrip()
+
+
+@dataclass
+class Layout:
+    lines: list[str]
+    menu_height: int
+    show_help: bool = True
+    cuts: list[str] = field(default_factory=list)
+
+
+def asked_by(
+    name: str, session: dict[str, object] | None, oldest: str, at: datetime
+) -> str:
+    meta = [
+        str(v)
+        for v in (
+            (session or {}).get("group"),
+            Path(str((session or {}).get("directory") or "")).name,
+        )
+        if v
+    ]
+    who = f"{name} ({', '.join(meta)})" if meta else name
+    return f"asked by {who} · {session_status(session)} · {age(oldest, at)}"
+
+
+def briefs_for(
+    decisions: list[Decision],
+    sessions: list[dict[str, object]] | None,
+    at: datetime,
+) -> list[Brief]:
+    """One context block per task, in ID order."""
+    out: dict[str, Brief] = {}
+    for d in sorted(decisions, key=lambda d: id_key(d.id)):
+        if d.task not in out:
+            oldest = min(x.created_at for x in decisions if x.task == d.task)
+            session = find_session(sessions, d.session_id)
+            line = asked_by(d.session_name, session, oldest, at)
+            out[d.task] = Brief(d.task, d.title, d.brief, line)
+    return list(out.values())
+
+
+def context_block(b: Brief, width: int) -> list[str]:
+    text = wrap(b.text, width, "  ") if b.text.strip() else []
+    return wrap(b.head(), width, rest="  ") + text + wrap(b.asked_by, width)
+
+
+def question_lines(d: Decision, width: int) -> list[str]:
+    tags = (" gate" if d.gate else "") + (" (amended)" if d.amended else "")
+    return wrap(f"{d.id}{tags}  {d.question}", width, rest="  ")
+
+
+def context_lines(d: Decision, width: int) -> list[str]:
+    return wrap(d.context, width, "│ ") if d.context.strip() else []
+
+
+def option_lines(d: Decision, width: int) -> list[str]:
+    return [
+        line
+        for letter, text in d.options
+        for line in wrap(
+            text + (REC_MARK if letter == d.rec else ""), width, f"{letter}) "
+        )
+    ]
+
+
+def decision_lines(d: Decision, width: int) -> list[str]:
+    return question_lines(d, width) + context_lines(d, width) + option_lines(d, width)
+
+
+def question_menu(d: Decision) -> list[Item]:
+    picks = [(ltr + (REC_MARK if ltr == d.rec else ""), ltr) for ltr, _ in d.options]
+    return [
+        *picks,
+        ("Free text", "free"),
+        ("Skip", "skip"),
+        ("Talk", "talk"),
+        ("View full", "full"),
+        ("Back", "back"),
+    ]
+
+
+def clip_lines(lines: list[str], rows: int, width: int) -> list[str]:
+    if len(lines) <= rows:
+        return lines
+    if rows <= 0:
+        return []
+    room = max(width, MIN_WIDTH) - len(MORE) - 1
+    return [*lines[: rows - 1], f"{lines[rows - 1][:room].rstrip()} {MORE}"]
+
+
+def screen(d: Decision, brief: Brief, width: int, height: int) -> Layout:
+    """Question screen: text above a short-item menu, fitted to width x height.
+
+    Space runs short → cut in CUT_ORDER. Options are clipped only when the
+    question and options alone overflow the pane, so the question stays on screen.
+    """
+    width = max(width, MIN_WIDTH)
+    items = len(question_menu(d))
+    head = wrap(brief.head(), width, rest="  ")
+    text = wrap(brief.text, width, "  ") if brief.text.strip() else []
+    asked = wrap(brief.asked_by, width) if brief.asked_by else []
+    body = question_lines(d, width)
+    ctx = context_lines(d, width)
+    opts = option_lines(d, width)
+    # (cuts, lines above the question, context clipped?, help shown, menu heights)
+    stages: list[tuple[list[str], list[str], bool, bool, range]] = [
+        ([], [*head, *text, *asked, ""], False, True, range(items, items - 1, -1)),
+        (["brief"], [*head, *asked, ""], False, True, range(items, items - 1, -1)),
+        (
+            ["brief", "context"],
+            [*head, *asked],
+            True,
+            True,
+            range(items, items - 1, -1),
+        ),
+        (
+            ["brief", "context", "asked-by"],
+            head,
+            True,
+            True,
+            range(items, items - 1, -1),
+        ),
+        (
+            ["brief", "context", "asked-by", "help"],
+            head,
+            True,
+            False,
+            range(items, items - 1, -1),
+        ),
+        (
+            ["brief", "context", "asked-by", "help", "menu"],
+            head,
+            True,
+            False,
+            range(items - 1, 0, -1),
+        ),
+        (list(CUT_ORDER[:-1]), [], True, False, range(items - 1, 0, -1)),
+    ]
+    for cuts, top, clip, show_help, heights in stages:
+        for h in heights:
+            room = (
+                height
+                - menu_rows(items, h, show_help)
+                - len(top)
+                - len(body)
+                - len(opts)
             )
-            lines.append(f"    {d.question}")
-            if d.context:
-                lines += [f"    │ {c}" for c in d.context.splitlines()]
-            for letter, text in d.options:
-                rec = "  ← recommended" if letter == d.rec else ""
-                lines.append(f"    {letter}) {text}{rec}")
+            if room < (min(len(ctx), 1) if clip else len(ctx)):
+                continue
+            shown = clip_lines(ctx, room, width) if clip else ctx
+            return Layout([*top, *body, *shown, *opts], h, show_help, cuts)
+    room = height - menu_rows(items, 1, False) - len(body)
+    return Layout([*body, *clip_lines(opts, room, width)], 1, False, list(CUT_ORDER))
+
+
+def fit(lines: list[str], compact: list[str], items: int, height: int) -> Layout:
+    """lines if they fit above the menu, else compact, else compact with no help."""
+    for text, show_help in ((lines, True), (compact, True), (compact, False)):
+        h = min(items, max(height - len(text) - (3 if show_help else 1), 1))
+        if len(text) + menu_rows(items, h, show_help) <= height:
+            return Layout(text, h, show_help)
+    return Layout(compact, 1, False)
+
+
+def session_lines(
+    decisions: list[Decision],
+    sessions: list[dict[str, object]] | None,
+    width: int,
+    at: datetime,
+    compact: bool = False,
+) -> list[str]:
+    lines: list[str] = []
+    for b in briefs_for(decisions, sessions, at):
+        lines += context_block(b, width)
+    for d in sorted(decisions, key=lambda d: id_key(d.id)):
+        if compact:
+            tag = " gate" if d.gate else ""
+            lines.append(_clip(f"{d.id}{tag}  {d.question}", max(width, MIN_WIDTH)))
+        else:
+            lines += ["", *decision_lines(d, width)]
+    return lines
+
+
+SESSION_MENU: list[Item] = [("Answer", "answer"), ("Talk", "talk"), ("Back", "back")]
+REVIEW_MENU: list[Item] = [
+    ("Send", "send"),
+    ("Change one", "change"),
+    ("Cancel", "cancel"),
+]
+
+
+@dataclass
+class Staged:
+    kind: str
+    option: str
+    text: str
+    rev: int
+
+
+def staged_text(d: Decision, s: Staged | None) -> str:
+    if s is None:
+        return "skipped"
+    if s.kind == "pick":
+        return f"{s.option}: {d.option_text(s.option)}"
+    return f"free text: {s.text}"
+
+
+def review_screen(
+    entries: list[tuple[Decision, Staged | None]], width: int, height: int
+) -> Layout:
+    width = max(width, MIN_WIDTH)
+
+    def lines(question_width: int | None) -> list[str]:
+        out = ["Review: Send records these answers.", ""]
+        for d, s in entries:
+            q = (
+                d.question
+                if question_width is None
+                else _clip(d.question, question_width)
+            )
+            head = f"{d.id}  {q}" if q else d.id
+            out += wrap(f"{head} → {staged_text(d, s)}", width, rest="    ")
+        return out
+
+    return fit(lines(None), lines(width // 2), len(REVIEW_MENU), height)
+
+
+# --------------------------------------------------------------------------- #
+# List                                                                         #
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class Row:
+    session_id: str
+    name: str
+    tasks: list[str]
+    title: str
+    count: int
+    oldest: str
+    gate: bool
+    status: str
+
+
+def list_rows(
+    opened: list[Decision], sessions: list[dict[str, object]] | None
+) -> list[Row]:
+    """One row per asking session, oldest open decision first."""
+    groups: dict[str, list[Decision]] = {}
+    for d in sorted(opened, key=lambda d: (d.created_at, id_key(d.id))):
+        groups.setdefault(d.session_id, []).append(d)
+    rows = []
+    for sid, ds in groups.items():
+        tasks = list(
+            dict.fromkeys(d.task for d in sorted(ds, key=lambda d: id_key(d.id)))
+        )
+        title = next((d.title for d in ds if d.title), "") if len(tasks) == 1 else ""
+        status = session_status(find_session(sessions, sid))
+        rows.append(
+            Row(
+                sid,
+                ds[0].session_name,
+                tasks,
+                title,
+                len(ds),
+                ds[0].created_at,
+                any(d.gate for d in ds),
+                status,
+            )
+        )
+    return rows
+
+
+def row_label(row: Row, at: datetime | None = None) -> str:
+    tasks = ", ".join(f"#{t}" for t in row.tasks)
+    parts = [
+        row.name,
+        f"{tasks} {row.title}".rstrip(),
+        f"{row.count} open",
+        age(row.oldest, at),
+        f"[{row.status}]",
+    ]
+    return " · ".join(parts + (["gate"] if row.gate else []))
+
+
+def status_lines(conn: sqlite3.Connection) -> list[str]:
+    lines: list[str] = []
     held: dict[str, list[str]] = {}
     names: dict[str, str] = {}
     for d in select(conn, "delivery = 'held'"):
@@ -750,7 +1159,61 @@ def render(conn: sqlite3.Connection, sessions: list[dict[str, object]] | None) -
             f"failed · {batch[0].session_name}: {', '.join(d.id for d in batch)}"
             f" ({batch[0].delivery_error or batch[0].delivery}); zen-inbox retry {sid}"
         )
+    return lines
+
+
+def render(
+    conn: sqlite3.Connection,
+    sessions: list[dict[str, object]] | None,
+    width: int = 80,
+    at: datetime | None = None,
+) -> str:
+    rows = list_rows(select(conn, "status = 'open'"), sessions)
+    lines = [line for r in rows for line in wrap(row_label(r, at), width, rest="    ")]
+    lines += [line for s in status_lines(conn) for line in wrap(s, width, rest="    ")]
     return "\n".join(lines) if lines else "inbox empty"
+
+
+def list_items(
+    conn: sqlite3.Connection,
+    sessions: list[dict[str, object]] | None,
+    width: int,
+    at: datetime | None = None,
+) -> list[Item]:
+    # gum's cursor takes 2 columns; a longer label would be cut with "…".
+    room = max(width, MIN_WIDTH) - 3
+    items = [
+        (_clip(row_label(r, at), room), f"s:{r.session_id}")
+        for r in list_rows(select(conn, "status = 'open'"), sessions)
+    ]
+    items += [
+        (
+            _clip(f"retry {batch[0].session_name}: {len(batch)} answer(s)", room),
+            f"r:{sid}",
+        )
+        for sid, batch in undelivered(conn).items()
+    ]
+    return items
+
+
+def list_fingerprint(
+    conn: sqlite3.Connection,
+    sessions: list[dict[str, object]] | None,
+    at: datetime,
+) -> tuple[object, ...]:
+    """The inbox, the status of every listed session, and the minute (for ages)."""
+    sids = sorted({d.session_id for d in select(conn, "status = 'open'")})
+    statuses = tuple((sid, session_status(find_session(sessions, sid))) for sid in sids)
+    return fingerprint(conn), statuses, int(at.timestamp() // 60)
+
+
+def bell_messages(opened: list[Decision], seen: set[str]) -> list[str]:
+    """One message per session with decisions not seen before."""
+    fresh: dict[str, list[Decision]] = {}
+    for d in opened:
+        if d.id not in seen:
+            fresh.setdefault(d.session_id, []).append(d)
+    return [f"{ds[0].session_name}: {len(ds)} new decision(s)" for ds in fresh.values()]
 
 
 # --------------------------------------------------------------------------- #
@@ -762,17 +1225,16 @@ def tmux_socket(tmux_env: str | None) -> str:
     return tmux_env.split(",")[0] if tmux_env else ""
 
 
-def attach_command(session_id: str, tmux_env: str | None) -> str:
-    socket = tmux_socket(tmux_env)
-    where = f"-S {shlex.quote(socket)}" if socket else f"-L {AM_SOCKET}"
-    return f"tmux {where} attach -t am_{session_id}"
+def attach_command(session_id: str) -> str:
+    """Sessions live on agent-manager's own server, whatever $TMUX names."""
+    return f"tmux -L {AM_SOCKET} attach -t am_{session_id}"
 
 
 def popup_argv(session_id: str, tmux_env: str | None) -> list[str] | None:
     socket = tmux_socket(tmux_env)
     if not socket:
         return None
-    inner = f"env -u TMUX {attach_command(session_id, tmux_env)}"
+    inner = f"env -u TMUX {attach_command(session_id)}"
     return [
         "tmux",
         "-S",
@@ -796,9 +1258,7 @@ def talk(session_id: str, tmux_env: str | None) -> bool:
                 return True
         except FileNotFoundError:
             pass
-    print(
-        f"no tmux popup available; attach with: {attach_command(session_id, tmux_env)}"
-    )
+    print(f"no tmux popup available; attach with: {attach_command(session_id)}")
     return False
 
 
@@ -807,25 +1267,18 @@ def talk(session_id: str, tmux_env: str | None) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def gum(*args: str) -> tuple[int, str]:
+def gum(*args: str, stdin: str | None = None) -> tuple[int, str]:
     # stdout only: gum draws on stderr (README gotcha).
     result = subprocess.run(
-        ["gum", *args], stdout=subprocess.PIPE, text=True, check=False
+        ["gum", *args], stdout=subprocess.PIPE, input=stdin, text=True, check=False
     )
     return result.returncode, result.stdout.strip()
 
 
-def bell(d: Decision) -> None:
+def bell(message: str) -> None:
     try:
         subprocess.Popen(
-            [
-                "zen-bell",
-                "window-attention",
-                "-n",
-                "zen-inbox",
-                "-b",
-                f"{d.id} {d.question}",
-            ],
+            ["zen-bell", "window-attention", "-n", "zen-inbox", "-b", message],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -833,13 +1286,324 @@ def bell(d: Decision) -> None:
         pass
 
 
+class UI(Protocol):
+    def size(self) -> tuple[int, int]: ...
+
+    def choose(
+        self, lines: list[str], items: list[Item], height: int, show_help: bool
+    ) -> str: ...
+
+    def pick_many(self, header: str, items: list[Item]) -> list[str]: ...
+
+    def write(self, header: str) -> str: ...
+
+    def text(self, placeholder: str) -> str: ...
+
+    def pager(self, text: str) -> None: ...
+
+    def talk(self, session_id: str) -> bool: ...
+
+
+DELIM = "\x1f"
+
+
+def choose_args(items: list[Item], height: int, show_help: bool) -> list[str]:
+    return [
+        "choose",
+        "--header",
+        "",
+        "--label-delimiter",
+        DELIM,
+        "--height",
+        str(height),
+        "--show-help" if show_help else "--no-show-help",
+        *(f"{label.replace(DELIM, ' ')}{DELIM}{value}" for label, value in items),
+    ]
+
+
+def draw(lines: list[str]) -> None:
+    print("\033[H\033[2J", end="", flush=True)
+    if lines:
+        print("\n".join(lines), flush=True)
+
+
+class GumUI:
+    def size(self) -> tuple[int, int]:
+        cols, rows = shutil.get_terminal_size()
+        return cols, rows
+
+    def choose(
+        self, lines: list[str], items: list[Item], height: int, show_help: bool
+    ) -> str:
+        draw(lines)
+        code, out = gum(*choose_args(items, height, show_help))
+        return out if code == 0 else ""
+
+    def live_choose(
+        self, lines: list[str], items: list[Item], height: int, poller: Poller
+    ) -> str | None:
+        """The list's menu; None when the poller killed it to redraw."""
+        draw(lines)
+        proc = subprocess.Popen(
+            ["gum", *choose_args(items, height, True)],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        poller.watch(proc)
+        out, _ = proc.communicate()
+        poller.watch(None)
+        if proc.returncode != 0:
+            return None if poller.changed.is_set() else ""
+        return out.strip()
+
+    def pick_many(self, header: str, items: list[Item]) -> list[str]:
+        width = self.size()[0]
+        code, out = gum(
+            "choose",
+            "--no-limit",
+            "--header",
+            _clip(header, width),
+            "--label-delimiter",
+            DELIM,
+            *(f"{_clip(label, width - 4)}{DELIM}{value}" for label, value in items),
+        )
+        return out.splitlines() if code == 0 else []
+
+    def write(self, header: str) -> str:
+        width = self.size()[0]
+        code, out = gum(
+            "write",
+            "--header",
+            _clip(header, width),
+            "--placeholder",
+            "answer (empty cancels)",
+        )
+        return out if code == 0 else ""
+
+    def text(self, placeholder: str) -> str:
+        code, out = gum("input", "--placeholder", placeholder)
+        return out if code == 0 else ""
+
+    def pager(self, text: str) -> None:
+        subprocess.run(["gum", "pager"], input=text, text=True, check=False)
+
+    def talk(self, session_id: str) -> bool:
+        return talk(session_id, os.environ.get("TMUX"))
+
+
+def describe(
+    result: Delivery | None, conn: sqlite3.Connection, session_id: str, name: str = ""
+) -> str:
+    if result is None:
+        waiting = open_ids(conn, session_id)
+        return f"held until {', '.join(waiting)}" if waiting else "nothing to send"
+    if result.ok:
+        return f"sent {', '.join(result.ids)} to {name or session_id}"
+    return f"delivery failed: {result.error}; zen-inbox retry {session_id}"
+
+
+def full_text(d: Decision, brief: Brief) -> str:
+    lines = [brief.head(), *([brief.text] if brief.text else []), brief.asked_by, ""]
+    lines += [f"{d.id}  {d.question}", *([d.context] if d.context else [])]
+    lines += [f"{ltr}) {t}{REC_MARK if ltr == d.rec else ''}" for ltr, t in d.options]
+    return "\n".join(lines)
+
+
+def session_open(conn: sqlite3.Connection, session_id: str) -> list[Decision]:
+    return select(conn, "session_id = ? AND status = 'open'", (session_id,))
+
+
+def talk_resolve(
+    conn: sqlite3.Connection, ui: UI, session_id: str
+) -> tuple[list[str], str]:
+    """Popup once, then resolve the decisions the user says it settled."""
+    if not ui.talk(session_id):
+        return [], f"talk unavailable; attach with: {attach_command(session_id)}"
+    opened = session_open(conn, session_id)
+    if not opened:
+        return [], "nothing open"
+    chosen = ui.pick_many(
+        "Which did the talk settle? (space marks, none leaves all open)",
+        [(f"{d.id}  {d.question}", d.id) for d in opened],
+    )
+    if not chosen:
+        return [], "all left open"
+    note = ui.text("note (optional)")
+    resolved: list[str] = []
+    notes: list[str] = []
+    result: Delivery | None = None
+    for decision_id in chosen:
+        try:
+            result = resolve(conn, decision_id, note) or result
+            resolved.append(decision_id)
+        except InboxError as e:
+            notes.append(str(e))
+    flash = [f"resolved {', '.join(resolved)}"] if resolved else []
+    if result is not None:
+        flash.append(describe(result, conn, session_id, opened[0].session_name))
+    return resolved, "; ".join(flash + notes)
+
+
+@dataclass
+class Pass:
+    session_id: str
+    staged: dict[str, Staged] = field(default_factory=dict)
+    visited: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    recorded: list[str] = field(default_factory=list)
+
+    def stopped(self, how: str) -> str:
+        kept = f"{', '.join(self.recorded)} recorded earlier" if self.recorded else ""
+        return "; ".join([f"{how}: {kept or 'nothing recorded'}", *self.notes])
+
+
+def walk_one(
+    conn: sqlite3.Connection,
+    ui: UI,
+    p: Pass,
+    decision_id: str,
+    sessions: list[dict[str, object]] | None,
+) -> bool:
+    """Stage (or skip) one question; False when the user backs out of the pass."""
+    while True:
+        d = get(conn, decision_id)
+        if d.status != "open":
+            p.notes.append(f"{d.id} already {d.status}")
+            p.staged.pop(d.id, None)
+            return True
+        width, height = ui.size()
+        [brief] = briefs_for([d], sessions, datetime.now(UTC))
+        layout = screen(d, brief, width, height)
+        choice = ui.choose(
+            layout.lines, question_menu(d), layout.menu_height, layout.show_help
+        )
+        if choice in ("", "back"):
+            return False
+        if choice == "skip":
+            p.staged.pop(d.id, None)
+            return True
+        if choice == "full":
+            ui.pager(full_text(d, brief))
+        elif choice == "talk":
+            resolved, flash = talk_resolve(conn, ui, d.session_id)
+            for decision_id_ in resolved:
+                p.staged.pop(decision_id_, None)
+            if flash:
+                p.notes.append(flash)
+            if d.id in resolved:
+                return True
+        elif choice == "free":
+            text = ui.write(f"{d.id}  {d.question}")
+            if text.strip():
+                p.staged[d.id] = Staged("text", "", text, d.rev)
+                return True
+        elif d.option_text(choice):
+            p.staged[d.id] = Staged("pick", choice, "", d.rev)
+            return True
+
+
+def commit(conn: sqlite3.Connection, p: Pass) -> tuple[list[str], Delivery | None]:
+    """Record every staged answer; returns (amended ids, last delivery)."""
+    amended: list[str] = []
+    result: Delivery | None = None
+    for decision_id in sorted(p.staged, key=id_key):
+        s = p.staged.pop(decision_id)
+        letter = s.option if s.kind == "pick" else None
+        text = s.text if s.kind == "text" else None
+        try:
+            result = answer(conn, decision_id, letter, text, rev=s.rev) or result
+            p.recorded.append(decision_id)
+        except Amended:
+            amended.append(decision_id)
+        except InboxError:
+            p.notes.append(f"{decision_id} already {get(conn, decision_id).status}")
+    return amended, result
+
+
+def answer_pass(
+    conn: sqlite3.Connection,
+    ui: UI,
+    session_id: str,
+    sessions: list[dict[str, object]] | None,
+) -> str:
+    """Walk, review, then Send; nothing is recorded before Send."""
+    p = Pass(session_id)
+    todo = open_ids(conn, session_id)
+    result: Delivery | None = None
+    while True:
+        for decision_id in todo:
+            if decision_id not in p.visited:
+                p.visited.append(decision_id)
+            if not walk_one(conn, ui, p, decision_id, sessions):
+                return p.stopped("back")
+        todo = [i for i in open_ids(conn, session_id) if i not in p.visited]
+        if todo:
+            continue
+        entries = [
+            (d, p.staged.get(d.id))
+            for d in (get(conn, i) for i in p.visited)
+            if d.status == "open"
+        ]
+        if not entries:
+            return "; ".join(p.notes) or "nothing open"
+        width, height = ui.size()
+        layout = review_screen(entries, width, height)
+        choice = ui.choose(
+            layout.lines, REVIEW_MENU, layout.menu_height, layout.show_help
+        )
+        if choice == "send":
+            amended, sent = commit(conn, p)
+            result = sent or result
+            if amended:
+                p.notes.append(f"{', '.join(amended)} amended; shown again")
+                todo = amended
+                continue
+            name = entries[0][0].session_name
+            return "; ".join([describe(result, conn, session_id, name), *p.notes])
+        if choice == "change":
+            items = [(f"{d.id}  {d.question}", d.id) for d, _ in entries]
+            pick = ui.choose(
+                [],
+                [(_clip(lbl, width - 3), v) for lbl, v in items] + [("Back", "")],
+                min(len(items) + 1, max(height - 3, 1)),
+                True,
+            )
+            todo = [pick] if pick else []
+            continue
+        return p.stopped("cancelled")
+
+
+def session_flow(conn: sqlite3.Connection, ui: UI, session_id: str) -> str:
+    sessions = am_sessions()
+    opened = session_open(conn, session_id)
+    if not opened:
+        return "nothing open for that session"
+    width, height = ui.size()
+    at = datetime.now(UTC)
+    layout = fit(
+        session_lines(opened, sessions, width, at),
+        session_lines(opened, sessions, width, at, compact=True),
+        len(SESSION_MENU),
+        height,
+    )
+    choice = ui.choose(layout.lines, SESSION_MENU, layout.menu_height, layout.show_help)
+    if choice == "answer":
+        return answer_pass(conn, ui, session_id, sessions)
+    if choice == "talk":
+        return talk_resolve(conn, ui, session_id)[1]
+    return ""
+
+
 class Poller(threading.Thread):
-    """Kills the list's gum when the inbox changes so the loop redraws it."""
+    """Kills the list's gum when its view would change; rings once per session."""
 
     def __init__(self, path: Path) -> None:
         super().__init__(daemon=True)
         self.path = path
-        self.last: tuple[tuple[str, int], ...] = ()
+        self.last: tuple[object, ...] = ()
+        self.seen: set[str] | None = None
+        self.sessions: list[dict[str, object]] | None = None
+        self.sessions_at = 0.0
         self.changed = threading.Event()
         self.lock = threading.Lock()
         self.proc: subprocess.Popen[str] | None = None
@@ -848,121 +1612,84 @@ class Poller(threading.Thread):
         with self.lock:
             self.proc = proc
 
+    def sync(
+        self, current: tuple[object, ...], sessions: list[dict[str, object]] | None
+    ) -> None:
+        self.last = current
+        self.sessions = sessions
+        self.sessions_at = time.monotonic()
+        self.changed.clear()
+
+    def ring(self, conn: sqlite3.Connection) -> None:
+        opened = select(conn, "status = 'open'")
+        if self.seen is not None:
+            for message in bell_messages(opened, self.seen):
+                bell(message)
+        self.seen = (self.seen or set()) | {d.id for d in opened}
+
+    def cycle(self, conn: sqlite3.Connection, at: datetime) -> bool:
+        if time.monotonic() - self.sessions_at >= SESSIONS_SECONDS:
+            self.sessions = am_sessions()
+            self.sessions_at = time.monotonic()
+        self.ring(conn)
+        current = list_fingerprint(conn, self.sessions, at)
+        if current == self.last:
+            return False
+        self.last = current
+        return True
+
     def run(self) -> None:
         conn: sqlite3.Connection | None = None
         while True:
             time.sleep(POLL_SECONDS)
             try:
                 conn = conn or connect(self.path)
-                current = fingerprint(conn)
+                changed = self.cycle(conn, datetime.now(UTC))
             except (InboxError, sqlite3.Error):
                 continue
-            if current == self.last:
+            if not changed:
                 continue
-            self.last = current
             self.changed.set()
             with self.lock:
                 if self.proc is not None and self.proc.poll() is None:
                     self.proc.terminate()
 
 
-def describe(result: Delivery | None, conn: sqlite3.Connection, session_id: str) -> str:
-    if result is None:
-        waiting = open_ids(conn, session_id)
-        return f"held until {', '.join(waiting)}" if waiting else "nothing to send"
-    if result.ok:
-        return f"sent {', '.join(result.ids)} to {session_id}"
-    return f"delivery failed: {result.error}; zen-inbox retry {session_id}"
-
-
-def decision_menu(conn: sqlite3.Connection, d: Decision) -> str:
-    labels = {
-        f"{letter}) {text}{' (rec)' if letter == d.rec else ''}": letter
-        for letter, text in d.options
-    }
-    header = d.question + (f"\n{d.context}" if d.context else "")
-    code, choice = gum(
-        "choose",
-        "--header",
-        f"{d.id}  {header}",
-        *labels,
-        "Free text",
-        "Talk",
-        "Back",
-    )
-    if code != 0 or choice in ("", "Back"):
-        return ""
-    if choice in labels:
-        return describe(answer(conn, d.id, labels[choice], None), conn, d.session_id)
-    if choice == "Free text":
-        code, text = gum(
-            "write",
-            "--header",
-            f"{d.id}  {d.question}",
-            "--placeholder",
-            "answer (empty cancels)",
-        )
-        if code != 0 or not text:
-            return "cancelled"
-        return describe(answer(conn, d.id, None, text), conn, d.session_id)
-    if not talk(d.session_id, os.environ.get("TMUX")):
-        return f"talk unavailable; attach with: {attach_command(d.session_id, os.environ.get('TMUX'))}"
-    if gum("confirm", f"{d.id} resolved?")[0] != 0:
-        return f"{d.id} left open"
-    note = gum("input", "--placeholder", "note (optional)")[1]
-    return describe(resolve(conn, d.id, note), conn, d.session_id)
-
-
 def watch_loop(path: Path) -> None:
     conn = connect(path)
     poller = Poller(path)
+    poller.ring(conn)
     poller.start()
-    seen: set[str] | None = None
+    ui = GumUI()
     flash = ""
     while True:
-        poller.last = fingerprint(conn)
-        poller.changed.clear()
-        opened = select(conn, "status = 'open'")
-        if seen is not None:
-            for d in opened:
-                if d.id not in seen:
-                    bell(d)
-        seen = {d.id for d in opened} | (seen or set())
-        print("\033[H\033[2J", end="")
-        if flash:
-            print(f"» {flash}\n")
-        print(render(conn, am_sessions()) + "\n")
-        items = [
-            f"{d.id}  {d.session_name}  {_clip(d.question, 70)}"
-            for d in sorted(opened, key=lambda d: d.created_at)
+        sessions = am_sessions()
+        at = datetime.now(UTC)
+        poller.sync(list_fingerprint(conn, sessions, at), sessions)
+        width, height = ui.size()
+        lines = [*wrap(f"» {flash}", width, rest="  "), ""] if flash else []
+        lines += [
+            line for s in status_lines(conn) for line in wrap(s, width, rest="    ")
         ]
-        items += [
-            f"retry {sid}  {batch[0].session_name}: {len(batch)} answer(s)"
-            for sid, batch in undelivered(conn).items()
-        ]
+        items = list_items(conn, sessions, width, at)
         if not items:
+            draw([*lines, "inbox empty"])
             while not poller.changed.wait(0.5):
                 pass
             continue
-        proc = subprocess.Popen(
-            ["gum", "choose", "--header", "decision (esc quits)", *items],
-            stdout=subprocess.PIPE,
-            text=True,
-        )
-        poller.watch(proc)
-        out, _ = proc.communicate()
-        poller.watch(None)
-        if proc.returncode != 0:
-            if poller.changed.is_set():
-                continue
+        menu = min(len(items), max(height - len(lines) - 4, 1))
+        value = ui.live_choose(lines, items, menu, poller)
+        if value is None:
+            continue
+        if not value:
             return
-        token = out.split()
         flash = ""
+        kind, _, session_id = value.partition(":")
         try:
-            if token and token[0] == "retry":
-                flash = describe(retry(conn, token[1]), conn, token[1])
-            elif token:
-                flash = decision_menu(conn, get(conn, token[0]))
+            if kind == "r":
+                flash = describe(retry(conn, session_id), conn, session_id)
+            else:
+                flash = session_flow(conn, ui, session_id)
         except InboxError as e:
             flash = str(e)
 
@@ -1003,6 +1730,8 @@ def cmd_ask(
     rec: str = typer.Option("", "--rec", help="Recommended option letter."),
     context: str = typer.Option("", "--context"),
     gate: bool = typer.Option(False, "--gate", help="Gate ID <task>.g."),
+    title: str = typer.Option("", "--title", help="Board task title."),
+    brief: str = typer.Option("", "--brief", help="1-3 lines of task context."),
     session: str = typer.Option("", "--session", help="Asking session id."),
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -1017,11 +1746,42 @@ def cmd_ask(
         found = find_session(am_sessions(), session_id)
         name = str(found.get("name") or session_id) if found else session_id
         d = ask(
-            conn, task, question, option or [], rec, context, gate, session_id, name
+            conn,
+            task,
+            question,
+            option or [],
+            rec,
+            context,
+            gate,
+            session_id,
+            name,
+            title,
+            brief,
         )
     except InboxError as e:
         raise _fail(e) from e
     print(json.dumps(d.to_json()) if as_json else d.id)
+
+
+@app.command("brief")
+def cmd_brief(
+    task: str = typer.Argument(..., help="Board task ID."),
+    title: str | None = typer.Option(None, "--title", help="Board task title."),
+    text: str | None = typer.Option(None, "--text", help="1-3 lines of context."),
+    session: str = typer.Option("", "--session", help="Asking session id."),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Set or replace a task's title and brief for the asking session."""
+    session_id = session or _caller()
+    if not session_id:
+        raise _fail(
+            InboxError("no session: set AGENT_MANAGER_SESSION_ID or --session", 2)
+        )
+    try:
+        row = set_brief(_open(), session_id, task, title, text)
+    except InboxError as e:
+        raise _fail(e) from e
+    print(json.dumps(row) if as_json else f"brief {task} for {session_id}")
 
 
 @app.command("amend")
@@ -1087,7 +1847,13 @@ def cmd_list(
                 state = f"{d.status}/{d.delivery}" if d.delivery != "none" else d.status
                 print(f"{d.id}\t{state}\t{d.session_name}\t{d.question}")
         else:
-            print(render(conn, am_sessions()))
+            sessions = am_sessions()
+            width = shutil.get_terminal_size().columns
+            at = datetime.now(UTC)
+            print(render(conn, sessions, width, at))
+            for row in list_rows(select(conn, "status = 'open'"), sessions):
+                opened = session_open(conn, row.session_id)
+                print("\n" + "\n".join(session_lines(opened, sessions, width, at)))
     except InboxError as e:
         raise _fail(e) from e
 
@@ -1106,6 +1872,9 @@ def cmd_show(
         print(json.dumps(d.to_json()))
         return
     print(f"{d.id}  [{d.status}]  {d.session_name} ({d.session_id})  {d.created_at}")
+    print(f"#{d.task} {d.title}".rstrip())
+    if d.brief:
+        print(d.brief)
     print(d.question)
     if d.context:
         print(d.context)
@@ -1168,7 +1937,7 @@ def cmd_retry(session: str = typer.Argument(..., help="Session id or name.")) ->
 
 @app.command("watch")
 def cmd_watch() -> None:
-    """Live view of open decisions; answer by pick, free text or talk."""
+    """Live view, one row per asking session; walk, review, then Send."""
     try:
         watch_loop(db_path(Path.home()))
     except InboxError as e:

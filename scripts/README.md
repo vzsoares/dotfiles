@@ -96,21 +96,26 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 ### zen-inbox
 ```
 zen-inbox ask <task> -q "<question>" -o a -o b --rec a   # prints 580.1 (--gate: 580.g)
+          [--title "<task title>"] [--brief "<1-3 lines>"]  # session+task context
+zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
 zen-inbox list [--all] | show <id>                      # --json on both
 zen-inbox answer <id> (<letter> | --text "...") [--note "..."]
 zen-inbox resolve <id> [--note "..."]                   # settled in talk; nothing sent
 zen-inbox retry <session>                               # resend a failed delivery
-zen-inbox watch                                         # live gum view
+zen-inbox watch                                         # one row per session
 ```
 SQLite at `<vault>/config/zen-flow.db` (`ZEN_FLOW_DB` overrides). Answers are held
 until the asking session has no open decision, then sent as one
 `agent-manager send … --from zen-inbox` message (without `--from` when run inside an
 agent pane, where agent-manager refuses it). Exit codes: 0 ok · 1 not found or wrong
-state · 2 usage · 3 recorded, delivery failed · 4 vault or db unavailable. `watch` polls
-every 2 s and redraws only when the inbox changed, never inside a decision's menu; talk
-opens `tmux display-popup` attached to `am_<session>`. See
-`docs/wiki/architecture/decision-inbox.md`.
+state · 2 usage · 3 recorded, delivery failed · 4 vault or db unavailable. `watch`
+lists one row per asking session; opening one shows each task's title, brief and
+asker, then its questions. Answer walks them (pick, free text, skip), a review screen
+sends them; nothing is recorded before Send. Talk opens `tmux display-popup` on
+`tmux -L agentmgr attach -t am_<session>`, then asks which decisions it settled. The
+list redraws on inbox or session-status changes and every minute, never inside a
+menu. See `docs/wiki/architecture/decision-inbox.md`.
 
 ### zen-pgp
 ```
