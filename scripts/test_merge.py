@@ -63,6 +63,7 @@ class Fake:
     boards: list[tuple[str, str, bool]] = field(default_factory=list)
     # (task id, note) per zen-board note call
     notes: list[tuple[str, str]] = field(default_factory=list)
+    kill_ok: bool = True
 
     def agent_manager(self, *args: str) -> tuple[int, str]:
         self.calls.append(args)
@@ -70,6 +71,8 @@ class Fake:
             return 0, json.dumps(self.sessions)
         if args[0] == "archive":
             return 0, "{}"
+        if args[0] == "kill":
+            return (0, "{}") if self.kill_ok else (1, "")
         return 1, ""
 
     def release(self, main: str) -> subprocess.CompletedProcess[str]:
@@ -138,6 +141,7 @@ def _make(
     monkeypatch.setattr(merge, "run_board_note", fake.note)
     monkeypatch.setattr(merge, "DRY_RUN", False)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("AGENT_MANAGER_SESSION_ID", "orch")
     return Setup(main=main, worktree=wt, fake=fake)
 
 
@@ -182,7 +186,7 @@ def test_dry_run_changes_nothing(setup: Setup, monkeypatch: pytest.MonkeyPatch) 
     assert (state.tag, state.board) == ("(dry-run)", "(dry-run)")
     assert _git("rev-parse", "HEAD", cwd=setup.main) == head
     assert setup.worktree.exists()
-    assert not any(c[0] == "archive" for c in setup.fake.calls)
+    assert not any(c[0] in ("archive", "kill") for c in setup.fake.calls)
     assert not merge.state_path("task").exists()
 
 
@@ -193,6 +197,53 @@ def test_dry_run_summary_and_json(setup: Setup) -> None:
     assert "cleanup ok" not in res.stdout
     res = CliRunner().invoke(merge.app, ["task", "--dry-run", "--json"])
     assert json.loads(res.stdout)["cleanup"] == "dry-run"
+
+
+def test_kills_the_worker_after_archiving_it(setup: Setup) -> None:
+    state = merge.land("task", "dev")
+    kinds = [c[0] for c in setup.fake.calls]
+    assert kinds.index("archive") < kinds.index("kill")
+    assert ("kill", "s1", "--json") in setup.fake.calls
+    assert [c for c in setup.fake.calls if c[0] == "kill"] == [("kill", "s1", "--json")]
+    assert state.stopped == "killed"
+
+
+@pytest.mark.parametrize(
+    "dead", [{"status": "dead"}, {"status": "errored"}, {"running": False}]
+)
+def test_skips_kill_when_already_dead(setup: Setup, dead: dict[str, object]) -> None:
+    setup.fake.sessions[0].update(dead)
+    state = merge.land("task", "dev")
+    assert not any(c[0] == "kill" for c in setup.fake.calls)
+    assert state.stopped == "already dead"
+
+
+def test_failing_kill_only_warns(setup: Setup) -> None:
+    setup.fake.kill_ok = False
+    res = CliRunner().invoke(merge.app, ["task", "--json"])
+    assert res.exit_code == 0
+    assert json.loads(res.stdout)["stopped"] == "failed"
+    assert "kill s1 failed" in res.stderr
+    assert not setup.worktree.exists()
+    assert not merge.state_path("task").exists()
+
+
+def test_never_kills_the_calling_session(
+    setup: Setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AGENT_MANAGER_SESSION_ID", "s1")
+    state = merge.land("task", "dev")
+    assert not any(c[0] == "kill" for c in setup.fake.calls)
+    assert state.stopped == "self"
+    assert not setup.worktree.exists()
+
+
+def test_dry_run_prints_the_kill(setup: Setup) -> None:
+    res = CliRunner().invoke(merge.app, ["task", "--dry-run", "--json"])
+    assert res.exit_code == 0
+    assert "[dry-run] agent-manager kill s1 --json" in res.stderr
+    assert json.loads(res.stdout)["stopped"] == "(dry-run)"
+    assert not any(c[0] == "kill" for c in setup.fake.calls)
 
 
 # --------------------------------------------------------------------------- #

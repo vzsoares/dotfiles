@@ -44,6 +44,9 @@
 #      merge     `git merge --ff-only <branch>` in the main checkout
 #      release   `zen-release --dev --yes --bump patch`, capturing the tag
 #      archive   `agent-manager archive <session>`
+#      stop      `agent-manager kill <session>` so the archived worker's
+#                process exits; skipped when it is already dead or is the
+#                calling session itself; a failed kill only warns
 #      worktree  `git worktree remove <path>`
 #      branch    `git branch -d`, or -D once merge-base --is-ancestor agrees
 #      board     `zen-board done <task> --note "<tag> · <shas>"`, or `zen-board
@@ -120,6 +123,7 @@ class State:
     part: str = ""
     shas: list[str] = field(default_factory=list)
     board: str = ""
+    stopped: str = ""
     phases: dict[str, str] = field(default_factory=dict)
 
     def done(self, phase: str) -> bool:
@@ -441,6 +445,39 @@ def phase_archive(state: State) -> None:
         raise Stop(EXIT_ERROR, f"agent-manager archive {state.session_id} failed")
 
 
+def phase_stop(state: State) -> None:
+    if state.session_id == os.environ.get("AGENT_MANAGER_SESSION_ID"):
+        state.stopped = "self"
+        print("zen-merge: not stopping the calling session", file=sys.stderr)
+        return
+    if DRY_RUN:
+        print(
+            f"[dry-run] agent-manager kill {state.session_id} --json",
+            file=sys.stderr,
+        )
+        state.stopped = "(dry-run)"
+        return
+    row = next(
+        (s for s in _sessions.list_sessions() or [] if s.get("id") == state.session_id),
+        None,
+    )
+    if row is not None and (
+        row.get("running") is False or row.get("status") in _sessions.DEAD_STATUSES
+    ):
+        state.stopped = "already dead"
+        return
+    code, _ = _sessions.agent_manager("kill", state.session_id, "--json")
+    if code != 0:
+        print(
+            f"zen-merge: agent-manager kill {state.session_id} failed;"
+            " the worker process may still be running",
+            file=sys.stderr,
+        )
+        state.stopped = "failed"
+        return
+    state.stopped = "killed"
+
+
 def phase_worktree(state: State) -> None:
     if not Path(state.worktree).exists():
         return
@@ -541,6 +578,7 @@ def land(
     run_phase(state, "merge", lambda: phase_merge(state))
     run_phase(state, "release", lambda: phase_release(state))
     run_phase(state, "archive", lambda: phase_archive(state))
+    run_phase(state, "stop", lambda: phase_stop(state))
     run_phase(state, "worktree", lambda: phase_worktree(state))
     run_phase(state, "branch", lambda: phase_branch(state))
     run_phase(state, "board", lambda: phase_board(state))
@@ -620,6 +658,7 @@ def main(
                     "branch": state.branch,
                     "cleanup": "dry-run" if dry_run else "ok",
                     "board": state.board,
+                    "stopped": state.stopped,
                     "phase": state.part,
                 }
             )
