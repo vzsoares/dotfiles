@@ -38,13 +38,16 @@
 #      archive   `agent-manager archive <session>`
 #      worktree  `git worktree remove <path>`
 #      branch    `git branch -d`, or -D once merge-base --is-ancestor agrees
+#      board     `zen-board done <task> --note "<tag> · <shas>"`; skipped
+#                without a Task: trailer
 #
 #      Never merges into, or releases from, prod, main or the zen-release
 #      target branch.
 #
 #  EXIT CODES
 #      0 landed   2 gate hit   3 not fast-forward   4 dirty tree / wrong branch
-#      5 release failed   6 protected base   1 anything else (rerun resumes)
+#      5 release failed   6 protected base   7 board step failed
+#      1 anything else (rerun resumes)
 #
 #  AUTHOR
 #      vzsoares.
@@ -73,9 +76,11 @@ EXIT_NOT_FF = 3
 EXIT_DIRTY = 4
 EXIT_RELEASE = 5
 EXIT_REFUSED = 6
+EXIT_BOARD = 7
 
 PROTECTED = ("prod", "main")
 PUSH_PENDING = "push pending"
+BOARD = Path(__file__).resolve().parent / "board.py"
 
 DRY_RUN = False
 
@@ -97,6 +102,8 @@ class State:
     release: bool = False
     task_id: str = ""
     tag: str = ""
+    shas: list[str] = field(default_factory=list)
+    board: str = ""
     phases: dict[str, str] = field(default_factory=dict)
 
     def done(self, phase: str) -> bool:
@@ -131,6 +138,10 @@ def agent_manager(*args: str) -> tuple[int, str]:
 
 def run_release(main: str) -> subprocess.CompletedProcess[str]:
     return mutate(main, ["zen-release", "--dev", "--yes", "--bump", "patch"])
+
+
+def run_board(main: str, task_id: str, note: str) -> subprocess.CompletedProcess[str]:
+    return mutate(main, [str(BOARD), "done", task_id, "--note", note])
 
 
 def load_gate() -> ModuleType:
@@ -193,6 +204,10 @@ def task_from_trailers(main: str, base: str, branch: str) -> str:
         if line.strip():
             return line.strip().lstrip("#")
     return ""
+
+
+def branch_shas(main: str, base: str, branch: str) -> list[str]:
+    return git(main, "log", "--format=%h", f"{base}..{branch}").stdout.split()
 
 
 # --------------------------------------------------------------------------- #
@@ -283,6 +298,7 @@ def phase_resolve(state: State, base: str) -> None:
     if state.branch in guarded or state.branch == state.base:
         raise Stop(EXIT_REFUSED, f"refusing to merge branch {state.branch!r}")
     state.task_id = task_from_trailers(state.main, state.base, state.branch)
+    state.shas = branch_shas(state.main, state.base, state.branch)
 
 
 def phase_clean(state: State) -> None:
@@ -312,6 +328,8 @@ def phase_gate(state: State) -> None:
 
 
 def phase_merge(state: State) -> None:
+    # Empty once merged by hand; keep what resolve saw for the board note.
+    state.shas = branch_shas(state.main, state.base, state.branch) or state.shas
     if (
         git(
             state.main, "merge-base", "--is-ancestor", state.branch, state.base
@@ -384,6 +402,18 @@ def phase_branch(state: State) -> None:
     delete_branch(state.main, state.branch, state.base)
 
 
+def phase_board(state: State) -> None:
+    if not state.task_id:
+        state.board = "skipped"
+        return
+    note = " · ".join([state.tag, " ".join(state.shas)]) if state.shas else state.tag
+    result = run_board(state.main, state.task_id, note)
+    if result.returncode != 0:
+        tail = (result.stdout + result.stderr).strip().splitlines()[-5:]
+        raise Stop(EXIT_BOARD, "zen-board done failed:\n" + "\n".join(tail))
+    state.board = "done"
+
+
 def run_phase(state: State, name: str, fn: Callable[[], None]) -> None:
     if state.done(name):
         return
@@ -415,6 +445,7 @@ def land(session: str, base: str, restart: bool = False) -> State:
     run_phase(state, "archive", lambda: phase_archive(state))
     run_phase(state, "worktree", lambda: phase_worktree(state))
     run_phase(state, "branch", lambda: phase_branch(state))
+    run_phase(state, "board", lambda: phase_board(state))
     clear_state(state)
     return state
 
@@ -441,7 +472,7 @@ def main(
     restart: bool = typer.Option(False, "--restart", help="Discard saved state."),
     as_json: bool = typer.Option(False, "--json", help="JSON output."),
 ) -> None:
-    """Land a worker branch; exit 0 landed, 2 gate, 3 not ff, 4 dirty, 5 release, 6 refused."""
+    """Land a worker branch; exit 0 landed, 2 gate, 3 not ff, 4 dirty, 5 release, 6 refused, 7 board."""
     global DRY_RUN
     DRY_RUN = dry_run
     try:
@@ -461,6 +492,11 @@ def main(
         print(f"zen-merge: {exc}", file=sys.stderr)
         if exc.code == EXIT_ERROR and not dry_run:
             print("  fix it, then rerun zen-merge to resume", file=sys.stderr)
+        if exc.code == EXIT_BOARD:
+            print(
+                "  rerun zen-merge to retry the board step, or mark it Done via MCP",
+                file=sys.stderr,
+            )
         raise typer.Exit(exc.code) from exc
     if as_json:
         print(
@@ -473,6 +509,7 @@ def main(
                     "base": state.base,
                     "branch": state.branch,
                     "cleanup": "ok",
+                    "board": state.board,
                 }
             )
         )

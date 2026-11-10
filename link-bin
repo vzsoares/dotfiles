@@ -20,6 +20,7 @@ LINKS=(
     "zen-merge:scripts/merge.py"
     "zen-sweep:scripts/sweep.py"
     "zen-inbox:scripts/inbox.py"
+    "zen-board:scripts/board.py"
     "zen-pgp:scripts/pgp.py"
     "zen-hash:scripts/hash.sh"
     "zen-env:scripts/env-build.py"

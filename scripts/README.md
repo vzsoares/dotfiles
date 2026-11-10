@@ -18,6 +18,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable. |
+| `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
 | `inbox.py` | `zen-inbox` | Decision inbox: agents `ask`, a gum watcher answers by pick, free text or talk; batched delivery. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
@@ -77,7 +78,7 @@ All take `--json`; the header of each script is the full reference.
 zen-await <session>... [--timeout 4h] [--new]   # 0 done · 10 escalation · 11 idle · 20 dead · 124 timeout
 zen-await --summary <session>                   # classify the last message now
 zen-gate [--base dev]                           # 0 clean · 1 hits (file:line rule)
-zen-merge <session> [--base dev] [--dry-run]    # 0 landed · 2 gate · 3 not ff · 4 dirty · 5 release · 6 refused
+zen-merge <session> [--base dev] [--dry-run]    # 0 landed · 2 gate · 3 not ff · 4 dirty · 5 release · 6 refused · 7 board
 zen-sweep                                       # 0 clean · 1 findings; never changes anything
 ```
 
@@ -90,6 +91,8 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
   resume. A repo without `dev` lands on its main checkout's branch and reports
   "push pending". It refuses prod, main and the zen-release target branch.
+  Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
+  branch's `Task:` trailer (skipped without one); exit 7 = that step failed.
 - **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
   `~/code/personal/*`, and every worktree of each.
 
@@ -116,6 +119,22 @@ sends them; nothing is recorded before Send. Talk opens `tmux display-popup` on
 `tmux -L agentmgr attach -t am_<session>`, then asks which decisions it settled. The
 list redraws on inbox or session-status changes and every minute, never inside a
 menu. See `docs/wiki/architecture/decision-inbox.md`.
+
+### zen-board
+```
+zen-board check [--json]                          # open tasks, Urgent → Inbox
+zen-board next [--json]                           # one pick + why
+zen-board start <task>                            # In Progress
+zen-board done <task> [--note TEXT]               # Done + Conclusion Date, one PATCH
+zen-board add <title> --project P [--inbox] [--human-only]   # prints the new ID
+zen-board note <task> <text>                      # appends **YYYY-MM-DD:** text
+```
+`<task>` is `570`, `#570`, a page URL or a page UUID. Calls the Notion REST API
+(`Notion-Version: 2025-09-03`) on the vault's `board.tasks_data_source`; every ID
+comes from the vault `config/zen-flow.json`. `NOTION_TOKEN` is read from the env,
+else from the `export NOTION_TOKEN=` line in `~/.zshrc.local`. Exit 0 ok · 1 API ·
+2 usage or not found · 3 token/config missing. Block, reopen, triage and Won't Do
+stay on the Notion MCP (zen-flow skill).
 
 ### zen-pgp
 ```
@@ -165,6 +184,7 @@ uv run scripts/test_release.py
 uv run scripts/test_await.py
 uv run scripts/test_gate.py
 uv run scripts/test_merge.py
+uv run scripts/test_board.py
 uv run scripts/test_sweep.py
 uv run scripts/test_inbox.py
 ```

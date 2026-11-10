@@ -51,12 +51,15 @@ def _commit(repo: Path, name: str, content: str, msg: str = "change") -> None:
 
 @dataclass
 class Fake:
-    """Stands in for agent-manager and zen-release."""
+    """Stands in for agent-manager, zen-release and zen-board."""
 
     sessions: list[dict[str, object]] = field(default_factory=list)
     calls: list[tuple[str, ...]] = field(default_factory=list)
     release_ok: bool = True
     releases: int = 0
+    board_ok: bool = True
+    # (task id, note, branch still present) per zen-board call
+    boards: list[tuple[str, str, bool]] = field(default_factory=list)
 
     def agent_manager(self, *args: str) -> tuple[int, str]:
         self.calls.append(args)
@@ -75,6 +78,14 @@ class Fake:
         _git("tag", f"v0.0.{self.releases}-dev.0", cwd=Path(main))
         return subprocess.CompletedProcess([], 0, "", "")
 
+    def board(
+        self, main: str, task_id: str, note: str
+    ) -> subprocess.CompletedProcess[str]:
+        self.boards.append((task_id, note, merge.branch_exists(main, "am/task")))
+        if not self.board_ok:
+            return subprocess.CompletedProcess([], 1, "", "zen-board: HTTP 502")
+        return subprocess.CompletedProcess([], 0, "", "")
+
 
 @dataclass
 class Setup:
@@ -83,7 +94,12 @@ class Setup:
     fake: Fake
 
 
-def _make(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, base: str = "dev") -> Setup:
+def _make(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    base: str = "dev",
+    trailer: str = "\n\nTask: #568",
+) -> Setup:
     main = tmp_path / "repo"
     main.mkdir()
     _git("init", "-q", "-b", base, cwd=main)
@@ -92,7 +108,7 @@ def _make(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, base: str = "dev") ->
     _commit(main, "a.txt", "a\n", "init")
     wt = tmp_path / "wt"
     _git("worktree", "add", "-q", "-b", "am/task", str(wt), cwd=main)
-    _commit(wt, "b.txt", "b\n", "feat: b\n\nTask: #568")
+    _commit(wt, "b.txt", "b\n", f"feat: b{trailer}")
 
     fake = Fake(
         sessions=[
@@ -107,6 +123,7 @@ def _make(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, base: str = "dev") ->
     )
     monkeypatch.setattr(merge, "agent_manager", fake.agent_manager)
     monkeypatch.setattr(merge, "run_release", fake.release)
+    monkeypatch.setattr(merge, "run_board", fake.board)
     monkeypatch.setattr(merge, "DRY_RUN", False)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     return Setup(main=main, worktree=wt, fake=fake)
@@ -115,6 +132,10 @@ def _make(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, base: str = "dev") ->
 @pytest.fixture
 def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Setup:
     return _make(tmp_path, monkeypatch)
+
+
+def _sha(repo: Path, ref: str) -> str:
+    return _git("log", "-1", "--format=%h", ref, cwd=repo).strip()
 
 
 def _code() -> int:
@@ -130,7 +151,10 @@ def _code() -> int:
 
 
 def test_lands_releases_and_cleans_up(setup: Setup) -> None:
+    sha = _sha(setup.worktree, "HEAD")
     state = merge.land("task", "dev")
+    assert setup.fake.boards == [("568", f"v0.0.1-dev.0 · {sha}", False)]
+    assert state.board == "done"
     assert merge.summary_line(state) == "#568 · v0.0.1-dev.0 · cleanup ok"
     assert (setup.main / "b.txt").exists()
     assert not setup.worktree.exists()
@@ -146,6 +170,7 @@ def test_no_dev_branch_skips_release(
     state = merge.land("task", "dev")
     assert (state.base, state.tag, state.release) == ("master", "push pending", False)
     assert s.fake.releases == 0
+    assert s.fake.boards[0][1].startswith("push pending · ")
     assert (s.main / "b.txt").exists()
 
 
@@ -251,6 +276,56 @@ def test_unknown_session(setup: Setup) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Board                                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_board_skipped_without_task_trailer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _make(tmp_path, monkeypatch, trailer="")
+    state = merge.land("task", "dev")
+    assert (state.task_id, state.board) == ("", "skipped")
+    assert s.fake.boards == []
+
+
+def test_board_failure_exits_7_then_resumes_only_board(setup: Setup) -> None:
+    setup.fake.board_ok = False
+    assert _code() == merge.EXIT_BOARD
+    saved = merge.load_state("task")
+    assert saved is not None
+    assert saved.phases["branch"] == "done" and saved.phases["board"] == "failed"
+    calls = len(setup.fake.calls)
+
+    setup.fake.board_ok = True
+    state = merge.land("task", "dev")
+    assert state.board == "done"
+    assert setup.fake.releases == 1
+    assert len(setup.fake.calls) == calls
+    assert [b[1] for b in setup.fake.boards] == [setup.fake.boards[0][1]] * 2
+    assert not merge.state_path("task").exists()
+
+
+def test_board_note_keeps_shas_after_manual_merge(setup: Setup) -> None:
+    sha = _sha(setup.worktree, "HEAD")
+    _commit(setup.main, "z.txt", "z\n")
+    assert _code() == merge.EXIT_NOT_FF
+    _git("merge", "-q", "--no-edit", "am/task", cwd=setup.main)
+    merge.land("task", "dev")
+    assert setup.fake.boards[-1][1] == f"v0.0.1-dev.0 · {sha}"
+
+
+def test_run_board_dry_run_echoes(
+    setup: Setup, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.undo()
+    monkeypatch.setattr(merge, "DRY_RUN", True)
+    assert merge.run_board(str(setup.main), "568", "tag · abc").returncode == 0
+    err = capsys.readouterr().err
+    assert "board.py done 568 --note 'tag · abc'" in err
+
+
+# --------------------------------------------------------------------------- #
 # Branch cleanup                                                                #
 # --------------------------------------------------------------------------- #
 
@@ -275,6 +350,7 @@ def test_cli_json(setup: Setup) -> None:
     assert res.exit_code == 0
     out = json.loads(res.stdout)
     assert (out["task_id"], out["tag"], out["cleanup"]) == ("568", "v0.0.1-dev.0", "ok")
+    assert out["board"] == "done"
 
 
 if __name__ == "__main__":

@@ -62,6 +62,14 @@ Never write project names or Notion IDs into this file or any other public repo 
 
 ### Operations
 
+**check, next, start, done, add and note run `zen-board` first** (Bash; see
+`scripts/README.md`): `zen-board check`, `next`, `start <id>`,
+`done <id> --note "…"`, `add "<title>" --project <name or group> [--inbox]
+[--human-only]` (prints the new ID), `note <id> "…"`. It reads the IDs from the vault
+config and `NOTION_TOKEN` from the env or `~/.zshrc.local`. When it exits non-zero
+(1 API, 2 not found, 3 token/config missing), fall back to the MCP steps below.
+Triage, block, reopen, title/body edits and Won't Do stay on MCP.
+
 - **check** — list open tasks (Urgent, In Progress, To Do, empty), grouped by project:
   ```sql
   SELECT "Write a task", Status, "☢️ Projeto", "date:Due Date:start" AS due, "Last Edited", url
@@ -113,7 +121,7 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
 `agent-manager spawn --model --effort`).
 
 | Role         | Preset         | Model · effort          | Session                                               |
-| ------------ | -------------- | ----------------------- | ----------------------------------------------------- |
+| --- | --- | --- | --- |
 | chief        | `chief`        | Opus · max              | the one the user talks to; group `chief`              |
 | spec-writer  | `spec-writer`  | Opus · high             | one per task, short-lived; project group; no worktree |
 | orchestrator | `orchestrator` | Opus · high             | one, long-running; group `chief`; no worktree         |
@@ -152,7 +160,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 - `zen-gate [--base dev]` (worker, before `WORKER_DONE`): banned ways to get green
   in the branch diff; exceptions in `.zen-gate-allow`.
 - `zen-merge <session>` (orchestrator, on exit 0): gate, ff-merge, dev release,
-  archive, worktree and branch cleanup; 2 gate, 3 not ff, 4 dirty, 5 release.
+  archive, worktree and branch cleanup, then marks the task Done via `zen-board`
+  with the tag and shas in a note; 2 gate, 3 not ff, 4 dirty, 5 release, 7 board.
+- `zen-board` (everyone): the routine board ops above, over REST.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
   trees, unpushed work, stashes, orphan branches and worktrees.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
@@ -187,7 +197,8 @@ orchestrator:
   `zen-gate` on the branch diff, `git merge --ff-only` into `dev` in the repo's main
   checkout, `zen-release --dev --yes --bump patch`, then cleanup (below); each
   shortcut follow-up it prints becomes a To Do task
-- marks the task Done (**done**) with the release tag in a note
+- leaves **done** to `zen-merge`'s board phase (tag and shas in the note); on
+  exit 7 it reruns `zen-merge` or marks it Done via MCP
 - files open review findings as To Do tasks, and device, prod, data or
   messages-to-people steps as Human Only tasks
 - leaves cleanup to `zen-merge`: archive the session, `git worktree remove <path>`,
