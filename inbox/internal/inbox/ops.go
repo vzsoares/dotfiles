@@ -297,6 +297,13 @@ func (ib *Inbox) closeOne(id string, a closeArgs) (Decision, error) {
 		if a.rev != nil && d.Rev != *a.rev {
 			return &Error{Msg: id + " was amended", Code: 1, Amended: true}
 		}
+		if a.status == "answered" && !ib.User {
+			if _, ok, err := ib.prodAction(id); err != nil {
+				return err
+			} else if ok {
+				return errf(1, "%s is a prod-action ask; answer it in the decisions panel", id)
+			}
+		}
 		if a.kind == "pick" && d.OptionText(a.option) == "" {
 			return errf(2, "%s has no option %s", id, pyfmt.Repr(a.option))
 		}

@@ -14,6 +14,14 @@ func approvalArgs(verb, id string) []string {
 	return []string{"approval", verb, id, "--action", "release", "--repo", "dotfiles", "--branch", "prod", "--sha", sha40}
 }
 
+// approve writes the panel's Approve straight to the db: the CLI can never
+// answer a prod-action ask.
+func (f *fake) approve(id string) {
+	f.t.Helper()
+	f.sqlite("UPDATE decisions SET status = 'answered', answer_kind = 'pick', answer_option = 'a'," +
+		" delivery = 'sent', answered_at = '2026-01-01T00:00:00', rev = rev + 1 WHERE id = '" + id + "'")
+}
+
 func TestAskProdUsageErrors(t *testing.T) {
 	f := newFake(t)
 	base := []string{"ask", "680", "--session", "s1"}
@@ -61,7 +69,7 @@ func TestApprovalCheckThenUse(t *testing.T) {
 	if r := f.zen(nil, approvalArgs("check", "680.1")...); r.code != 1 || r.stderr != "zen-inbox: approval 680.1: not answered\n" {
 		t.Fatalf("%+v", r)
 	}
-	f.zen(nil, "answer", "680.1", "a")
+	f.approve("680.1")
 	if r := f.zen(nil, approvalArgs("check", "680.1")...); r.code != 0 || r.stdout != "approved 680.1\n" {
 		t.Fatalf("%+v", r)
 	}
@@ -86,7 +94,7 @@ func TestApprovalCheckThenUse(t *testing.T) {
 func TestApprovalUseDefaultsToUser(t *testing.T) {
 	f := newFake(t)
 	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
-	f.zen(nil, "answer", "680.1", "a")
+	f.approve("680.1")
 	if r := f.zen(nil, approvalArgs("use", "680.1")...); r.code != 0 || r.stdout != "used 680.1 by user\n" {
 		t.Fatalf("%+v", r)
 	}
@@ -95,7 +103,7 @@ func TestApprovalUseDefaultsToUser(t *testing.T) {
 func TestConcurrentApprovalUseOneWins(t *testing.T) {
 	f := newFake(t)
 	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
-	f.zen(nil, "answer", "680.1", "a")
+	f.approve("680.1")
 	var cmds []*exec.Cmd
 	for range 8 {
 		cmds = append(cmds, f.cmd(nil, append([]string{zenBin}, approvalArgs("use", "680.1")...)...))
@@ -128,8 +136,69 @@ func TestV2FixtureMigratesToV3(t *testing.T) {
 		t.Fatalf("migration changed rows:\n%s\n%s", before, after)
 	}
 	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
-	f.zen(nil, "answer", "680.1", "a")
+	f.approve("680.1")
 	if r := f.zen(nil, approvalArgs("use", "680.1")...); r.code != 0 {
 		t.Fatalf("%+v", r)
+	}
+}
+
+func TestCLIRefusesProdAnswer(t *testing.T) {
+	refused := "zen-inbox: 680.1 is a prod-action ask; answer it in the decisions panel\n"
+	for _, c := range []struct {
+		name string
+		env  []string
+		args []string
+	}{
+		{"other agent", []string{"AGENT_MANAGER_SESSION_ID=s2"}, []string{"answer", "680.1", "a"}},
+		{"asker", []string{"AGENT_MANAGER_SESSION_ID=s1"}, []string{"answer", "680.1", "a"}},
+		{"no session", nil, []string{"answer", "680.1", "a"}},
+		{"free text", nil, []string{"answer", "680.1", "--text", "Approve"}},
+		{"hold", []string{"AGENT_MANAGER_SESSION_ID=s1"}, []string{"answer", "680.1", "b"}},
+		{"resolve", nil, []string{"resolve", "680.1"}},
+		{"resolve asker", []string{"AGENT_MANAGER_SESSION_ID=s1"}, []string{"resolve", "680.1"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFake(t)
+			f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
+			if r := f.zen(c.env, c.args...); r.code != 1 || r.stderr != refused || r.stdout != "" {
+				t.Fatalf("%+v", r)
+			}
+			if got := f.sqlite("SELECT status, rev FROM decisions"); got != "open|0\n" {
+				t.Fatalf("%q", got)
+			}
+			if r := f.zen(nil, approvalArgs("check", "680.1")...); r.code != 1 || !strings.Contains(r.stderr, "not answered") {
+				t.Fatalf("%+v", r)
+			}
+			if len(f.sends()) != 0 {
+				t.Fatal(f.sends())
+			}
+		})
+	}
+}
+
+func TestCLIWithdrawProdAskUnchanged(t *testing.T) {
+	f := newFake(t)
+	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
+	f.zen(nil, append([]string{"ask", "680", "--session", "s2"}, prodArgs...)...)
+	if r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=s1"}, "withdraw", "680.1"); r.code != 0 {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=chief"}, "withdraw", "680.2", "--force"); r.code != 0 {
+		t.Fatalf("%+v", r)
+	}
+	if got := f.sqlite("SELECT status FROM decisions ORDER BY id"); got != "withdrawn\nwithdrawn\n" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestCLIPlainAskFromAgentStillAnswers(t *testing.T) {
+	f := newFake(t)
+	f.zen(nil, "ask", "7", "--session", "s1", "-q", "Ship?", "-o", "Approve", "-o", "Hold")
+	r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=s2"}, "answer", "7.1", "b")
+	if r.code != 0 || f.sqlite("SELECT status, answer_option, delivery FROM decisions") != "answered|b|sent\n" {
+		t.Fatalf("%+v", r)
+	}
+	if sends := f.sends(); len(sends) != 1 || !strings.Contains(sends[0][2], "7.1 Ship? → b: Hold") {
+		t.Fatal(sends)
 	}
 }

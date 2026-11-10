@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/am"
+	"github.com/vzsoares/dotfiles/inbox/internal/guard"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
@@ -43,6 +44,9 @@ const (
 	scChange
 	scTalkPick
 	scTalkNote
+	scConfirm
+	// scLocked is never m.scr: it names the footer of a walk on a locked prod ask.
+	scLocked
 )
 
 // snapshot is one read of everything the panel shows.
@@ -155,6 +159,10 @@ type Model struct {
 	talkFrom screen
 	talkOpen []inbox.Decision
 	marked   map[string]bool
+
+	// prodBlock is why prod-action asks are locked here; it applies only
+	// while ib.User is false.
+	prodBlock string
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -168,7 +176,8 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, md: md.New(lipgloss.DefaultRenderer()),
-		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		prodBlock: "guard not run",
+		sp:        spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
 		},
@@ -178,7 +187,11 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 // Watch runs the panel until the user quits.
 func Watch(client am.Client) func(*inbox.Inbox) error {
 	return func(ib *inbox.Inbox) error {
-		_, err := tea.NewProgram(New(ib, client), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+		ok, reason := guard.Current()
+		ib.User = ok
+		m := New(ib, client)
+		m.prodBlock = reason
+		_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 		if errors.Is(err, tea.ErrInterrupted) {
 			return nil
 		}
@@ -375,7 +388,7 @@ func (m *Model) livePass() {
 		}
 	}
 	switch m.scr {
-	case scWalk, scFree, scFull:
+	case scWalk, scFree, scFull, scConfirm:
 		if curGone {
 			m.advance()
 		}
@@ -568,6 +581,7 @@ func (m *Model) startTalk(from screen) tea.Cmd {
 func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 	m.busy = ""
 	m.snap = msg.snap
+	msg.open = slices.DeleteFunc(msg.open, m.locked)
 	switch {
 	case !msg.ok:
 		m.finishTalk(nil, "talk unavailable; attach with: "+am.AttachCommand(m.sid))
@@ -578,6 +592,17 @@ func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 		m.scr, m.cursor = scTalkPick, 0
 	}
 	return nil
+}
+
+// locked is a prod-action ask this panel may not answer.
+func (m *Model) locked(d inbox.Decision) bool { return d.Prod != nil && !m.ib.User }
+
+// notice is the locked prod ask's line on its question screen.
+func (m *Model) notice(d inbox.Decision) string {
+	if !m.locked(d) {
+		return ""
+	}
+	return "prod approvals only from the decisions terminal (" + m.prodBlock + ")"
 }
 
 func (m *Model) chosen() []string {
@@ -654,7 +679,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case m.scr == scr:
 	case scr == scWalk:
 		m.walkScroll, m.scroll = m.scroll, 0
-	case m.scr == scWalk && (scr == scFull || scr == scFree):
+	case m.scr == scWalk && (scr == scFull || scr == scFree || scr == scConfirm):
 		m.scroll = m.walkScroll
 	default:
 		m.scroll = 0
@@ -728,7 +753,7 @@ func (m *Model) menuLen() int {
 		return len(sessionMenu)
 	case scWalk:
 		if d, ok := m.decision(m.p.cur); ok {
-			return len(questionMenu(d))
+			return len(questionMenu(d, m.locked(d)))
 		}
 	case scReview:
 		return len(reviewMenu)
@@ -750,6 +775,9 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.busy != "" {
 		return m, nil
+	}
+	if m.scr == scConfirm {
+		return m.keyConfirm(k)
 	}
 	if n := m.scrollBy(k); n != 0 {
 		m.scroll = max(m.scroll+n, 0)
@@ -911,7 +939,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	choice := ""
 	switch k {
 	case "enter":
-		items := questionMenu(d)
+		items := questionMenu(d, m.locked(d))
 		choice = items[min(m.cursor, len(items)-1)].value
 	case "a", "b", "c", "d":
 		choice = k
@@ -934,6 +962,9 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		delete(m.p.staged, d.ID)
 		m.advance()
 	case "free":
+		if m.locked(d) {
+			return m, nil
+		}
 		m.ta.Reset()
 		m.scr = scFree
 		return m, m.ta.Focus()
@@ -942,9 +973,23 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	case "talk":
 		return m, m.startTalk(scWalk)
 	default:
-		if d.OptionText(choice) != "" {
+		switch {
+		case m.locked(d) || d.OptionText(choice) == "":
+		case d.Prod != nil && d.OptionText(choice) == "Approve":
+			m.scr = scConfirm
+		default:
 			m.stage(view.Staged{Kind: "pick", Option: choice, Rev: d.Rev})
 		}
+	}
+	return m, nil
+}
+
+// keyConfirm stages Approve only on y; any other key goes back unstaged.
+func (m *Model) keyConfirm(k string) (tea.Model, tea.Cmd) {
+	d, ok := m.decision(m.p.cur)
+	m.scr = scWalk
+	if ok && k == "y" && !m.locked(d) {
+		m.stage(view.Staged{Kind: "pick", Option: "a", Rev: d.Rev})
 	}
 	return m, nil
 }

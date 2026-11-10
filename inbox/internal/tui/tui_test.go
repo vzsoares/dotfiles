@@ -238,7 +238,7 @@ func TestCutOrderAsSpaceShrinks(t *testing.T) {
 	prev := -1
 	clipped := false
 	for h := 60; h >= 10; h-- {
-		f := fitWalk(dec, b, nil, 92, h, len(questionMenu(dec)), 1, 0, d.m.paint)
+		f := fitWalk(dec, b, nil, "", 92, h, len(questionMenu(dec, false)), 1, 0, d.m.paint)
 		if len(f.cuts) < prev {
 			t.Fatalf("height %d cut %v after %d cuts", h, f.cuts, prev)
 		}
@@ -381,6 +381,8 @@ func TestWalkReviewSendRecordsStaged(t *testing.T) {
 func TestEmptyFreeTextReturnsToQuestion(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.ask("7", "s1", "Which way?", "left", "right")
+	at := time.Now()
+	d.m.now = func() time.Time { return at }
 	d.openWalk()
 	before := d.view()
 	d.keys("f", "ctrl+d")

@@ -102,6 +102,7 @@ func TestApprovalReasons(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			ib, _, _ := open(t)
+			ib.User = true
 			id := askProd(t, ib, "s1")
 			c.setup(ib, id)
 			_, err := ib.Approval(id, c.want, "s9")
@@ -131,6 +132,7 @@ func TestApprovalUnknownAndPlainAsk(t *testing.T) {
 
 func TestApprovalCheckNeverConsumesUseOnce(t *testing.T) {
 	ib, _, _ := open(t)
+	ib.User = true
 	id := askProd(t, ib, "s1")
 	approve(ib, id)
 	for range 2 {
@@ -197,5 +199,68 @@ func TestV3KeepsV2TablesUnchanged(t *testing.T) {
 		if got, want := createSQL(t, ib.conn, table), createSQL(t, v2, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)
 		}
+	}
+}
+
+func TestProdAskClosesOnlyForUser(t *testing.T) {
+	ib, fake, _ := open(t)
+	id := askProd(t, ib, "s1")
+	refused := id + " is a prod-action ask; answer it in the decisions panel"
+	for name, close := range map[string]func() error{
+		"pick a": func() error { _, err := ib.Answer(id, p("a"), nil, "", nil); return err },
+		"pick b": func() error { _, err := ib.Answer(id, p("b"), nil, "", nil); return err },
+		"text":   func() error { _, err := ib.Answer(id, nil, p("Approve"), "", nil); return err },
+		"talk":   func() error { _, err := ib.Resolve(id, ""); return err },
+		"raw":    func() error { return ib.CloseRaw(id, "answered", "pick", "a", "", "held") },
+	} {
+		if err := close(); code(err) != 1 || err.Error() != refused {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if d := get(t, ib, id); d.Status != "open" || d.Rev != 0 || d.Prod == nil || d.Prod.Sha != testSha {
+		t.Fatalf("%+v", d)
+	}
+	if len(fake.sends) != 0 {
+		t.Fatalf("%v", fake.sends)
+	}
+	ib.User = true
+	if _, err := ib.Answer(id, p("a"), nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := get(t, ib, id); d.Status != "answered" || d.AnswerKind != "pick" || d.AnswerOption != "a" {
+		t.Fatalf("%+v", d)
+	}
+	if got, err := ib.Approval(id, prodWant(), "x"); err != nil || got.UsedBy != "x" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestProdAskWithdrawUnchanged(t *testing.T) {
+	ib, _, _ := open(t)
+	own, forced := askProd(t, ib, "s1"), askProd(t, ib, "s2")
+	if _, err := ib.Withdraw(own, "s1", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ib.Withdraw(forced, "chief", false); code(err) != 1 {
+		t.Fatalf("%v", err)
+	}
+	if _, err := ib.Withdraw(forced, "chief", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{own, forced} {
+		if d := get(t, ib, id); d.Status != "withdrawn" {
+			t.Fatalf("%+v", d)
+		}
+	}
+}
+
+func TestPlainAskAnswersWithoutUser(t *testing.T) {
+	ib, fake, _ := open(t)
+	id := ask(t, ib, "7", "s1", false, "Ship?", "Approve", "Hold")
+	if _, err := ib.Answer(id, p("a"), nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := get(t, ib, id); d.Status != "answered" || d.Prod != nil || len(fake.sends) != 1 {
+		t.Fatalf("%+v %v", d, fake.sends)
 	}
 }

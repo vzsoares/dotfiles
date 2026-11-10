@@ -164,6 +164,8 @@ type Decision struct {
 	Rev           int64
 	Title         string
 	Brief         string
+	// Prod is set on a prod-action ask.
+	Prod *ProdAction
 }
 
 type Option struct{ Letter, Text string }
@@ -235,6 +237,9 @@ type Inbox struct {
 	Path string
 	// Self is the calling agent session; answers for it are recorded, never sent.
 	Self string
+	// User permits answering a prod-action ask. Only the panel sets it, after
+	// guard.Current passed; no flag or env var reaches it.
+	User bool
 }
 
 var ctx = context.Background()
@@ -446,6 +451,11 @@ func (ib *Inbox) sel(where string, args ...any) ([]Decision, error) {
 }
 
 func (ib *Inbox) fill(d *Decision) error {
+	if p, ok, err := ib.prodAction(d.ID); err != nil {
+		return err
+	} else if ok {
+		d.Prod = &p
+	}
 	rows, err := ib.conn.QueryContext(ctx,
 		"SELECT letter, text FROM decision_options WHERE decision_id = ? ORDER BY letter", d.ID)
 	if err != nil {

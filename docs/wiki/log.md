@@ -52,3 +52,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-10] update | zen-release prod approval gate (#680)
 A full zen-release now fails closed: headless, agent-session or non-TTY runs need `--approval <id>`, a structured `zen-inbox ask --prod` answered Approve, bound to repo, target branch and the full source sha, consumed once by `zen-inbox approval use` (exit 3 otherwise). zen-inbox schema v3 adds `prod_actions`; amend of such an ask is refused. `--dev` is unchanged.
 Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
+
+## [2026-11-10] update | zen-inbox: only the user answers a prod ask (#691)
+The store refuses `answer`/`resolve` on a prod-action ask unless `Inbox.User`, an in-process bit only the panel sets after `internal/guard` passes (agent env vars and a `ps` walk for claude/codex ancestors, fail closed). A refused panel shows a notice and offers no answer; a passing one confirms Approve on a y/N screen with the full sha.
+Pages updated: architecture/decision-inbox.md

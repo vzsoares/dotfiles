@@ -15,7 +15,11 @@ var CutOrder = []string{"brief", "context", "asked-by", "help", "menu", "title"}
 
 type item struct{ label, value string }
 
-func questionMenu(d inbox.Decision) []item {
+// questionMenu is the walk's menu; a locked prod ask offers no answer.
+func questionMenu(d inbox.Decision, locked bool) []item {
+	if locked {
+		return []item{{"Skip", "skip"}, {"Talk", "talk"}, {"View full", "full"}, {"Back", "back"}}
+	}
 	var out []item
 	for _, o := range d.Options {
 		label := o.Letter
@@ -42,7 +46,7 @@ type walkFit struct {
 // fitWalk cuts in CutOrder until the question, its options and the menu
 // fit; when the question and options alone overflow, everything (context
 // included) goes into a scrolling body so no option text is ever clipped.
-func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, items, footer, helpRows int,
+func fitWalk(d inbox.Decision, b view.Brief, banner []string, notice string, width, height, items, footer, helpRows int,
 	p view.Painter) walkFit {
 	head := view.WrapRest(b.Head(), width, "", "  ")
 	text := view.PanelBriefText(b, width, p)
@@ -51,6 +55,9 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, ite
 		asked = view.Wrap(b.AskedBy, width, "")
 	}
 	question := view.PanelQuestionLines(d, width, p)
+	if notice != "" {
+		question = append(question, view.WrapRest(notice, width, "", "  ")...)
+	}
 	ctx := view.PanelContextLines(d, width, p)
 	opts := view.PanelOptionLines(d, width, p)
 	full := []int{items}
@@ -152,13 +159,17 @@ var footers = map[screen][]key{
 	scFull:     {{"↑↓", "scroll"}, {"esc", "back"}},
 	scTalkPick: {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote: {{"enter", "done"}, {"esc", "no note"}},
+	scConfirm:  {{"y", "approve"}, {"n/esc", "back"}},
+	scLocked:   {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"esc", "back"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
 	scList:    "One row per asking session, oldest first. Open one to see its tasks and questions.",
 	scSession: "Answer walks the questions one by one; Talk opens the agent in a popup.",
-	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything; nothing is recorded until Send on the review screen.",
+	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything; nothing is recorded until Send on the review screen. Approve on a prod ask asks y/N first.",
 	scReview:  "Send records the staged answers; Change one walks a single question again.",
+	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the decisions terminal.",
+	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
 }
 
 func footerLines(s screen, width int, scroll bool) []string {

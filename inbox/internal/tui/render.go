@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -223,6 +224,8 @@ func (m *Model) frame() frame {
 		return m.viewChange()
 	case scTalkPick:
 		return m.viewTalkPick()
+	case scConfirm:
+		return m.viewConfirm()
 	case scTalkNote:
 		return frame{s: scTalkNote, top: []section{{lines: []string{"note (optional)"}}},
 			body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
@@ -309,13 +312,23 @@ func (m *Model) viewSession() frame {
 		menu: menuSection(sessionMenu, m.cursor, menuH, m.w), cur: -1, help: true}
 }
 
+// walkKeys is the screen whose footer and help the walk shows.
+func (m *Model) walkKeys(d inbox.Decision) screen {
+	if m.locked(d) {
+		return scLocked
+	}
+	return scWalk
+}
+
 func (m *Model) walkFit() (walkFit, inbox.Decision) {
 	d, _ := m.decision(m.p.cur)
+	s := m.walkKeys(d)
 	help := 0
 	if m.showHelp {
-		help = len(helpLines(scWalk, m.w))
+		help = len(helpLines(s, m.w))
 	}
-	f := fitWalk(d, m.brief(d), m.banner(), m.w, m.rows(), len(questionMenu(d)), m.footRows(scWalk), help, m.paint)
+	f := fitWalk(d, m.brief(d), m.banner(), m.notice(d), m.w, m.rows(), len(questionMenu(d, m.locked(d))), m.footRows(s),
+		help, m.paint)
 	return f, d
 }
 
@@ -323,8 +336,8 @@ func (m *Model) viewWalk() frame {
 	f, d := m.walkFit()
 	top := f.top
 	nb := min(len(m.banner()), len(top))
-	return frame{s: scWalk, top: []section{{lines: top[:nb], style: &bannerStyle}, {lines: top[nb:]}},
-		body: []section{{lines: f.body}}, menu: menuSection(questionMenu(d), m.cursor, f.menuH, m.w),
+	return frame{s: m.walkKeys(d), top: []section{{lines: top[:nb], style: &bannerStyle}, {lines: top[nb:]}},
+		body: []section{{lines: f.body}}, menu: menuSection(questionMenu(d, m.locked(d)), m.cursor, f.menuH, m.w),
 		cur: -1, help: f.help}
 }
 
@@ -348,6 +361,23 @@ func (m *Model) viewReview() frame {
 		m.rows()-m.footRows(scReview)-len(banner)-help)
 	return frame{s: scReview, body: []section{{lines: banner, style: &bannerStyle}, {lines: text}},
 		menu: menuSection(reviewMenu, m.cursor, menuH, m.w), cur: -1, help: true}
+}
+
+// viewConfirm shows the exact prod action an Approve binds; the sha gets a
+// line of its own so all 40 characters fit a 40-column pane.
+func (m *Model) viewConfirm() frame {
+	d, _ := m.decision(m.p.cur)
+	var p inbox.ProdAction
+	if d.Prod != nil {
+		p = *d.Prod
+	}
+	var body []string
+	for _, kv := range [][2]string{{"action", p.Action}, {"repo", p.Repo}, {"branch", p.Branch}} {
+		body = append(body, view.WrapRest(fmt.Sprintf("%-7s%s", kv[0], kv[1]), m.w, "", "       ")...)
+	}
+	body = append(body, "sha", p.Sha, "", "Approve? y/N")
+	return frame{s: scConfirm, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  prod approval", m.w)}, style: &bannerStyle}},
+		body: []section{{lines: body}}, cur: -1, help: true}
 }
 
 func (m *Model) viewChange() frame {

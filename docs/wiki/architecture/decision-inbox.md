@@ -98,6 +98,35 @@ one-line reason on stderr, 2 usage, 4 db. `--by` defaults to
 `$AGENT_MANAGER_SESSION_ID`, else `user`. zen-release is the consumer; see
 [[release-tooling]].
 
+### Only the user answers one (#691)
+
+- **CLI refusal.** The store refuses every close as `answered` (`answer` pick or
+  text, `resolve`, `CloseRaw`) of a decision with a `prod_actions` row, inside
+  `closeOne`'s `BEGIN IMMEDIATE`, unless `Inbox.User` is set: exit 1, `<id> is a
+  prod-action ask; answer it in the decisions panel`, row left `open`. `withdraw`
+  is unchanged (the asker's own, or `--force`). Chief can no longer record a chat
+  "Approve" with `answer`.
+- **The bit.** `Inbox.User` is an in-process field; only `tui.Watch` sets it, from
+  `guard.Current()` at panel start. No flag, env var or file reaches it.
+- **Guard (`internal/guard`).** Refuses, with the reason, when any of
+  `AGENT_MANAGER_SESSION_ID`, `AGENT_MANAGER_AGENT_PID`, `CLAUDECODE` is non-empty,
+  or when walking parents with `ps -o ppid=,comm= -p <pid>` finds a `claude` or
+  `codex` comm or `$AGENT_MANAGER_AGENT_PID`. A `ps` error or a walk past 256
+  levels refuses (fail closed). Gemini runs as `node`, so only the env check
+  catches it.
+- **Refused panel.** Everything else works; a prod ask shows `prod approvals only
+  from the decisions terminal (<reason>)`, its menu is Skip / Talk / View full /
+  Back, `a`-`d` and `f` do nothing, and Talk's resolve list leaves it out.
+- **Confirm.** In a passing panel, Approve (`a` or enter) opens a screen with
+  action, repo, branch and the full 40-char sha, and `Approve? y/N`. Only `y`
+  stages the pick for the normal review → Send; any other key stages nothing and
+  returns to the question. Hold, free text and talk need no confirm.
+- **Out of scope.** Deliberate bypasses: `tmux send-keys` into the decisions pane,
+  `tmux new-window 'zen-inbox watch'` (escapes the agent ancestry), raw `sqlite3`
+  writes, editing the source the launcher rebuilds. The decisions terminal must
+  not inherit an agent env var from the agentmgr tmux server's environment, or the
+  guard refuses there too.
+
 ## IDs
 
 `<task>.<n>` with n = 1 + the highest n ever used for that task (withdrawn included);

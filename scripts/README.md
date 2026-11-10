@@ -137,10 +137,10 @@ zen-inbox approval use|check <id> --action A --repo R --branch B --sha S [--by w
 zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
 zen-inbox list [--all] | show <id>                      # --json on both
-zen-inbox answer <id> (<letter> | --text "...") [--note "..."]
-zen-inbox resolve <id> [--note "..."]                   # settled in talk; nothing sent
+zen-inbox answer <id> (<letter> | --text "...") [--note "..."]  # not a --prod ask
+zen-inbox resolve <id> [--note "..."]                   # settled in talk; not --prod
 zen-inbox retry <session>                               # resend a failed delivery
-zen-inbox watch                                         # one row per session
+zen-inbox watch                  # one row per session; outside agents, y/N Approve
 ```
 SQLite at `<vault>/config/zen-flow.db` (`ZEN_FLOW_DB` overrides). Answers are held
 until the asking session has no open decision, then sent as one
