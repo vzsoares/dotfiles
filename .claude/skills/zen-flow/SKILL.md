@@ -129,7 +129,7 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   board write).
 - Prod actions: a push, tag, release or deploy that targets `prod`, `main` or
   `master` is filed as `zen-inbox ask <task> --prod <push|tag|release|deploy>
-  --repo <repo> --branch <branch> --sha <sha>`, approved once per action in the
+  --repo <repo> --branch <branch> --sha <40-char sha>`, approved once per action in the
   panel, in every repo (Approva included). `zen-release --approval <id>` consumes
   it and a `git push` checks it first. Agents never answer a `--prod` ask. Workers
   never run one; chief or the orchestrator may after my approval. Never ff-merge a
