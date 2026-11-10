@@ -108,18 +108,18 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, ite
 }
 
 // fitText picks the first variant that fits above a full menu, else above a
-// paged one; failing both, the last variant scrolls above a one-row menu.
-func fitText(variants [][]string, items, rows int) (text []string, menuH int, scroll bool) {
+// paged one; failing both, the last variant goes above a one-row menu.
+func fitText(variants [][]string, items, rows int) (text []string, menuH int) {
 	for _, v := range variants {
 		room := rows - len(v)
 		if room >= items {
-			return v, items, false
+			return v, items
 		}
 		if room >= 1 {
-			return v, room, false
+			return v, room
 		}
 	}
-	return variants[len(variants)-1], 1, true
+	return variants[len(variants)-1], 1
 }
 
 func reviewLines(entries []entry, width int, questionWidth int) []string {

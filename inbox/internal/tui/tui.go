@@ -132,6 +132,8 @@ type Model struct {
 
 	cursor int
 	scroll int
+	// walkScroll is the walk's offset kept while View full or Free text is open.
+	walkScroll int
 	// shown is how many body rows the last layout fitted; a page is half.
 	shown   int
 	flash   string
@@ -648,7 +650,13 @@ func (m *Model) finishTalk(resolved []string, flash string) {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	scr, cursor := m.scr, m.cursor
 	_, cmd := m.update(msg)
-	if m.scr != scr {
+	switch {
+	case m.scr == scr:
+	case scr == scWalk:
+		m.walkScroll, m.scroll = m.scroll, 0
+	case m.scr == scWalk && (scr == scFull || scr == scFree):
+		m.scroll = m.walkScroll
+	default:
 		m.scroll = 0
 	}
 	if m.w > 0 && m.h > 0 && m.busy == "" {

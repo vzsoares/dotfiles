@@ -113,15 +113,17 @@ func (m *Model) lines(secs []section) []string {
 // span is the body rows [start, end) shown in room rows from off; a marker
 // row is taken at each clipped edge. cur, when >= 0, is kept in view.
 func span(n, room, off, cur int) (int, int) {
+	// A footer wider than a tiny pane leaves room negative.
+	room = max(room, 0)
 	if n <= room {
 		return 0, n
 	}
 	if room < 3 {
-		off = max(min(off, n-room), 0)
 		if cur >= 0 {
 			off = max(min(off, cur), cur-room+1)
 		}
-		return off, off + max(room, 0)
+		off = max(min(off, n-room), 0)
+		return off, off + room
 	}
 	bounds := func(off int) (int, int) {
 		k := room
@@ -342,7 +344,7 @@ func (m *Model) viewReview() frame {
 	if m.showHelp {
 		help = len(helpLines(scReview, m.w))
 	}
-	text, menuH, _ := fitText([][]string{full, compact}, len(reviewMenu),
+	text, menuH := fitText([][]string{full, compact}, len(reviewMenu),
 		m.rows()-m.footRows(scReview)-len(banner)-help)
 	return frame{s: scReview, body: []section{{lines: banner, style: &bannerStyle}, {lines: text}},
 		menu: menuSection(reviewMenu, m.cursor, menuH, m.w), cur: -1, help: true}

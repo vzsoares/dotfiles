@@ -118,7 +118,7 @@ func TestAsciiAndNoColorWriteNoEscapes(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	tty := lipgloss.NewRenderer(io.Discard, termenv.WithTTY(true))
 	if tty.ColorProfile() == termenv.Ascii {
-		t.Skip("terminal profile not detected; NO_COLOR check would prove nothing")
+		t.Fatal("a TTY with TERM=xterm-256color should have a colour profile")
 	}
 	t.Setenv("NO_COLOR", "1")
 	r := New(lipgloss.NewRenderer(io.Discard, termenv.WithTTY(true)))

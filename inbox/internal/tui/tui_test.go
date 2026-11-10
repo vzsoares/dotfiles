@@ -1138,3 +1138,18 @@ func TestViewFullScrollsByLine(t *testing.T) {
 		t.Fatalf("down scrolled to %d:\n%s", d.m.scroll, d.view())
 	}
 }
+
+func TestWalkKeepsScrollAcrossViewFull(t *testing.T) {
+	d := newDrv(t, 40, 15)
+	d.ask("7", "s1", "Which way?", words(150), words(150), words(150))
+	d.openWalk()
+	d.keys("pgdown")
+	before := d.m.scroll
+	if before == 0 {
+		t.Fatal("walk did not scroll")
+	}
+	d.keys("v", "down", "esc")
+	if d.m.scroll != before {
+		t.Fatalf("walk scroll %d, want %d", d.m.scroll, before)
+	}
+}
