@@ -61,7 +61,7 @@ targets `prod`, `main` or `master` (`zen-release` without `--dev`,
 `STAGE=prod just deploy`, pipelines, `git push` of those branches) is first filed as
 `zen-inbox ask <task> --prod <push|tag|release|deploy> --repo <repo> --branch <branch> --sha <40-char sha>`.
 I approve it once per action in the panel; `zen-release --approval <id>` consumes
-it, and a `git push` checks it first. No standing permission. Agents never answer
+it; file the ask before any such `git push`. No standing permission. Agents never answer
 a `--prod` ask. Workers never run one; the orchestrator or chief may after my
 approval. Never ff-merge a worker branch into `prod`. Handing me prod commands
 to run myself is fine. Dev releases (`zen-release --dev --yes --bump patch`)
