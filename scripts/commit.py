@@ -32,7 +32,8 @@
 #  DESCRIPTION
 #      Stages files (interactive picker, or --all), scans the staged diff for
 #      secrets / sensitive files, generates a Conventional Commit message with
-#      Claude (haiku), then lets you commit / edit / regenerate. Shells out to
+#      Claude (zen.json commit.model, default haiku), then lets you commit /
+#      edit / regenerate. Shells out to
 #      `gum` for the UI and `claude` for the message.
 #
 #      Runs HEADLESS (no gum prompts) when there's no TTY, or when --yes / -m is
@@ -50,10 +51,12 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 
@@ -351,9 +354,24 @@ CLAUDE_BASE = [
     "--strict-mcp-config",
     "--no-session-persistence",
     "--disable-slash-commands",
-    "--model",
-    "haiku",
 ]
+
+
+def commit_model() -> str:
+    """$ZEN_COMMIT_MODEL, else zen.json commit.model, else haiku."""
+    if model := os.environ.get("ZEN_COMMIT_MODEL"):
+        return model
+    config = Path(__file__).resolve().parent / "config.sh"
+    try:
+        result = subprocess.run(
+            [str(config), "get", "commit.model"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return "haiku"
+    return result.stdout.strip() or "haiku"
 
 PROMPT_BASE = """Write a concise Conventional Commit message for the staged diff below.
 
@@ -390,7 +408,8 @@ def run_claude(diff_text: str, full_prompt: str) -> str:
         [
             "gum", "spin", "--spinner", "dot",
             "--title", "Generating commit message...", "--",
-            *CLAUDE_BASE, "--append-system-prompt", SYSTEM_PROMPT, full_prompt,
+            *CLAUDE_BASE, "--model", commit_model(),
+            "--append-system-prompt", SYSTEM_PROMPT, full_prompt,
         ],
         input=diff_text,
         text=True,
@@ -451,10 +470,9 @@ def do_commit(
         "212",
     )
 
-    if stage_all:
-        if git("add", "-A").returncode != 0:
-            fail("git add -A failed.")
-            raise typer.Exit(1)
+    if stage_all and git("add", "-A").returncode != 0:
+        fail("git add -A failed.")
+        raise typer.Exit(1)
 
     if git("diff", "--cached", "--quiet").returncode == 0:
         unstaged = [

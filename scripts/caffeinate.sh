@@ -9,9 +9,12 @@ if ! command -v gum &>/dev/null; then
     exit 1
 fi
 
+cfg() { "$(dirname "$(readlink -f "$0")")/config.sh" get "caffeinate.$1" 2>/dev/null || true; }
+
 HOURS="$1"
 if [ -z "$HOURS" ]; then
-    HOURS=$(seq 0.5 0.5 24 | gum choose --header "Stay awake for (hours):" --height 12 --selected 1)
+    DEFAULT_HOURS=$(cfg hours)
+    HOURS=$(seq -f %g 0.5 0.5 24 | gum choose --header "Stay awake for (hours):" --height 12 --selected "${DEFAULT_HOURS:-1}")
 fi
 if ! [[ "$HOURS" =~ ^[0-9]+(\.[0-9]+)?$ ]] || awk "BEGIN{exit !($HOURS < 0.5 || $HOURS > 24)}"; then
     gum style --foreground 196 "Hours must be a number between 0.5 and 24 (got '$HOURS')"
@@ -26,7 +29,16 @@ OPTIONS=(
     "disk     -m  prevent disk idle sleep"
     "user     -u  declare user active (wakes the display)"
 )
-PICKED=$(printf '%s\n' "${OPTIONS[@]}" | gum choose --no-limit --header "Keep awake (space to toggle):" --selected="${OPTIONS[0]}")
+# caffeinate.keep lists option names (display, idle, ...) preselected in the picker.
+KEEP=()
+while read -r name; do
+    for opt in "${OPTIONS[@]}"; do
+        [[ ${opt%% *} == "$name" ]] && KEEP+=("$opt")
+    done
+done < <(cfg keep)
+((${#KEEP[@]})) || KEEP=("${OPTIONS[0]}")
+SELECTED=$(IFS=,; echo "${KEEP[*]}")
+PICKED=$(printf '%s\n' "${OPTIONS[@]}" | gum choose --no-limit --header "Keep awake (space to toggle):" --selected="$SELECTED")
 if [ -z "$PICKED" ]; then
     gum style --foreground 196 "No option picked"
     exit 1

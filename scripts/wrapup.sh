@@ -11,9 +11,11 @@ set -e
 
 CONFIG="$HOME/.claude/second-brain.json"
 STATE_DIR="$HOME/.cache/zen-wrapup"
-MODEL="${ZEN_WRAPUP_MODEL:-$("$(dirname "$(readlink -f "$0")")/config.sh" get wrapup.model 2>/dev/null || true)}"
+cfg() { "$(dirname "$(readlink -f "$0")")/config.sh" get "wrapup.$1" 2>/dev/null || true; }
+MODEL="${ZEN_WRAPUP_MODEL:-$(cfg model)}"
 MODEL="${MODEL:-sonnet}"
-MIN_USER_TURNS=3
+MIN_USER_TURNS="${ZEN_WRAPUP_MIN_TURNS:-$(cfg minUserTurns)}"
+MIN_USER_TURNS="${MIN_USER_TURNS:-3}"
 
 usage() {
     cat <<'EOF'
@@ -26,6 +28,7 @@ usage: zen-wrapup hook
   digest   print the condensed transcript the skill reads
 
   model: $ZEN_WRAPUP_MODEL, else zen.json wrapup.model, else sonnet
+  skips sessions under $ZEN_WRAPUP_MIN_TURNS / wrapup.minUserTurns (3) turns
 EOF
 }
 

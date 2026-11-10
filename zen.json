@@ -10,10 +10,18 @@
       "fzf", "top", "journalctl"
     ]
   },
+  "commit": {
+    "model": "haiku"
+  },
+  "caffeinate": {
+    "hours": 1,
+    "keep": ["display"]
+  },
   "git": {
     "fetchIntervalMinutes": 10
   },
   "wrapup": {
-    "model": "sonnet"
+    "model": "sonnet",
+    "minUserTurns": 3
   }
 }
