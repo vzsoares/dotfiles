@@ -169,8 +169,11 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   together in one message. Its only board write is that
   page body. Ends with `SPEC_READY <id>`.
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
-  cross-cutting work, Sonnet for pattern or spec work; max 3 core workers, plus up to 2
-  dotfiles workers (light: unit tests, no browsers or dev servers); `list_reservations`
+  cross-cutting work, Sonnet for pattern or spec work; max 3 core workers, or 2 while the
+  5-minute load average (middle number of `uptime`) is over 150, checked before each core
+  claim and never by stopping running workers; plus up to 2 dotfiles workers (light: unit
+  tests, no browsers or dev servers); the core-heavy lock `~/.cache/zen/core-heavy.lock`
+  covers browser runs, `just check`, tsc/tsgo, `just test` and builds; `list_reservations`
   before a second worker in one repo) and waits on them. A stuck Sonnet worker gets one
   relaunch on Opus on the same branch; anything else becomes a gate in the inbox
   (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
