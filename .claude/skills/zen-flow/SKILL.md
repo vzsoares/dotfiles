@@ -1,7 +1,7 @@
 ---
 name: zen-flow
 description: Vinicius's personal work workflow — the Notion "Main Board" task board (Approva + personal projects), picking what to do next, starting and closing tasks, triage. Use when the user says "my board", "board", "tasks", "what should I do", "what's next", "check my board", "mark it done", "add a task", or wants to plan their day/week.
-argument-hint: <check|next|start|done|add|triage> [task]
+argument-hint: <check|next|start|done|add|triage|block|id|reopen|note> [task]
 allowed-tools: Read Bash mcp__claude_ai_Notion__notion-search mcp__claude_ai_Notion__notion-fetch mcp__claude_ai_Notion__notion-query-data-sources mcp__claude_ai_Notion__notion-create-pages mcp__claude_ai_Notion__notion-update-page
 ---
 
@@ -25,6 +25,9 @@ This skill lives in a public repo. Database IDs, data source URLs, and the proje
 live in the private second-brain vault: read `config/zen-flow.json` under the `vault`
 path in `~/.claude/second-brain.json` before any board call. Projects with
 `"private": true` must never be named outside the vault.
+
+`board.database_id` is the Main Board's linked view; API calls use the Tasks data
+source (`board.tasks_data_source`) or the Tasks database (`board.tasks_database_id`).
 
 Never write project names or Notion IDs into this file or any other public repo file.
 
@@ -52,6 +55,9 @@ Never write project names or Notion IDs into this file or any other public repo 
 - `Human Only` — a step only the user can do (deploys, visual review, messages to
   colleagues, CMS edits, pushes of the public dotfiles). When a session leaves such steps
   behind, create one task per step with this tag so the board says what to do next.
+  One task with a checklist is fine when the steps share a kind or a release (device
+  checks, a prod rollout); append new items to an open checklist task instead of
+  creating a new one.
 - `Has Data` — the task page carries data/notes worth reading before starting.
 
 ### Operations
@@ -71,22 +77,33 @@ Never write project names or Notion IDs into this file or any other public repo 
 - **block** — set `Status` = `Blocked` and append "Aguardando <quem> desde <data>" to the
   page. When the user says the blocker cleared, move it back to `In Progress`.
 - **start** — set `Status` = `In Progress`.
-- **done** — set `Status` = `✅ Done` and `date:Conclusion Date:start` = today (ISO date).
+- **done** — set `Status` = `✅ Done` and `date:Conclusion Date:start` = today (ISO date),
+  then **note** with the release tag and commits.
 - **add** — create a page in the Tasks data source with title, `☢️ Projeto` (ask if
   ambiguous; default Approva when working in an Approva repo), `Status` = `🧱 To Do`
   unless the user says it's just an idea (leave empty).
 - **triage** — walk Inbox items one at a time; for each propose To Do / Won't Do / leave.
+- **id** — a task's numeric `userDefined:ID`; create-pages doesn't return it and
+  `zen-commit --task` needs it. Query with params `["%<page id: 32 hex, no dashes>%"]`:
+  ```sql
+  SELECT "userDefined:ID" FROM "<board.tasks_data_source>" WHERE url LIKE ?
+  ```
+- **reopen** — set `Status` = `In Progress` and `date:Conclusion Date:start` = null.
+- **note** — append `**YYYY-MM-DD:** …` at the end of the page with `insert_content`;
+  Done notes carry the release tag and commits.
 
 ### Write permissions
 
-- Status changes and new tasks: do it, then report what changed.
+- Status changes, new tasks, reopen and note: do it, then report what changed. A dated
+  note is not a body edit.
 - `🗑️ Won't Do`, deleting, or editing a task's title/body: ask first.
 
 ## Linking tasks to code
 
 - Work tasks map to a repo listed under `repos` in the vault `config/zen-flow.json`;
   check the second brain (`/second-brain`) index for which repo owns the feature
-  before starting.
+  before starting. Personal repos live under `repos.personal`; `agent_groups` maps an
+  agent-manager group to its board project.
 - When a task is finished and committed (`zen-commit`), run **done** on the board task.
 
 ## Agent roles
