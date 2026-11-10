@@ -89,33 +89,67 @@ Never write project names or Notion IDs into this file or any other public repo 
   before starting.
 - When a task is finished and committed (`zen-commit`), run **done** on the board task.
 
-## Chief and workers
+## Agent roles
 
-Chief is the orchestrator session: it reads the board, spawns one worker per task
-with agent-manager `create_session` (`worktree: true` for code repos), and never
-writes code.
+Four agent-manager presets (`agent-manager/config.json`). Presets hold instructions
+only; model and effort are set per session (`create_session` `model`/`effort`, or
+`agent-manager spawn --model --effort`).
 
-- Pass `saved: worker-rules` on every `create_session`; the prompt only adds the goal,
-  done-criteria, file scope and the board task ID (workers commit it with
-  `zen-commit --task <id>`, which adds a `Task: #<id>` trailer).
-- Model per task: Opus for design-heavy or cross-cutting work, Sonnet for work that
-  follows an existing pattern or a written spec.
-- Max 3 workers at once.
-- Before a second worker starts in the same repo, run `list_reservations` and give each
-  worker its file scope in the prompt; workers `reserve_files` before editing.
-- The user never reviews diffs. When a worker finishes with its checks green and its
-  single `/code-review` round done, chief:
-  - merges the branch into `dev` in the repo's main checkout (`git merge --ff-only`
-    when possible; for a real merge, re-run the repo's checks first)
-  - runs `zen-release --dev --yes --bump patch`
-  - marks the task Done (**done**) with the release tag in a note
-  - archives the session (`archive_session`), then removes the worktree and branch:
-    `git worktree remove <path>`, then `git branch -d <branch>` (`-D` once
-    `git merge-base --is-ancestor <branch> dev` confirms it is merged)
-- Open review findings become To Do tasks; facts and copy only the user can verify
-  become Human Only tasks.
-- Repos without a `dev` branch (e.g. dotfiles on master): chief merges locally and
-  leaves the push to the user. Prod merges and prod releases stay the user's.
+| Role         | Preset         | Model · effort          | Session                                               |
+| ------------ | -------------- | ----------------------- | ----------------------------------------------------- |
+| chief        | `chief`        | Opus · max              | the one the user talks to; group `chief`              |
+| spec-writer  | `spec-writer`  | Opus · high             | one per task, short-lived; project group; no worktree |
+| orchestrator | `orchestrator` | Opus · high             | one, long-running; group `chief`; no worktree         |
+| worker       | `worker-rules` | Opus or Sonnet · medium | one per task and repo; project group; worktree        |
+
+- **chief** reads the board, gets the user's approval, spawns a spec-writer per task
+  (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
+  (task ID, page URL, repo, model tier) and sets them In Progress. It relays decision
+  gates as numbered decisions and lists Human Only work. It never waits on sessions,
+  merges or releases. After an agent-manager restart it revives the orchestrator.
+- **spec-writer** writes the spec into the task page body: goal, done-criteria, file
+  scope, required tests, settled decisions, out of scope, Human Only steps. Open
+  decisions go to chief as numbered questions. Its only board write is that page body.
+  Ends with `SPEC_READY <id>`.
+- **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
+  cross-cutting work, Sonnet for pattern or spec work; max 3; `list_reservations`
+  before a second worker in one repo) and waits on them. A stuck Sonnet worker gets one
+  relaunch on Opus on the same branch; anything else goes to chief as a decision gate
+  (`failing · tried · cause · needs`).
+- **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
+  trailer), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
+  Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
+  code under test, catch-all fallbacks, RLS/auth bypass).
+
+The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
+orchestrator:
+
+- checks green was reported, one `/code-review` round ran, and the branch diff has no
+  banned way to get green
+- merges into `dev` in the repo's main checkout (`git merge --ff-only`; for a real
+  merge, re-runs the repo's checks first), runs `zen-release --dev --yes --bump patch`,
+  and marks the task Done (**done**) with the release tag in a note
+- files open review findings as To Do tasks, and device, prod, data or
+  messages-to-people steps as Human Only tasks
+- archives the session, runs `git worktree remove <path>` and `git branch -d <branch>`
+  (`-D` once `git merge-base --is-ancestor <branch> dev` confirms it), and sends chief
+  one line
+
+Repos without `dev` (dotfiles on master): the orchestrator merges locally and leaves
+the push to the user. Prod merges, prod releases and deploys stay the user's.
+
+Start chief from any shell; check `agent-manager sessions` first so only one runs:
+
+```
+agent-manager spawn \
+  --name chief \
+  --saved chief \
+  --tool claude \
+  --model opus \
+  --effort max \
+  --group chief \
+  --prompt "Start: check the board."
+```
 
 ## Commit → dev release routine (every repo)
 
