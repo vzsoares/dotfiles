@@ -303,15 +303,16 @@ def test_explicit_non_dev_base_never_releases(setup: Setup) -> None:
     assert (state.tag, setup.fake.releases) == ("push pending", 0)
 
 
-def test_single_branch_saved_target_refused(
+def test_single_branch_lands_on_saved_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    s = _make(tmp_path, monkeypatch, base="main")
+    s = _make(tmp_path, monkeypatch, base="master")
     common = _git("rev-parse", "--git-common-dir", cwd=s.main).strip()
     (s.main / common / "zen-release.json").write_text(
-        json.dumps({"branches": {"source": "dev", "target": "main"}})
+        json.dumps({"branches": {"source": "", "target": "master"}})
     )
-    assert _code() == merge.EXIT_REFUSED
+    state = merge.land("task", "dev")
+    assert (state.base, state.tag) == ("master", "push pending")
 
 
 def test_refuses_release_target(setup: Setup) -> None:

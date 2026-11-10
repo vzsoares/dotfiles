@@ -279,8 +279,9 @@ Two models; the tooling detects which one a repo uses from its local branches.
   this model when there is no `dev` and the main checkout is on `main` or `master`.
 
 Anything else (no `dev`, checkout on another branch) is refused with exit 6;
-`zen-merge` never creates a `dev`. Landing on `prod` or the saved release target is
-always refused. `zen-release` pre-fills `dev → prod` on a first run when both exist.
+`zen-merge` never creates a `dev`. Landing on `prod` is always refused, and so is
+the saved release target in a dev+prod repo. `zen-release` pre-fills `dev → prod`
+on a first run when both exist.
 `zen-sweep` reports `branch-model` drift in personal repos only: `dev` without
 `prod` (or the reverse), a `main`/`master` left beside dev+prod, or a dev+prod repo
 whose `origin/HEAD` is not `dev`.

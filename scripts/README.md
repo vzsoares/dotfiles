@@ -100,7 +100,7 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
   resume. A repo without `dev` whose main checkout is on `main` or `master` lands
   there and reports "push pending"; any other checkout exits 6. Only base `dev` is
-  released. It refuses (exit 6) prod and the zen-release target branch.
+  released. It refuses (exit 6) prod, and the zen-release target branch when the repo has `dev`.
   Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
   branch's `Task:` trailer, or the base reflog's `merge <branch>:` range once merged
   by hand, or `--task` (skipped without an ID); exit 7 = that step failed.

@@ -53,8 +53,8 @@
 #                (a branch merged by hand), else the saved shas still on the
 #                branch, else the branch tip.
 #
-#      Never merges into, or releases from, prod or the zen-release target
-#      branch.
+#      Never merges into, or releases from, prod, or the zen-release target
+#      branch of a repo with `dev`.
 #
 #  EXIT CODES
 #      0 landed   2 gate hit   3 not fast-forward   4 dirty tree / wrong branch
@@ -218,9 +218,11 @@ def release_target(main: str) -> str:
 
 
 def protected_branches(main: str) -> set[str]:
+    """prod, plus the zen-release target in a dev+prod repo; a single-branch
+    repo releases from the branch it lands on."""
     names = set(PROTECTED)
     target = release_target(main)
-    if target:
+    if target and branch_exists(main, "dev"):
         names.add(target)
     return names
 
