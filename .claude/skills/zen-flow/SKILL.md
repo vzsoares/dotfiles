@@ -103,8 +103,11 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
 ### Write permissions
 
 - Status changes, new tasks, reopen and note: do it, then report what changed. A dated
-  note is not a body edit.
-- `🗑️ Won't Do`, deleting, or editing a task's title/body: ask first.
+  note is not a body edit. Applies to chief and the orchestrator, who change status
+  and append dated notes without asking. Workers don't write to the board.
+- `🗑️ Won't Do`, deleting, or editing a task's title/body: ask first. Exception: a
+  spec-writer writes its spec into the body of the task it was spawned for (its only
+  board write).
 
 ## Linking tasks to code
 
