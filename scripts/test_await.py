@@ -37,7 +37,9 @@ _spec.loader.exec_module(zen_await)
 # --------------------------------------------------------------------------- #
 
 
-def _assistant(text: str, stop: str = "end_turn", msg_id: str = "m1", uuid: str = "u1") -> str:
+def _assistant(
+    text: str, stop: str = "end_turn", msg_id: str = "m1", uuid: str = "u1"
+) -> str:
     return json.dumps(
         {
             "type": "assistant",
@@ -51,7 +53,9 @@ def _assistant(text: str, stop: str = "end_turn", msg_id: str = "m1", uuid: str 
     )
 
 
-def _session(directory: str, status: str = "finished", sid: str = "abc123") -> dict[str, object]:
+def _session(
+    directory: str, status: str = "finished", sid: str = "abc123"
+) -> dict[str, object]:
     return {
         "id": sid,
         "name": f"worker-{sid}",
@@ -69,7 +73,7 @@ def projects(tmp_path: Path) -> Path:
 
 
 def _write_transcript(root: Path, session: dict[str, object], lines: list[str]) -> Path:
-    path = zen_await.transcript_path(session, root)
+    path: Path | None = zen_await.transcript_path(session, root)
     assert path is not None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
@@ -101,8 +105,16 @@ def fake_am(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     [
         ("all green\n\nWORKER_DONE 568", "done", "568"),
         ("spec written. SPEC_READY #42", "done", "42"),
-        ("failing: tests · tried: x · cause: y · needs: decision on #9", "escalation", "9"),
-        ("Failing — e2e\nTried — retry\nCause — flake\nNeeds — a human", "escalation", None),
+        (
+            "failing: tests · tried: x · cause: y · needs: decision on #9",
+            "escalation",
+            "9",
+        ),
+        (
+            "Failing — e2e\nTried — retry\nCause — flake\nNeeds — a human",
+            "escalation",
+            None,
+        ),
         ("I made some progress on task 12", "idle", "12"),
         ("", "idle", None),
     ],
@@ -183,7 +195,9 @@ def test_last_end_turn_ignores_sidechain(projects: Path) -> None:
     s = _session("/repo")
     side = json.loads(_assistant("subagent", uuid="z", msg_id="m2"))
     side["isSidechain"] = True
-    path = _write_transcript(projects, s, [_assistant("main", uuid="a"), json.dumps(side)])
+    path = _write_transcript(
+        projects, s, [_assistant("main", uuid="a"), json.dumps(side)]
+    )
     assert zen_await.last_end_turn(path)[1] == "main"
 
 
@@ -232,7 +246,9 @@ def test_await_returns_on_reached(projects: Path, fake_am: Path) -> None:
 
 def test_await_times_out(projects: Path, fake_am: Path) -> None:
     s = _session("/repo")
-    (fake_am / "wait.json").write_text(json.dumps({"reached": False, "outcome": "timeout"}))
+    (fake_am / "wait.json").write_text(
+        json.dumps({"reached": False, "outcome": "timeout"})
+    )
     ev = zen_await.await_sessions([s], timeout=0.3, root=projects, poll=0.01)
     assert (ev.state, ev.exit_code) == ("timeout", 124)
 
@@ -241,11 +257,15 @@ def test_await_new_ignores_stale_message(projects: Path, fake_am: Path) -> None:
     s = _session("/repo")
     _write_transcript(projects, s, [_assistant("WORKER_DONE 1")])
     (fake_am / "wait.json").write_text(json.dumps({"reached": True, "session": s}))
-    ev = zen_await.await_sessions([s], timeout=0.3, new_only=True, root=projects, poll=0.01)
+    ev = zen_await.await_sessions(
+        [s], timeout=0.3, new_only=True, root=projects, poll=0.01
+    )
     assert ev.state == "timeout"
 
 
-def test_cli_summary_and_unknown(fake_am: Path, monkeypatch: pytest.MonkeyPatch, projects: Path) -> None:
+def test_cli_summary_and_unknown(
+    fake_am: Path, monkeypatch: pytest.MonkeyPatch, projects: Path
+) -> None:
     s = _session("/repo")
     _write_transcript(projects, s, [_assistant("SPEC_READY 5")])
     (fake_am / "sessions.json").write_text(json.dumps([s]))

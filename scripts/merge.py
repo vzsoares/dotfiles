@@ -146,7 +146,10 @@ def load_gate() -> ModuleType:
 
 
 def branch_exists(repo: str, name: str) -> bool:
-    return git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0
+    return (
+        git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode
+        == 0
+    )
 
 
 def current_branch(repo: str) -> str:
@@ -162,7 +165,9 @@ def main_checkout(worktree: str) -> str:
 
 
 def release_target(main: str) -> str:
-    common = git(main, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    common = git(
+        main, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    ).stdout.strip()
     path = Path(common) / "zen-release.json"
     if not common or not path.exists():
         return ""
@@ -181,7 +186,9 @@ def protected_branches(main: str) -> set[str]:
 
 
 def task_from_trailers(main: str, base: str, branch: str) -> str:
-    out = git(main, "log", f"{base}..{branch}", "--format=%(trailers:key=Task,valueonly)").stdout
+    out = git(
+        main, "log", f"{base}..{branch}", "--format=%(trailers:key=Task,valueonly)"
+    ).stdout
     for line in out.splitlines():
         if line.strip():
             return line.strip().lstrip("#")
@@ -239,7 +246,9 @@ def phase_resolve(state: State, base: str) -> None:
     if code != 0:
         raise Stop(EXIT_ERROR, "agent-manager sessions failed")
     data = json.loads(out or "[]")
-    sessions = [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
+    sessions = (
+        [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
+    )
     match = next((s for s in sessions if s.get("id") == state.session), None) or next(
         (s for s in sessions if s.get("name") == state.session), None
     )
@@ -254,7 +263,9 @@ def phase_resolve(state: State, base: str) -> None:
     state.branch = branch
     state.main = main_checkout(worktree)
     if Path(state.main).resolve() == Path(worktree).resolve():
-        raise Stop(EXIT_ERROR, f"{worktree} is the main checkout, not a worker worktree")
+        raise Stop(
+            EXIT_ERROR, f"{worktree} is the main checkout, not a worker worktree"
+        )
 
     if branch_exists(state.main, base):
         state.base, state.release = base, True
@@ -272,7 +283,10 @@ def phase_resolve(state: State, base: str) -> None:
 
 
 def phase_clean(state: State) -> None:
-    for label, path in (("worker worktree", state.worktree), ("main checkout", state.main)):
+    for label, path in (
+        ("worker worktree", state.worktree),
+        ("main checkout", state.main),
+    ):
         if git(path, "status", "--porcelain").stdout.strip():
             raise Stop(EXIT_DIRTY, f"{label} {path} has uncommitted changes")
     on = current_branch(state.main)
@@ -316,13 +330,18 @@ def phase_release(state: State) -> None:
     if DRY_RUN:
         state.tag = "(dry-run)"
         return
-    tags = git(state.main, "tag", "--points-at", "HEAD", "--sort=-v:refname").stdout.split()
+    tags = git(
+        state.main, "tag", "--points-at", "HEAD", "--sort=-v:refname"
+    ).stdout.split()
     state.tag = tags[0] if tags else "(untagged)"
 
 
 def phase_archive(state: State) -> None:
     if DRY_RUN:
-        print(f"[dry-run] agent-manager archive {state.session_id} --json", file=sys.stderr)
+        print(
+            f"[dry-run] agent-manager archive {state.session_id} --json",
+            file=sys.stderr,
+        )
         return
     code, _ = agent_manager("archive", state.session_id, "--json")
     if code != 0:
@@ -346,7 +365,9 @@ def delete_branch(main: str, branch: str, base: str) -> None:
         raise Stop(EXIT_ERROR, f"{branch} is not merged into {base}; left in place")
     result = mutate(main, ["git", "branch", "-D", branch])
     if result.returncode != 0:
-        raise Stop(EXIT_ERROR, result.stderr.strip() or f"git branch -D {branch} failed")
+        raise Stop(
+            EXIT_ERROR, result.stderr.strip() or f"git branch -D {branch} failed"
+        )
 
 
 def phase_branch(state: State) -> None:
@@ -400,7 +421,9 @@ app = typer.Typer(add_completion=False, help=__doc__)
 def main(
     session: str = typer.Argument(..., help="Worker session id or name."),
     base: str = typer.Option("dev", "--base", help="Branch to land on."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Echo mutating commands only."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Echo mutating commands only."
+    ),
     restart: bool = typer.Option(False, "--restart", help="Discard saved state."),
     as_json: bool = typer.Option(False, "--json", help="JSON output."),
 ) -> None:
@@ -411,7 +434,16 @@ def main(
         state = land(session, base, restart)
     except Stop as exc:
         if as_json:
-            print(json.dumps({"session": session, "ok": False, "exit": exc.code, "error": str(exc)}))
+            print(
+                json.dumps(
+                    {
+                        "session": session,
+                        "ok": False,
+                        "exit": exc.code,
+                        "error": str(exc),
+                    }
+                )
+            )
         print(f"zen-merge: {exc}", file=sys.stderr)
         if exc.code == EXIT_ERROR and not dry_run:
             print("  fix it, then rerun zen-merge to resume", file=sys.stderr)

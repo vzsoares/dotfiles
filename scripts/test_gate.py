@@ -22,7 +22,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-_spec = importlib.util.spec_from_file_location("gate", Path(__file__).parent / "gate.py")
+_spec = importlib.util.spec_from_file_location(
+    "gate", Path(__file__).parent / "gate.py"
+)
 assert _spec is not None and _spec.loader is not None
 gate = importlib.util.module_from_spec(_spec)
 sys.modules["gate"] = gate
@@ -90,7 +92,7 @@ def _rules(text: str, path: str = "src/x.ts") -> list[str]:
         "xit('x', () => {})",
         "@pytest.mark.skip(reason='flaky')",
         "@pytest.mark.skipif(True, reason='x')",
-        "    t.Skip(\"later\")",
+        '    t.Skip("later")',
         "#[ignore]",
         "pytest.skip('x')",
     ],
@@ -221,11 +223,15 @@ def test_mock_target(spec: str, src: str, key: str | None) -> None:
 
 
 def test_allow_rules() -> None:
-    allow = gate.parse_allow("# comment\nscripts/gate.py\nscripts/await.py timeout-bump  # flag\n")
+    allow = gate.parse_allow(
+        "# comment\nscripts/gate.py\nscripts/await.py timeout-bump  # flag\n"
+    )
     assert allow == [("scripts/gate.py", ""), ("scripts/await.py", "timeout-bump")]
     assert gate.allowed(gate.Hit("scripts/gate.py", 1, "skip-focus"), allow)
     assert gate.allowed(gate.Hit("scripts/await.py", 1, "timeout-bump"), allow)
     assert not gate.allowed(gate.Hit("scripts/await.py", 1, "skip-focus"), allow)
+    report = gate.Report(followups=[gate.Hit("scripts/gate.py", 3, "shortcut")])
+    assert gate.apply_allow(report, allow).followups == []
 
 
 # --------------------------------------------------------------------------- #
@@ -281,16 +287,29 @@ def test_mock_of_changed_file(repo: Path) -> None:
         },
     )
     hits = gate.run_gate(repo, "dev").hits
-    assert [(h.file, h.line, h.rule) for h in hits] == [("src/auth.test.ts", 1, "mock-changed")]
+    assert [(h.file, h.line, h.rule) for h in hits] == [
+        ("src/auth.test.ts", 1, "mock-changed")
+    ]
 
 
 def test_mock_of_unchanged_file_is_fine(repo: Path) -> None:
-    _commit(repo, {"src/auth.test.ts": "vi.mock('./auth')\nit('a', () => {})\nit('b', () => {})\n"})
+    _commit(
+        repo,
+        {
+            "src/auth.test.ts": "vi.mock('./auth')\nit('a', () => {})\nit('b', () => {})\n"
+        },
+    )
     assert gate.run_gate(repo, "dev").clean
 
 
 def test_allow_file_applies(repo: Path) -> None:
-    _commit(repo, {"src/auth.ts": "jest.setTimeout(1)\n", ".zen-gate-allow": "src/*.ts timeout-bump\n"})
+    _commit(
+        repo,
+        {
+            "src/auth.ts": "jest.setTimeout(1)\n",
+            ".zen-gate-allow": "src/*.ts timeout-bump\n",
+        },
+    )
     assert gate.run_gate(repo, "dev").clean
 
 
@@ -304,7 +323,10 @@ def test_cli_exit_codes(repo: Path) -> None:
     assert [f["line"] for f in out["followups"]] == [2]
 
     text = runner.invoke(gate.app, [])
-    assert text.stdout.splitlines() == ["src/auth.ts:1 empty-catch", "src/auth.ts:2 shortcut (follow-up)"]
+    assert text.stdout.splitlines() == [
+        "src/auth.ts:1 empty-catch",
+        "src/auth.ts:2 shortcut (follow-up)",
+    ]
 
     assert runner.invoke(gate.app, ["--base", "nope"]).exit_code == 2
 

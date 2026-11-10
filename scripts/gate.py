@@ -71,7 +71,9 @@ TEST_PATH_RE = re.compile(
     r"|_test\.(py|go)$"
     r"|\.(test|spec)\.[cm]?[jt]sx?$"
 )
-FIXTURE_PATH_RE = re.compile(r"fixture|(^|/)seeds?[/.]|conftest\.py$|__mocks__/", re.I)
+FIXTURE_PATH_RE = re.compile(
+    r"fixture|(^|/)seeds?[/.]|conftest\.py$|__mocks__/", re.IGNORECASE
+)
 TEST_CASE_RE = re.compile(
     r"^\s*(?:it|test)(?:\.each\b[^(]*)?\s*\("
     r"|^\s*(?:async\s+)?def\s+test_"
@@ -91,7 +93,7 @@ LINE_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("timeout-bump", re.compile(r"testTimeout|jest\.setTimeout|--timeout\b")),
     (
         "auth-bypass",
-        re.compile(r"service_role|bypass_?rls|row_security\s*=\s*off", re.I),
+        re.compile(r"service_role|bypass_?rls|row_security\s*=\s*off", re.IGNORECASE),
     ),
     (
         "empty-catch",
@@ -105,7 +107,7 @@ ADMIN_CLIENT_RE = re.compile(r"\b(?:systemCtx|systemDb|\w*[aA]dmin(?:Client|Db)\
 OPEN_CATCH_RE = re.compile(r"\bcatch\s*(?:\([^)]*\))?\s*\{\s*$")
 OPEN_EXCEPT_RE = re.compile(r"^\s*except(?:\s+(?:Base)?Exception\b[^:]*)?\s*:\s*$")
 MOCK_RE = re.compile(r"\b(?:vi|jest)\.mock\(\s*['\"]([^'\"]+)['\"]")
-SHORTCUT_RE = re.compile(r"\bshortcut:", re.I)
+SHORTCUT_RE = re.compile(r"\bshortcut:", re.IGNORECASE)
 HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 CODE_SUFFIX_RE = re.compile(r"\.(?:[cm]?[jt]sx?|py|go|rs|vue|svelte)$")
 
@@ -185,8 +187,7 @@ def is_doc(path: str) -> bool:
 
 
 def _module_key(path: str) -> str:
-    path = CODE_SUFFIX_RE.sub("", path)
-    return path[: -len("/index")] if path.endswith("/index") else path
+    return CODE_SUFFIX_RE.sub("", path).removesuffix("/index")
 
 
 def mock_target(spec: str, from_file: str) -> str | None:
@@ -209,7 +210,9 @@ def _mock_hits(fd: FileDiff, changed: dict[str, str]) -> list[Hit]:
                 continue
             for path_key, path in changed.items():
                 if path_key == key or path_key.endswith("/" + key):
-                    hits.append(Hit(fd.path, lineno, "mock-changed", f"{spec} -> {path}"))
+                    hits.append(
+                        Hit(fd.path, lineno, "mock-changed", f"{spec} -> {path}")
+                    )
                     break
     return hits
 
@@ -219,9 +222,10 @@ def _multiline_catch(fd: FileDiff) -> list[Hit]:
     for (ln, text), (next_ln, next_text) in zip(fd.added, fd.added[1:]):
         if next_ln != ln + 1:
             continue
-        if OPEN_CATCH_RE.search(text) and next_text.strip().startswith("}"):
-            hits.append(Hit(fd.path, ln, "empty-catch", text.strip()))
-        elif OPEN_EXCEPT_RE.match(text) and next_text.strip() == "pass":
+        closes = next_text.strip()
+        empty_js = OPEN_CATCH_RE.search(text) and closes.startswith("}")
+        empty_py = OPEN_EXCEPT_RE.match(text) and closes == "pass"
+        if empty_js or empty_py:
             hits.append(Hit(fd.path, ln, "empty-catch", text.strip()))
     return hits
 
@@ -290,14 +294,15 @@ def parse_allow(text: str) -> list[tuple[str, str]]:
 
 def allowed(hit: Hit, allow: list[tuple[str, str]]) -> bool:
     return any(
-        fnmatch.fnmatch(hit.file, glob) and rule in ("", hit.rule) for glob, rule in allow
+        fnmatch.fnmatch(hit.file, glob) and rule in ("", hit.rule)
+        for glob, rule in allow
     )
 
 
 def apply_allow(report: Report, allow: list[tuple[str, str]]) -> Report:
     return Report(
         hits=[h for h in report.hits if not allowed(h, allow)],
-        followups=report.followups,
+        followups=[f for f in report.followups if not allowed(f, allow)],
     )
 
 

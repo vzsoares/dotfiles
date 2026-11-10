@@ -18,10 +18,13 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
-_spec = importlib.util.spec_from_file_location("sweep", Path(__file__).parent / "sweep.py")
+_spec = importlib.util.spec_from_file_location(
+    "sweep", Path(__file__).parent / "sweep.py"
+)
 assert _spec is not None and _spec.loader is not None
 sweep = importlib.util.module_from_spec(_spec)
 sys.modules["sweep"] = sweep
@@ -45,7 +48,12 @@ def _init(path: Path, branch: str = "dev") -> Path:
     return path
 
 
-def _kinds(findings: list[object]) -> list[tuple[str, str]]:
+class _Finding(Protocol):
+    kind: str
+    detail: str
+
+
+def _kinds(findings: list[_Finding]) -> list[tuple[str, str]]:
     return sorted((f.kind, f.detail) for f in findings)
 
 
@@ -129,16 +137,25 @@ def test_collect_repos_dedupes_and_walks(tmp_path: Path) -> None:
     c = _init(personal / "dots", branch="master")
     _git("worktree", "add", "-q", "-b", "am/x", str(personal / "dots-wt"), cwd=c)
     (personal / "notes").mkdir()
-    config = {"repos": {"root": str(root), "release_routine": [str(a), str(tmp_path / "gone")]}}
+    config = {
+        "repos": {
+            "root": str(root),
+            "release_routine": [str(a), str(tmp_path / "gone")],
+        }
+    }
     assert sweep.collect_repos(config, personal) == [a, b, c]
 
 
 def test_vault_config(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     (vault / "config").mkdir(parents=True)
-    (vault / "config" / "zen-flow.json").write_text(json.dumps({"repos": {"root": "~/w"}}))
+    (vault / "config" / "zen-flow.json").write_text(
+        json.dumps({"repos": {"root": "~/w"}})
+    )
     (tmp_path / ".claude").mkdir()
-    (tmp_path / ".claude" / "second-brain.json").write_text(json.dumps({"vault": str(vault)}))
+    (tmp_path / ".claude" / "second-brain.json").write_text(
+        json.dumps({"vault": str(vault)})
+    )
     assert sweep.vault_config(tmp_path) == {"repos": {"root": "~/w"}}
     assert sweep.vault_config(tmp_path / "nobody") == {}
 

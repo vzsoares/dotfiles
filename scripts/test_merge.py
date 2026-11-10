@@ -23,7 +23,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-_spec = importlib.util.spec_from_file_location("merge", Path(__file__).parent / "merge.py")
+_spec = importlib.util.spec_from_file_location(
+    "merge", Path(__file__).parent / "merge.py"
+)
 assert _spec is not None and _spec.loader is not None
 merge = importlib.util.module_from_spec(_spec)
 sys.modules["merge"] = merge
@@ -94,7 +96,13 @@ def _make(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, base: str = "dev") ->
 
     fake = Fake(
         sessions=[
-            {"id": "s1", "name": "task", "directory": str(wt), "branch": "am/task", "status": "finished"}
+            {
+                "id": "s1",
+                "name": "task",
+                "directory": str(wt),
+                "branch": "am/task",
+                "status": "finished",
+            }
         ]
     )
     monkeypatch.setattr(merge, "agent_manager", fake.agent_manager)
@@ -112,7 +120,8 @@ def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Setup:
 def _code() -> int:
     with pytest.raises(merge.Stop) as exc:
         merge.land("task", "dev")
-    return exc.value.code
+    code: int = exc.value.code
+    return code
 
 
 # --------------------------------------------------------------------------- #
@@ -130,7 +139,9 @@ def test_lands_releases_and_cleans_up(setup: Setup) -> None:
     assert not merge.state_path("task").exists()
 
 
-def test_no_dev_branch_skips_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_dev_branch_skips_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     s = _make(tmp_path, monkeypatch, base="master")
     state = merge.land("task", "dev")
     assert (state.base, state.tag, state.release) == ("master", "push pending", False)

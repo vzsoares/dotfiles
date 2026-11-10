@@ -59,6 +59,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -148,7 +149,9 @@ def project_slug(directory: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", directory)
 
 
-def transcript_path(session: dict[str, object], root: Path | None = None) -> Path | None:
+def transcript_path(
+    session: dict[str, object], root: Path | None = None
+) -> Path | None:
     directory = session.get("directory")
     agent_id = session.get("agent_session_id")
     if not isinstance(directory, str) or not isinstance(agent_id, str):
@@ -206,7 +209,9 @@ def last_end_turn(path: Path) -> tuple[str, str]:
         parts: list[str] = []
         for rec in records[: i + 1]:
             other = _message(rec)
-            if other is not None and (other is msg or (msg_id and other.get("id") == msg_id)):
+            if other is not None and (
+                other is msg or (msg_id and other.get("id") == msg_id)
+            ):
                 parts.append(_text_of(other))
         return str(records[i].get("uuid", i)), "\n".join(p for p in parts if p).strip()
     return "", ""
@@ -232,7 +237,9 @@ def list_sessions() -> list[dict[str, object]]:
     return [s for s in data if isinstance(s, dict)] if isinstance(data, list) else []
 
 
-def find_session(key: str, sessions: list[dict[str, object]]) -> dict[str, object] | None:
+def find_session(
+    key: str, sessions: list[dict[str, object]]
+) -> dict[str, object] | None:
     for s in sessions:
         if s.get("id") == key:
             return s
@@ -333,9 +340,13 @@ app = typer.Typer(add_completion=False, help=__doc__)
 
 @app.command()
 def main(
-    sessions: list[str] = typer.Argument(..., help="Session ids or names to watch."),
+    sessions: Annotated[
+        list[str], typer.Argument(help="Session ids or names to watch.")
+    ],
     timeout: str = typer.Option("4h", "--timeout", help="Give up after this long."),
-    new: bool = typer.Option(False, "--new", help="Ignore a final message already there."),
+    new: bool = typer.Option(
+        False, "--new", help="Ignore a final message already there."
+    ),
     summary: bool = typer.Option(False, "--summary", help="Classify now, no wait."),
     as_json: bool = typer.Option(False, "--json", help="JSON output."),
 ) -> None:

@@ -140,7 +140,9 @@ def collect_repos(config: dict[str, object], personal: Path) -> list[Path]:
     for path in candidates:
         if not is_repo(path):
             continue
-        common = git(path, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+        common = git(
+            path, "rev-parse", "--path-format=absolute", "--git-common-dir"
+        ).stdout.strip()
         key = Path(common).resolve() if common else path.resolve()
         if key in seen:
             continue
@@ -166,7 +168,12 @@ def worktrees(repo: Path) -> list[Worktree]:
 
 def base_branch(repo: Path) -> str:
     for name in ("dev", "main", "master"):
-        if git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0:
+        if (
+            git(
+                repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"
+            ).returncode
+            == 0
+        ):
             return name
     return ""
 
@@ -180,14 +187,16 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
 
     for wt in trees:
         if not Path(wt.path).exists():
-            found.append(Finding(name, "orphan-worktree", f"{wt.path} (missing on disk)"))
+            found.append(
+                Finding(name, "orphan-worktree", f"{wt.path} (missing on disk)")
+            )
             continue
         status = git(wt.path, "status", "--porcelain").stdout.splitlines()
         if status:
             found.append(Finding(name, "dirty", f"{wt.path} ({len(status)} changed)"))
-        if not wt.main and live_dirs is not None:
-            if str(Path(wt.path).resolve()) not in live_dirs:
-                found.append(Finding(name, "orphan-worktree", wt.path))
+        live = live_dirs is None or str(Path(wt.path).resolve()) in live_dirs
+        if not wt.main and not live:
+            found.append(Finding(name, "orphan-worktree", wt.path))
 
     refs = git(
         repo,
@@ -207,21 +216,32 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> list[Finding]:
 
     base = base_branch(repo)
     if base:
-        merged = git(repo, "branch", "--merged", base, "--format=%(refname:short)").stdout.split()
+        merged = git(
+            repo, "branch", "--merged", base, "--format=%(refname:short)"
+        ).stdout.split()
         for branch in merged:
             if branch != base and branch not in LONG_LIVED:
                 found.append(Finding(name, "merged", f"{branch} (into {base})"))
 
     stashes = git(repo, "stash", "list").stdout.splitlines()
     if stashes:
-        found.append(Finding(name, "stash", f"{len(stashes)} entr{'y' if len(stashes) == 1 else 'ies'}"))
+        found.append(
+            Finding(
+                name,
+                "stash",
+                f"{len(stashes)} entr{'y' if len(stashes) == 1 else 'ies'}",
+            )
+        )
     return found
 
 
 def live_session_dirs() -> set[str] | None:
     try:
         result = subprocess.run(
-            ["agent-manager", "sessions", "--json"], capture_output=True, text=True, check=False
+            ["agent-manager", "sessions", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
     except FileNotFoundError:
         return None
