@@ -205,6 +205,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
   trees, unpushed work, stashes, orphan branches and worktrees, and `branch-model`
   drift in personal repos.
+- `zen-lock <name> [--wait SECS] -- <cmd>` (worker): runs a core-heavy command under
+  `~/.cache/zen/<name>.lock`; releases on exit/INT/TERM, takes over a lock whose owner
+  pid is gone, exits 75 on timeout. `status <name>`, `break <name>`.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
 - `zen-telemetry` (hook on every agent tool call; chief weekly): see Telemetry.
 
