@@ -24,8 +24,9 @@
 #      zen-board next [--json]
 #      zen-board start <task> [--json]
 #      zen-board done <task> [--note TEXT] [--json]
-#      zen-board add <title> --project P [--inbox] [--human-only |
-#                    --human-approval] [--priority low|medium] [--related <task>]... [--json]
+#      zen-board add <title> --project P [--inbox] [--human-only]
+#                    [--human-approval] [--priority low|medium]
+#                    [--related <task>]... [--json]
 #      zen-board priority <task> low|medium|none [--json]
 #      zen-board relate <task> <task>... [--json]
 #      zen-board note <task> <text> [--json]

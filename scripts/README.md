@@ -167,7 +167,7 @@ zen-board next [--json]                           # In Progress, then To Do by P
 zen-board start <task>                            # In Progress
 zen-board done <task> [--note TEXT]               # Done + Conclusion Date, one PATCH
 zen-board add <title> --project P [--inbox] [--human-only]   # prints the new ID
-          [--human-approval]
+          [--human-approval]   # both tags allowed
           [--priority low|medium] [--related <task>]...
 zen-board priority <task> low|medium|none         # refuses High and tasks already High (exit 2)
 zen-board relate <task> <task>...                 # adds to Related Tasks, keeps old links

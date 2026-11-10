@@ -351,7 +351,7 @@ Moving a repo to dev+prod, in its main checkout with a clean tree (local steps):
 4. Write `.git/zen-release.json` with `"branches": {"source": "dev", "target":
    "prod"}` (or run `zen-release --reconfigure` and accept the defaults).
 
-Remote steps are prod actions or Human Only: pushing `dev` and `prod` goes through an
-approved ask; the GitHub default branch (`dev`) and branch protection on `prod` are
-Human Only. After the default branch changes, `git remote set-head origin -a`
+Remote steps are prod actions or Human Approval: pushing `dev` and `prod` goes through
+an approved ask; the GitHub default branch (`dev`) and branch protection on `prod` are
+`gh` repo settings, so Human Approval. After the default branch changes, `git remote set-head origin -a`
 refreshes the local `origin/HEAD` that `zen-sweep` checks.
