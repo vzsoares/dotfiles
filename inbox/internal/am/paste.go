@@ -30,7 +30,7 @@ func isRule(line string) bool {
 // paste placeholders. The box must be framed by ─ rules, so scrollback and
 // dialogs never match.
 func StuckPaste(screen string) bool {
-	lines := strings.Split(strings.ReplaceAll(screen, " ", " "), "\n")
+	lines := strings.Split(strings.ReplaceAll(screen, "\u00a0", " "), "\n")
 	for i, line := range lines {
 		if !pasteLine.MatchString(strings.TrimRight(line, " ")) {
 			continue
