@@ -169,14 +169,14 @@ func schema(t *testing.T, ib *Inbox) []string {
 	return out
 }
 
-func TestV1DBMigratesToV2Once(t *testing.T) {
+func TestV1DBMigratesToCurrentOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "zen-flow.db")
 	v1DB(t, path)
 	ib, err := Open(path, &fakeAM{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := ib.userVersion(); v != 2 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	d := get(t, ib, "7.1")

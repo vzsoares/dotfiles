@@ -59,6 +59,9 @@ type AskInput struct {
 	Gate            bool
 	SessionID, Name string
 	Title, Brief    string
+	// Prod binds the ask to one prod action; Question and Options must be
+	// ProdQuestion and ProdOptions (AskProd fills them).
+	Prod *ProdAction
 }
 
 func (ib *Inbox) Ask(in AskInput) (Decision, error) {
@@ -104,6 +107,11 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 		}
 		if err := ib.insertOptions(id, in.Options); err != nil {
 			return err
+		}
+		if in.Prod != nil {
+			if err := ib.insertProd(id, *in.Prod); err != nil {
+				return err
+			}
 		}
 		if in.Title != "" || in.Brief != "" {
 			return ib.upsertBrief(in.SessionID, in.Task, nonEmpty(in.Title), nonEmpty(in.Brief))
@@ -214,6 +222,11 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 		d, err := ib.openOwned(id, caller, force)
 		if err != nil {
 			return err
+		}
+		if _, ok, err := ib.prodAction(id); err != nil {
+			return err
+		} else if ok {
+			return errf(1, "%s is a prod-action ask; withdraw and re-ask", id)
 		}
 		texts := in.Options
 		if texts == nil {

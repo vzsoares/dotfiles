@@ -79,6 +79,25 @@ message.
   (3 lines a notch). Elsewhere `j`/`k` move the menu cursor. The walk keeps its
   scroll position across View full.
 
+## Prod-action asks (#680)
+
+`zen-inbox ask <task> --prod <action> --repo R --branch B --sha S [--context …]
+[--title … --brief …]` files an approval for one prod action. zen-inbox writes the
+question `<action> <repo> <branch>@<sha12>?` and the options `Approve`/`Hold` with
+rec `a`; `--prod` refuses `-q`, `-o`, `--rec` and `--gate`, needs all three
+bindings, and `--sha` must be 40 lowercase hex (exit 2). The bound fields live in
+`prod_actions`, so tools match on them, never on the question text. Amend is
+refused (withdraw and re-ask), so the bindings cannot drift from the question.
+
+`zen-inbox approval use <id> --action A --repo R --branch B --sha S [--by who]`
+checks and consumes it in one `BEGIN IMMEDIATE` transaction; `approval check` does
+the same matching without consuming. Valid means answered, kind `pick`, option text
+exactly `Approve`, unused, and the same action, repo, branch and sha; talk-resolved
+and free-text answers never count. Exit 0 valid or consumed, 1 rejected with a
+one-line reason on stderr, 2 usage, 4 db. `--by` defaults to
+`$AGENT_MANAGER_SESSION_ID`, else `user`. zen-release is the consumer; see
+[[release-tooling]].
+
 ## IDs
 
 `<task>.<n>` with n = 1 + the highest n ever used for that task (withdrawn included);
@@ -88,11 +107,13 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 2. Tables `decisions` and `decision_options` use generic names because the db is
+now 3. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
-working on a migrated db.
+working on a migrated db. v3 adds `prod_actions (decision_id, action, repo, branch,
+sha, used_at, used_by)` and changes no existing table, so a v2 reader keeps working
+on a v3 db.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SchemaVersion = 2
+	SchemaVersion = 3
 	Letters       = "abcd"
 	// A 'sending' row older than this is a crashed send, not one in flight.
 	StaleSeconds = 2 * 30
@@ -75,9 +75,23 @@ CREATE TABLE decision_briefs (
 );
 `
 
+// schemaV3 binds a prod-action ask to what it approves; used_at makes it
+// single-use. No decisions columns change, so a v2 reader still works.
+const schemaV3 = `
+CREATE TABLE prod_actions (
+    decision_id TEXT PRIMARY KEY REFERENCES decisions(id),
+    action TEXT NOT NULL,
+    repo TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    sha TEXT NOT NULL,
+    used_at TEXT NOT NULL DEFAULT '',
+    used_by TEXT NOT NULL DEFAULT ''
+);
+`
+
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
 // can build a db of any version.
-var Migrations = map[int]string{1: schemaV1, 2: schemaV2}
+var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3}
 
 // Error carries the exit code the CLI reports it with.
 type Error struct {

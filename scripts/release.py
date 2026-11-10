@@ -38,10 +38,26 @@
 #      --yes / -y      Headless: no prompts, auto-confirm (needs --bump).
 #      --bump VALUE    Headless version choice: patch|minor|major|finalize|auto.
 #      --source/--target  Override the source/target branches for this run.
+#      --approval ID   Approved prod-action ask (zen-inbox) for this release;
+#                      consumed once, before the first mutating phase.
 #
 #  HEADLESS
-#      zen-release --yes --bump patch          # full release, no prompts
-#      zen-release --dev --yes --bump patch    # dev release, no prompts
+#      zen-release --yes --bump patch --approval 680.3   # full release
+#      zen-release --dev --yes --bump patch              # dev release
+#
+#  APPROVAL
+#      Every full release tags and pushes its target, so it needs --approval
+#      when it runs with --yes, under AGENT_MANAGER_SESSION_ID, or without a
+#      TTY on stdin. The id must be an ask filed with
+#        zen-inbox ask <task> --prod release --repo R --branch B --sha S
+#      answered Approve, unused, and matching this repo (main checkout name),
+#      the target branch and the full tip sha of the chain's first branch.
+#      Only a TTY run in your own terminal may go without one, after a
+#      default-No confirm. --dry-run checks an approval but never consumes it.
+#      --resume reuses the id saved in the state; --restart needs a new one.
+#
+#  EXIT CODES
+#      0 ok · 1 failure or refusal · 3 approval missing, rejected or used
 #
 #  DESCRIPTION
 #      A thin orchestrator: it shells out to best-in-class external tools, one
@@ -101,10 +117,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 
@@ -194,6 +212,7 @@ CONFIG_SCHEMA = 1
 STATE_SCHEMA = 1
 REPO_SCHEMA = 1
 PROD_BRANCHES = ("prod", "main", "master")
+APPROVAL_EXIT = 3
 
 # Optional phases a repo can toggle on/off in its per-repo config. Core phases
 # (merge, write_version, tag, push, rebase_source) always run, gated by no_merge.
@@ -449,6 +468,8 @@ class State:
     # outcomes (shown in the finalize summary)
     published: str = ""
     github_release_url: str = ""
+    # zen-inbox prod-action ask consumed by this run; --resume needs no other.
+    approval_id: str = ""
 
     def status(self, phase: str) -> str:
         return self.phases.get(phase, "pending")
@@ -679,6 +700,87 @@ def apply_branches_from_repo(
         info(f"Releasing {state.target_branch} (no merge)")
     else:
         info(" -> ".join(chain))
+
+
+def repo_name() -> str:
+    """The main checkout's folder name, so a worktree reports its repo."""
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(common.stdout.strip()).parent.name
+
+
+def release_sha(state: State) -> str:
+    """Full tip of the chain's first branch: where the released content comes from."""
+    return git("rev-parse", f"refs/heads/{merge_chain(state)[0]}").stdout.strip()
+
+
+def stdin_is_tty() -> bool:
+    return sys.stdin.isatty()
+
+
+def approval_required() -> bool:
+    return (
+        HEADLESS
+        or bool(os.environ.get("AGENT_MANAGER_SESSION_ID"))
+        or not stdin_is_tty()
+    )
+
+
+def inbox_approval(
+    verb: str, approval: str, repo: str, branch: str, sha: str
+) -> tuple[bool, str]:
+    """`zen-inbox approval use|check`; any failure to run it counts as a rejection."""
+    cmd = ["zen-inbox", "approval", verb, approval, "--action", "release"]
+    cmd += ["--repo", repo, "--branch", branch, "--sha", sha]
+    try:
+        result = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    except OSError as exc:
+        return False, f"zen-inbox unavailable: {exc}"
+    if result.returncode == 0:
+        return True, result.stdout.strip()
+    return False, result.stderr.strip() or f"zen-inbox exited {result.returncode}"
+
+
+def confirm_unapproved(prompt: str) -> bool:
+    result = subprocess.run(["gum", "confirm", "--default=false", prompt], check=False)
+    return result.returncode == 0
+
+
+def refuse_approval(text: str) -> NoReturn:
+    fail(text)
+    raise typer.Exit(APPROVAL_EXIT)
+
+
+def gate_prod_release(state: State, approval: str) -> None:
+    """Fail closed: consume an approved prod-action ask before anything mutates."""
+    if state.approval_id:
+        info(f"Approved by {state.approval_id} (resumed)")
+        return
+    repo, branch, sha = repo_name(), state.target_branch, release_sha(state)
+    ask = f"zen-inbox ask <task> --prod release --repo {repo} --branch {branch} --sha {sha}"
+    if DRY_RUN:
+        if not approval:
+            info(f"[dry-run] a real run needs --approval <id> from: {ask}")
+            return
+        ok, msg = inbox_approval("check", approval, repo, branch, sha)
+        (info if ok else warn)(f"[dry-run] approval {approval}: {msg}")
+        return
+    if not approval:
+        if approval_required():
+            refuse_approval(
+                f"A full release of {repo} {branch} needs an approved prod-action "
+                f"ask. File it, then rerun with --approval <id>:\n  {ask}"
+            )
+        if not confirm_unapproved(
+            f"Release {repo} {branch}@{sha[:12]} without an inbox approval?"
+        ):
+            raise typer.Abort()
+        return
+    ok, msg = inbox_approval("use", approval, repo, branch, sha)
+    if not ok:
+        refuse_approval(f"Approval refused: {msg}")
+    state.approval_id = approval
+    save_state(state)
+    good(f"Approval {approval}: {msg}")
 
 
 def merge_chain(state: State) -> list[str]:
@@ -1646,6 +1748,7 @@ def do_release(
     bump: str = "",
     source: str = "",
     target: str = "",
+    approval: str = "",
 ) -> None:
     """Run an interactive, resumable release."""
     global DRY_RUN, HEADLESS
@@ -1672,6 +1775,7 @@ def do_release(
     # Resolve branches before optional phases so secret_scan has target_branch.
     if not state.target_branch:
         apply_branches_from_repo(state, repo_cfg, source, target)
+    gate_prod_release(state, approval)
 
     # Pre-branch phases (optional, gated by the repo config)
     run_optional("hooks", repo_cfg, state, lambda: phase_hooks(state, config))
@@ -1798,6 +1902,11 @@ def main(
         "--target",
         help="Override the target branch for this run (overrides saved config).",
     ),
+    approval: str = typer.Option(
+        "",
+        "--approval",
+        help="Approved zen-inbox prod-action ask id; consumed by a full release.",
+    ),
 ) -> None:
     """Run a release by default; `setup` detects tools (run once)."""
     if ctx.invoked_subcommand is not None:
@@ -1817,6 +1926,7 @@ def main(
         bump,
         source,
         target,
+        approval,
     )
 
 

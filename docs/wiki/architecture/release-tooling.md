@@ -1,8 +1,8 @@
 ---
 title: Release Tooling — zen-release
 category: architecture
-updated: 2026-05-28
-related: [overview]
+updated: 2026-11-10
+related: [overview, decision-inbox]
 ---
 
 # Release Tooling — zen-release
@@ -106,9 +106,36 @@ Repos follow one of two models (zen-flow skill, Branch model section):
   release and reports `push pending`.
 
 Every push, tag, release or deploy on `prod`/`main`/`master` needs the user's
-approval for that one action, filed as a `zen-inbox ask`. The scripts do not check
-the approval; the guards above only stop `--dev` and `zen-merge` from touching
-prod branches. `zen-sweep` reports `branch-model` drift in personal repos.
+approval for that one action, filed as a `zen-inbox ask`. `zen-sweep` reports
+`branch-model` drift in personal repos.
+
+## Prod approval gate (#680)
+
+A full release (no `--dev`) always tags and pushes its target, so zen-release fails
+closed on it. Right after branch resolution, before hooks or any mutating phase:
+
+- **When it is needed.** With `--yes`, with `AGENT_MANAGER_SESSION_ID` set, or with a
+  non-TTY stdin, a release without `--approval <id>` exits **3** and prints the ask
+  to file: `zen-inbox ask <task> --prod release --repo R --branch B --sha S`. Only a
+  TTY run in your own terminal may skip it, through a default-No `gum confirm`
+  showing repo, branch and sha12.
+- **Binding.** repo = basename of the main checkout (parent of `git rev-parse
+  --git-common-dir`, so a worktree reports its repo); branch = the resolved target;
+  sha = the full tip of the chain's first branch (`dev` for `dev → prod`, the target
+  itself in place). zen-release runs `zen-inbox approval use <id> --action release
+  ...`, which checks and consumes in one `BEGIN IMMEDIATE` transaction. Any non-zero
+  exit, a missing binary included, becomes exit 3 with zen-inbox's reason (`not
+  answered`, `answered Hold`, `already used by … at …`, `sha mismatch: approved a,
+  releasing b`, …). A mismatch leaves the approval unused.
+- **Resume.** The consumed id is saved as `approval_id` in
+  `.git/release-state.json`; `--resume` needs nothing new. A state without it
+  follows the rules above again; `--restart` clears it and needs a fresh approval.
+- **Dry run** never consumes and never refuses: it runs `approval check` when given
+  an id, else prints that a real run needs one.
+- **Exit codes.** 3 = approval missing, rejected or used; every other failure stays
+  1. `--dev` is unchanged and needs no approval, so `zen-merge` is unaffected.
+- **Not covered.** `git push` of single-branch repos (`zen-merge`'s `push pending`),
+  deploys, and an agent that edits `zen-flow.db` or the state file by hand.
 
 ## State & resume
 

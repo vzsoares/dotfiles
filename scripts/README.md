@@ -14,7 +14,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | Script | Command | What it does |
 |---|---|---|
 | `commit.py` | `zen-commit` | Conventional-Commit helper: stage → secret-scan → AI message (claude haiku) → commit. |
-| `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. `--dev` refuses prod/main/master and the saved target. |
+| `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. A full release needs `--approval <id>` (exit 3 without); `--dev` refuses prod/main/master and the saved target. |
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
@@ -58,8 +58,16 @@ zen-release setup          # run once per repo: detect tools, configure branches
 zen-release                # full release
 zen-release --dev          # quick dev (-dev.N) release on current branch; refused on prod/main/master/target
 zen-release --resume        # continue a release interrupted mid-run
-zen-release --yes --bump <patch|minor|major>   # headless
+zen-release --yes --bump <patch|minor|major> --approval <id>   # headless
 ```
+A full release fails closed: with `--yes`, inside an agent session, or without a TTY
+it needs `--approval <id>`, an ask filed with `zen-inbox ask <task> --prod release
+--repo R --branch B --sha S` and answered Approve. It is consumed once, before the
+first mutating phase, and must match the repo (main checkout name), target branch
+and full tip sha of the chain's first branch; otherwise it exits 3 and prints the ask
+to file. A TTY run in your own terminal may go without one after a default-No
+confirm. `--resume` reuses the consumed id; `--dry-run` never consumes. `--dev`
+needs no approval.
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them.
 
@@ -118,6 +126,8 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 ```
 zen-inbox ask <task> -q "<question>" -o a -o b --rec a   # prints 580.1 (--gate: 580.g)
           [--title "<task title>"] [--brief "<1-3 lines>"]  # session+task context
+zen-inbox ask <task> --prod release --repo R --branch B --sha <40 hex>  # Approve/Hold
+zen-inbox approval use|check <id> --action A --repo R --branch B --sha S [--by who]
 zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
 zen-inbox list [--all] | show <id>                      # --json on both
@@ -132,7 +142,9 @@ until the asking session has no open decision, then sent as one
 agent pane, where agent-manager refuses it). An agent that withdraws its own last
 open decision gets the held answers printed on stdout instead of a send to itself.
 Exit codes: 0 ok · 1 not found or wrong state · 2 usage · 3 recorded, delivery
-failed · 4 vault, db or Go unavailable. `watch` is a Bubble Tea panel: one row per
+failed · 4 vault, db or Go unavailable. `approval use` consumes a prod-action ask
+once (exit 1 with the reason when it does not match); `check` never consumes; amend
+of a prod-action ask is refused. `watch` is a Bubble Tea panel: one row per
 asking session; opening one shows each task's title, brief and asker, then its
 questions. Answer walks them (`a`-`d` pick, `f` free text, `s` skip, `t` talk, `v`
 view full, `esc` back), a review screen sends them; nothing is recorded before Send.

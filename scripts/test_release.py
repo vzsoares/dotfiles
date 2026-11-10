@@ -16,6 +16,9 @@ Run with:  uv run scripts/test_release.py
 from __future__ import annotations
 
 import importlib.util
+import os
+import shutil
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -70,6 +73,76 @@ def _reset_globals(monkeypatch: pytest.MonkeyPatch) -> None:
     # do_release/do_dev_release set these module globals; reset for test isolation.
     monkeypatch.setattr(release, "HEADLESS", False)
     monkeypatch.setattr(release, "DRY_RUN", False)
+
+
+REAL_CONFIRM_UNAPPROVED = release.confirm_unapproved
+INBOX_LAUNCHER = Path(__file__).resolve().parent.parent / "inbox" / "zen-inbox"
+
+
+@pytest.fixture(scope="session")
+def inbox_bin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    """PATH dir with the real zen-inbox launcher and a fake agent-manager.
+
+    The fake keeps zen-inbox from reaching real sessions; the cache dir keeps
+    the launcher's build out of ~/.cache.
+    """
+    root = tmp_path_factory.mktemp("inbox")
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "zen-inbox").symlink_to(INBOX_LAUNCHER)
+    fake = bin_dir / "agent-manager"
+    fake.write_text('#!/bin/sh\n[ "$1" = sessions ] && echo "[]" && exit 0\nexit 1\n')
+    fake.chmod(0o755)
+    return bin_dir, root / "cache"
+
+
+@pytest.fixture(autouse=True)
+def _own_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inbox_bin: tuple[Path, Path]
+) -> None:
+    """A TTY run in the user's own terminal, on a temp inbox db, by default."""
+    bin_dir, cache = inbox_bin
+    monkeypatch.delenv("AGENT_MANAGER_SESSION_ID", raising=False)
+    monkeypatch.setenv("ZEN_FLOW_DB", str(tmp_path / "zen-flow.db"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(release, "stdin_is_tty", lambda: True)
+    monkeypatch.setattr(release, "confirm_unapproved", lambda prompt: True)
+
+
+def zen_inbox(*args: str, session: str = "") -> subprocess.CompletedProcess[str]:
+    env = dict(os.environ)
+    if session:
+        env["AGENT_MANAGER_SESSION_ID"] = session
+    return subprocess.run(
+        ["zen-inbox", *args], capture_output=True, text=True, check=False, env=env
+    )
+
+
+def file_approval(
+    branch: str, sha: str, *, repo: str = "repo", answer: str = "a"
+) -> str:
+    """A prod-action ask from session s1, answered inside s1 so nothing is sent."""
+    asked = zen_inbox(
+        "ask", "680", "--session", "s1", "--prod", "release",
+        "--repo", repo, "--branch", branch, "--sha", sha,
+    )  # fmt: skip
+    assert asked.returncode == 0, asked.stderr
+    approval = asked.stdout.strip()
+    if answer:
+        answered = zen_inbox("answer", approval, answer, session="s1")
+        assert answered.returncode == 0, answered.stderr
+    return approval
+
+
+def approval_use(approval: str) -> tuple[str, str]:
+    with sqlite3.connect(os.environ["ZEN_FLOW_DB"]) as db:
+        row = db.execute(
+            "SELECT used_at, used_by FROM prod_actions WHERE decision_id = ?",
+            (approval,),
+        ).fetchone()
+    assert row is not None
+    return row[0], row[1]
 
 
 @pytest.fixture
@@ -842,6 +915,7 @@ def test_headless_release_no_prompts(
     """
     write_config()  # no repo config → headless uses ephemeral defaults
     _add_bare_remote(git_repo)
+    approval = file_approval("main", _git("rev-parse", "HEAD").strip())
     release.do_release(
         resume=False,
         restart=False,
@@ -851,6 +925,7 @@ def test_headless_release_no_prompts(
         yes=True,
         bump="patch",
         source="",  # release current branch
+        approval=approval,
     )
     assert "v0.0.1" in _git("tag").split()
     # Pushed to the bare remote (--yes auto-confirmed the push).
@@ -1497,6 +1572,7 @@ def test_e2e_headless_feature_branch_chain(
     _git("add", ".")
     _git("commit", "-q", "-m", "feat: add feature")
     write_repo_config(source="develop", target="master")
+    approval = file_approval("master", _git("rev-parse", "HEAD").strip())
 
     release.do_release(
         resume=False,
@@ -1506,6 +1582,7 @@ def test_e2e_headless_feature_branch_chain(
         no_changelog=False,
         yes=True,
         bump="patch",
+        approval=approval,
     )
 
     assert "v0.0.1" in _git("tag").split()
@@ -1530,6 +1607,7 @@ def test_e2e_headless_feature_branch_override(
     _git("add", ".")
     _git("commit", "-q", "-m", "feat: add feature")
     write_repo_config(source="", target="main")  # saved config = no-merge on main
+    approval = file_approval("prod", _git("rev-parse", "HEAD").strip())
 
     release.do_release(
         resume=False,
@@ -1541,6 +1619,7 @@ def test_e2e_headless_feature_branch_override(
         bump="patch",
         source="feature/xyz",  # override: merge the feature branch...
         target="prod",  # ...into prod, not the configured main
+        approval=approval,
     )
 
     assert "v0.0.1" in _git("tag").split()
@@ -1625,6 +1704,273 @@ def test_e2e_resume_after_crash(
     # HEAD is unchanged — changelog wasn't committed a second time.
     assert _git("rev-parse", "HEAD").strip() == changelog_commit
     assert not (git_repo / ".git" / "release-state.json").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Prod approval gate (#680)                                                     #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def dev_prod(git_repo: Path, xdg_home: Path, offline_gum: None) -> Path:
+    """dev one commit ahead of prod, a bare origin, no repo config, on dev."""
+    write_config()
+    _add_bare_remote(git_repo)
+    _git("branch", "prod")
+    _git("checkout", "-q", "-b", "dev")
+    (git_repo / "feature.txt").write_text("feature\n")
+    _git("add", ".")
+    _git("commit", "-q", "-m", "feat: add feature")
+    return git_repo
+
+
+@pytest.fixture
+def failures(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    messages: list[str] = []
+    monkeypatch.setattr(release, "fail", messages.append)
+    return messages
+
+
+def dev_tip() -> str:
+    return _git("rev-parse", "dev").strip()
+
+
+def full_release(
+    *,
+    resume: bool = False,
+    restart: bool = False,
+    dry_run: bool = False,
+    yes: bool = True,
+    bump: str = "patch",
+    approval: str = "",
+) -> None:
+    release.do_release(
+        resume=resume,
+        restart=restart,
+        dry_run=dry_run,
+        no_scan=False,
+        no_changelog=False,
+        yes=yes,
+        bump=bump,
+        approval=approval,
+    )
+
+
+def refused(
+    *, restart: bool = False, yes: bool = True, bump: str = "patch", approval: str = ""
+) -> int:
+    with pytest.raises(typer.Exit) as exc:
+        full_release(restart=restart, yes=yes, bump=bump, approval=approval)
+    return exc.value.exit_code
+
+
+def remote_refs() -> str:
+    return _git("ls-remote", "origin")
+
+
+def assert_untouched(prod: str) -> None:
+    """No tag, no push, no version commit, no state file."""
+    assert _git("tag") == ""
+    assert remote_refs() == ""
+    assert _git("rev-parse", "prod").strip() == prod
+    assert "bump version" not in _git("log", "--all", "--oneline")
+    assert not release.state_path().exists()
+
+
+def test_headless_no_config_no_approval_refuses(
+    dev_prod: Path, failures: list[str]
+) -> None:
+    prod = _git("rev-parse", "prod").strip()
+    assert refused() == release.APPROVAL_EXIT
+    assert_untouched(prod)
+    ask = f"zen-inbox ask <task> --prod release --repo repo --branch prod --sha {dev_tip()}"
+    assert any(ask in m for m in failures)
+
+
+@pytest.mark.parametrize(
+    ("answer", "reason"),
+    [("b", "answered Hold"), ("", "not answered"), ("talk", "resolved in talk")],
+)
+def test_approval_not_approve_refuses(
+    dev_prod: Path, failures: list[str], answer: str, reason: str
+) -> None:
+    prod = _git("rev-parse", "prod").strip()
+    approval = file_approval(
+        "prod", dev_tip(), answer="" if answer == "talk" else answer
+    )
+    if answer == "talk":
+        assert zen_inbox("resolve", approval, session="s1").returncode == 0
+    assert refused(approval=approval) == release.APPROVAL_EXIT
+    assert_untouched(prod)
+    assert any(reason in m for m in failures)
+    assert approval_use(approval) == ("", "")
+
+
+def test_approved_release_completes_and_marks_used(dev_prod: Path) -> None:
+    approval = file_approval("prod", dev_tip())
+    full_release(approval=approval)
+    assert "v0.0.1" in _git("tag").split()
+    assert "refs/tags/v0.0.1" in remote_refs()
+    assert "Release version 0.0.1" in _git("log", "prod", "--oneline")
+    used_at, used_by = approval_use(approval)
+    assert used_at != ""
+    assert used_by == "user"
+    assert not release.state_path().exists()
+
+
+def test_reused_approval_refuses(dev_prod: Path, failures: list[str]) -> None:
+    approval = file_approval("prod", dev_tip())
+    full_release(approval=approval)
+    first = approval_use(approval)
+    _git("checkout", "-q", "dev")
+    (dev_prod / "more.txt").write_text("more\n")
+    _git("add", ".")
+    _git("commit", "-q", "-m", "feat: more")
+    tags = _git("tag")
+    assert refused(approval=approval) == release.APPROVAL_EXIT
+    assert any("already used by user at" in m for m in failures)
+    assert _git("tag") == tags
+    assert approval_use(approval) == first
+
+
+@pytest.mark.parametrize(
+    ("mismatch", "reason"),
+    [
+        ("sha", "sha mismatch: approved"),
+        ("branch", "branch mismatch"),
+        ("repo", "repo mismatch"),
+    ],
+)
+def test_mismatched_approval_refuses_and_stays_unused(
+    dev_prod: Path, failures: list[str], mismatch: str, reason: str
+) -> None:
+    approved_sha = dev_tip()
+    approval = file_approval(
+        "main" if mismatch == "branch" else "prod",
+        approved_sha,
+        repo="other" if mismatch == "repo" else "repo",
+    )
+    if mismatch == "sha":
+        (dev_prod / "late.txt").write_text("late\n")
+        _git("add", ".")
+        _git("commit", "-q", "-m", "feat: late")
+    prod = _git("rev-parse", "prod").strip()
+    assert refused(approval=approval) == release.APPROVAL_EXIT
+    assert_untouched(prod)
+    assert any(reason in m for m in failures)
+    if mismatch == "sha":
+        assert any(
+            f"approved {approved_sha}, releasing {dev_tip()}" in m for m in failures
+        )
+    assert approval_use(approval) == ("", "")
+
+
+def test_unknown_approval_and_missing_inbox_refuse(
+    dev_prod: Path, failures: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prod = _git("rev-parse", "prod").strip()
+    assert refused(approval="680.9") == release.APPROVAL_EXIT
+    assert any("unknown id" in m for m in failures)
+    no_inbox = dev_prod.parent / "no-inbox"
+    no_inbox.mkdir()
+    for tool in ("git", "gum"):
+        found = shutil.which(tool)
+        assert found is not None
+        (no_inbox / tool).symlink_to(found)
+    monkeypatch.setenv("PATH", str(no_inbox))
+    assert refused(approval="680.9") == release.APPROVAL_EXIT
+    assert any("zen-inbox unavailable" in m for m in failures)
+    assert_untouched(prod)
+
+
+def test_headless_dev_release_needs_no_approval_in_agent_pane(
+    git_repo: Path, xdg_home: Path, offline_gum: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config()
+    _add_bare_remote(git_repo)
+    _git("switch", "-q", "-c", "dev")
+    monkeypatch.setenv("AGENT_MANAGER_SESSION_ID", "worker")
+    release.do_dev_release(dry_run=False, yes=True, bump="patch")
+    assert "v0.0.1-dev.1" in _git("tag").split()
+
+
+def test_dry_run_checks_but_never_consumes(dev_prod: Path) -> None:
+    approval = file_approval("prod", dev_tip())
+    full_release(dry_run=True, approval=approval)
+    assert approval_use(approval) == ("", "")
+    full_release(dry_run=True)  # no approval: still runs
+    assert _git("tag") == ""
+    assert not release.state_path().exists()
+
+
+def _push_fails_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_push = release.phase_push
+
+    def failing_push(state: release.State) -> None:
+        monkeypatch.setattr(release, "phase_push", real_push)
+        raise typer.Exit(1)
+
+    monkeypatch.setattr(release, "phase_push", failing_push)
+
+
+def test_resume_reuses_the_consumed_approval(
+    dev_prod: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    approval = file_approval("prod", dev_tip())
+    _push_fails_once(monkeypatch)
+    with pytest.raises(typer.Exit):
+        full_release(approval=approval)
+    mid = release.load_state()
+    assert mid is not None and mid.approval_id == approval
+    assert mid.status("push") == "failed"
+    full_release(resume=True)
+    assert "refs/tags/v0.0.1" in remote_refs()
+    assert not release.state_path().exists()
+
+
+def test_restart_needs_a_fresh_approval(
+    dev_prod: Path, monkeypatch: pytest.MonkeyPatch, failures: list[str]
+) -> None:
+    approval = file_approval("prod", dev_tip())
+    _push_fails_once(monkeypatch)
+    with pytest.raises(typer.Exit):
+        full_release(approval=approval)
+    assert refused(restart=True, approval=approval) == release.APPROVAL_EXIT
+    assert any("already used" in m for m in failures)
+    assert remote_refs() == ""
+
+
+@pytest.mark.parametrize("why", ["agent", "no-tty"])
+def test_interactive_agent_or_pipe_needs_approval(
+    dev_prod: Path, monkeypatch: pytest.MonkeyPatch, why: str
+) -> None:
+    write_repo_config(source="dev", target="prod")
+    if why == "agent":
+        monkeypatch.setenv("AGENT_MANAGER_SESSION_ID", "worker")
+    else:
+        monkeypatch.setattr(release, "stdin_is_tty", lambda: False)
+    prod = _git("rev-parse", "prod").strip()
+    assert refused(yes=False, bump="") == release.APPROVAL_EXIT
+    assert_untouched(prod)
+
+
+def test_own_terminal_confirm_declined_releases_nothing(
+    dev_prod: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_repo_config(source="dev", target="prod")
+    log = tmp_path / "gum.log"
+    gum_dir = tmp_path / "gum-bin"
+    gum_dir.mkdir()
+    gum = gum_dir / "gum"
+    gum.write_text(f'#!/bin/sh\necho "$@" >> {log}\n[ "$1" = confirm ] && exit 1\n')
+    gum.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{gum_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(release, "confirm_unapproved", REAL_CONFIRM_UNAPPROVED)
+    prod = _git("rev-parse", "prod").strip()
+    with pytest.raises(typer.Abort):
+        full_release(yes=False, bump="")
+    assert_untouched(prod)
+    assert f"--default=false Release repo prod@{dev_tip()[:12]}" in log.read_text()
 
 
 if __name__ == "__main__":

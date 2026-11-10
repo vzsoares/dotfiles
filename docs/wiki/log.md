@@ -48,3 +48,7 @@ Pages updated: architecture/release-tooling.md
 ## [2026-11-10] update | zen-inbox stuck-paste check, panel refresh (#610, folds in #670)
 After a successful `agent-manager send`, zen-inbox captures the asker's pane and presses Enter once when the prompt holds only an unsent `[Pasted text #N]` placeholder (Claude sessions only, two matching captures, early stop when the session works). The delivery state never changes; the outcome line says `submitted a stuck paste` or `still stuck` with the attach command, and zen-bell rings once on the latter. Also: an answer recorded inside the asking session is handed back instead of sent (`Inbox.Self`). The decision-inbox page now covers the panel after #614 and #611: busy loader, bottom status line, `r` retry, glamour markdown on ANSI-16 with hard-wrap, and scrolling on every screen.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-10] update | zen-release prod approval gate (#680)
+A full zen-release now fails closed: headless, agent-session or non-TTY runs need `--approval <id>`, a structured `zen-inbox ask --prod` answered Approve, bound to repo, target branch and the full source sha, consumed once by `zen-inbox approval use` (exit 3 otherwise). zen-inbox schema v3 adds `prod_actions`; amend of such an ask is refused. `--dev` is unchanged.
+Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md

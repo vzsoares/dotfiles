@@ -75,7 +75,7 @@ func (a *App) root() *cobra.Command {
 	root.SetErr(a.Stderr)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })
 	root.AddCommand(a.ask(), a.brief(), a.amend(), a.withdraw(), a.list(), a.show(),
-		a.answer(), a.resolve(), a.retry(), a.watch())
+		a.answer(), a.resolve(), a.retry(), a.watch(), a.approval())
 	return root
 }
 
@@ -127,13 +127,17 @@ func noSession() error {
 
 func (a *App) ask() *cobra.Command {
 	var in inbox.AskInput
+	var prod inbox.ProdAction
 	var session string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "ask TASK -q QUESTION [-o OPTION]...",
+		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S)",
 		Short: "Record a decision; print its ID.",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := prodFlags(cmd); err != nil {
+				return err
+			}
 			in.Task = args[0]
 			in.SessionID = session
 			if in.SessionID == "" {
@@ -151,7 +155,11 @@ func (a *App) ask() *cobra.Command {
 			if s := am.Find(a.AM.Sessions(), in.SessionID); s != nil && pyfmt.Truthy(s["name"]) {
 				in.Name = pyfmt.Str(s["name"])
 			}
-			d, err := ib.Ask(in)
+			ask := ib.Ask
+			if cmd.Flags().Changed("prod") {
+				ask = func(in inbox.AskInput) (inbox.Decision, error) { return ib.AskProd(in, prod) }
+			}
+			d, err := ask(in)
 			if err != nil {
 				return err
 			}
@@ -173,7 +181,10 @@ func (a *App) ask() *cobra.Command {
 	f.StringVar(&in.Brief, "brief", "", "1-3 lines of task context")
 	f.StringVar(&session, "session", "", "asking session id")
 	f.BoolVar(&asJSON, "json", false, "print the decision as JSON")
-	_ = cmd.MarkFlagRequired("question")
+	f.StringVar(&prod.Action, "prod", "", "prod-action ask for ACTION (e.g. release)")
+	f.StringVar(&prod.Repo, "repo", "", "with --prod: repo name")
+	f.StringVar(&prod.Branch, "branch", "", "with --prod: target branch")
+	f.StringVar(&prod.Sha, "sha", "", "with --prod: full 40-char commit sha")
 	return cmd
 }
 
