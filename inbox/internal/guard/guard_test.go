@@ -57,10 +57,7 @@ func TestAgentAncestorRefuses(t *testing.T) {
 	}
 }
 
-func TestAgentPIDAncestorRefuses(t *testing.T) {
-	if ok, reason := walk(tree(nil), 40, 30); ok || reason != "inside agent pid 30" {
-		t.Fatalf("%v %q", ok, reason)
-	}
+func TestAgentPIDRefuses(t *testing.T) {
 	ok, reason := Check(env(map[string]string{"AGENT_MANAGER_AGENT_PID": "30"}), tree(nil), 40)
 	if ok || reason == "" {
 		t.Fatalf("%v %q", ok, reason)

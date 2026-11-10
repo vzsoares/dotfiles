@@ -31,17 +31,13 @@ func Check(getenv func(string) string, parent Parent, pid int) (ok bool, reason 
 			return false, v + " is set"
 		}
 	}
-	agentPID, _ := strconv.Atoi(getenv("AGENT_MANAGER_AGENT_PID"))
-	return walk(parent, pid, agentPID)
+	return walk(parent, pid)
 }
 
-func walk(parent Parent, pid, agentPID int) (bool, string) {
+func walk(parent Parent, pid int) (bool, string) {
 	for range maxDepth {
 		if pid <= 1 {
 			return true, ""
-		}
-		if agentPID > 0 && pid == agentPID {
-			return false, fmt.Sprintf("inside agent pid %d", pid)
 		}
 		ppid, comm, err := parent(pid)
 		if err != nil {

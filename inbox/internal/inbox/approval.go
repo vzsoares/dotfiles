@@ -112,12 +112,10 @@ func (ib *Inbox) Approval(id string, want ProdAction, by string) (ProdAction, er
 		} else if err != nil {
 			return err
 		}
-		var ok bool
-		if p, ok, err = ib.prodAction(id); err != nil {
-			return err
-		} else if !ok {
+		if d.Prod == nil {
 			return errf(1, "approval %s: not a prod-action ask", id)
 		}
+		p = *d.Prod
 		if reason := approvalError(d, p, want); reason != "" {
 			return errf(1, "approval %s: %s", id, reason)
 		}

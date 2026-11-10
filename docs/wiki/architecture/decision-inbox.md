@@ -111,7 +111,7 @@ one-line reason on stderr, 2 usage, 4 db. `--by` defaults to
 - **Guard (`internal/guard`).** Refuses, with the reason, when any of
   `AGENT_MANAGER_SESSION_ID`, `AGENT_MANAGER_AGENT_PID`, `CLAUDECODE` is non-empty,
   or when walking parents with `ps -o ppid=,comm= -p <pid>` finds a `claude` or
-  `codex` comm or `$AGENT_MANAGER_AGENT_PID`. A `ps` error or a walk past 256
+  `codex` comm. A `ps` error or a walk past 256
   levels refuses (fail closed). Gemini runs as `node`, so only the env check
   catches it.
 - **Refused panel.** Everything else works; a prod ask shows `prod approvals only

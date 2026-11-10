@@ -163,6 +163,8 @@ type Model struct {
 	// prodBlock is why prod-action asks are locked here; it applies only
 	// while ib.User is false.
 	prodBlock string
+	// confirm is the Approve letter scConfirm stages on y.
+	confirm string
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -976,6 +978,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		switch {
 		case m.locked(d) || d.OptionText(choice) == "":
 		case d.Prod != nil && d.OptionText(choice) == "Approve":
+			m.confirm = choice
 			m.scr = scConfirm
 		default:
 			m.stage(view.Staged{Kind: "pick", Option: choice, Rev: d.Rev})
@@ -988,8 +991,8 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 func (m *Model) keyConfirm(k string) (tea.Model, tea.Cmd) {
 	d, ok := m.decision(m.p.cur)
 	m.scr = scWalk
-	if ok && k == "y" && !m.locked(d) {
-		m.stage(view.Staged{Kind: "pick", Option: "a", Rev: d.Rev})
+	if ok && k == "y" && !m.locked(d) && d.OptionText(m.confirm) == "Approve" {
+		m.stage(view.Staged{Kind: "pick", Option: m.confirm, Rev: d.Rev})
 	}
 	return m, nil
 }
