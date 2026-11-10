@@ -24,7 +24,8 @@
 #
 #  OPTIONS
 #      --base BRANCH  Branch to land on. Default dev; a repo without `dev`
-#                     lands on its main checkout's branch and skips the release.
+#                     lands on its main checkout's branch. Without
+#                     a `dev` branch no base is released.
 #      --dry-run      Run the checks, echo the mutating commands, save nothing.
 #      --restart      Discard the saved state for this session and start over.
 #      --json         Print the outcome as JSON.
@@ -286,7 +287,7 @@ def phase_resolve(state: State, base: str) -> None:
         )
 
     if branch_exists(state.main, base):
-        state.base, state.release = base, True
+        state.base, state.release = base, branch_exists(state.main, "dev")
     elif base == "dev":
         state.base, state.release = current_branch(state.main), False
     else:

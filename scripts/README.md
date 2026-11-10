@@ -91,7 +91,8 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   follow-ups, not failures. `.zen-gate-allow` takes `<path glob> [rule]` per line.
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
   resume. A repo without `dev` lands on its main checkout's branch and reports
-  "push pending". It refuses prod, main and the zen-release target branch.
+  "push pending"; without `dev` it never releases, even with `--base`.
+  It refuses prod, main and the zen-release target branch.
   Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
   branch's `Task:` trailer (skipped without one); exit 7 = that step failed.
 - **zen-sweep** covers the vault `repos` (config/zen-flow.json) plus
