@@ -14,11 +14,12 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
+	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
@@ -129,8 +130,10 @@ type Model struct {
 	sessionsAt time.Time
 	seen       map[string]bool
 
-	cursor  int
-	scroll  int
+	cursor int
+	scroll int
+	// shown is how many body rows the last layout fitted; a page is half.
+	shown   int
 	flash   string
 	flashOK bool
 	flashAt time.Time
@@ -143,7 +146,9 @@ type Model struct {
 
 	ta textarea.Model
 	ti textinput.Model
-	vp viewport.Model
+
+	// md takes its colour profile from a lipgloss renderer; tests inject one.
+	md *md.Renderer
 
 	talkFrom screen
 	talkOpen []inbox.Decision
@@ -160,7 +165,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ta.Cursor.SetMode(cursor.CursorStatic)
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
-		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti,
+		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, md: md.New(lipgloss.DefaultRenderer()),
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -171,7 +176,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 // Watch runs the panel until the user quits.
 func Watch(client am.Client) func(*inbox.Inbox) error {
 	return func(ib *inbox.Inbox) error {
-		_, err := tea.NewProgram(New(ib, client), tea.WithAltScreen()).Run()
+		_, err := tea.NewProgram(New(ib, client), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 		if errors.Is(err, tea.ErrInterrupted) {
 			return nil
 		}
@@ -641,7 +646,14 @@ func (m *Model) finishTalk(resolved []string, flash string) {
 // ----------------------------------------------------------------- update --
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	scr, cursor := m.scr, m.cursor
 	_, cmd := m.update(msg)
+	if m.scr != scr {
+		m.scroll = 0
+	}
+	if m.w > 0 && m.h > 0 && m.busy == "" {
+		_, m.scroll, m.shown = m.layout(m.scr != scr || m.cursor != cursor)
+	}
 	if m.busy != "" && !m.spinning {
 		m.spinning = true
 		cmd = tea.Batch(cmd, m.sp.Tick)
@@ -656,7 +668,16 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ta.SetWidth(max(m.w, 1))
 		m.ta.SetHeight(max(m.rows()-4, 1))
 		m.ti.Width = max(m.w-3, 1)
-		m.vp.Width, m.vp.Height = m.w, max(m.rows()-m.footerRows(scFull), 1)
+		return m, nil
+	case tea.MouseMsg:
+		if m.busy == "" && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.scroll = max(m.scroll-3, 0)
+			case tea.MouseButtonWheelDown:
+				m.scroll += 3
+			}
+		}
 		return m, nil
 	case spinner.TickMsg:
 		if m.busy == "" {
@@ -722,6 +743,10 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.busy != "" {
 		return m, nil
 	}
+	if n := m.scrollBy(k); n != 0 {
+		m.scroll = max(m.scroll+n, 0)
+		return m, nil
+	}
 	switch m.scr {
 	case scFree:
 		return m.keyFree(msg)
@@ -737,12 +762,6 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "down", "j":
 		m.cursor = min(m.cursor+1, max(n-1, 0))
-		return m, nil
-	case "pgdown", "ctrl+f":
-		m.scroll += max(m.rows()/2, 1)
-		return m, nil
-	case "pgup", "ctrl+b":
-		m.scroll = max(m.scroll-max(m.rows()/2, 1), 0)
 		return m, nil
 	case "?":
 		m.showHelp = !m.showHelp
@@ -763,6 +782,35 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyTalkPick(k)
 	}
 	return m, nil
+}
+
+// scrollBy is how far k scrolls the body, 0 when k does not scroll here.
+func (m *Model) scrollBy(k string) int {
+	half := max(m.shown/2, 1)
+	switch k {
+	case "pgdown":
+		return half
+	case "pgup":
+		return -half
+	}
+	if m.scr == scFree || m.scr == scTalkNote {
+		return 0
+	}
+	switch k {
+	case "ctrl+d", "ctrl+f":
+		return half
+	case "ctrl+u", "ctrl+b":
+		return -half
+	}
+	if m.scr == scFull {
+		switch k {
+		case "down", "j":
+			return 1
+		case "up", "k":
+			return -1
+		}
+	}
+	return 0
 }
 
 func (m *Model) listItems() []item {
@@ -882,8 +930,6 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		m.scr = scFree
 		return m, m.ta.Focus()
 	case "full":
-		m.vp.SetContent(strings.Join(m.fullLines(d), "\n"))
-		m.vp.GotoTop()
 		m.scr = scFull
 	case "talk":
 		return m, m.startTalk(scWalk)
@@ -895,12 +941,11 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// fullLines is View full: the context block, then the question, its context
+// and options, nothing cut.
 func (m *Model) fullLines(d inbox.Decision) []string {
-	var out []string
-	for _, line := range strings.Split(view.FullText(d, m.brief(d)), "\n") {
-		out = append(out, view.Wrap(line, m.w, "")...)
-	}
-	return out
+	out := view.PanelContextBlock(m.brief(d), m.w, m.paint)
+	return append(append(out, ""), view.PanelDecisionLines(d, m.w, m.paint)...)
 }
 
 func (m *Model) brief(d inbox.Decision) view.Brief {
@@ -931,11 +976,8 @@ func (m *Model) keyFull(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "q", "v":
 		m.scr = scWalk
-		return m, nil
 	}
-	var cmd tea.Cmd
-	m.vp, cmd = m.vp.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {

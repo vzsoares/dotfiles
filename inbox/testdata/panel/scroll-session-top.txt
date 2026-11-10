@@ -1,0 +1,30 @@
+#669
+asked by spec-s1 · idle · 0s
+
+669.1  Scroll?
+│ context line 1
+│ context line 2
+│ context line 3
+│ context line 4
+│ context line 5
+│ context line 6
+│ context line 7
+│ context line 8
+│ context line 9
+│ context line 10
+│ context line 11
+│ context line 12
+│ context line 13
+│ context line 14
+│ context line 15
+│ context line 16
+│ context line 17
+│ context line 18
+│ context line 19
+│ context line 20
+↓ 22 more
+› Answer
+  Talk
+  Back
+↑↓ · enter · t talk · esc back · ? help · ^u/^d scroll
+◆ 1 open · spec-s1

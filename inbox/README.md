@@ -24,6 +24,7 @@ main.go             wires the CLI to the real agent-manager client and the panel
 internal/inbox      store: schema v2, IDs, guarded transitions, flush, message
 internal/am         agent-manager, tmux popup and zen-bell calls
 internal/view       text for list rows, context blocks and question screens
+internal/md         glamour markdown for the panel: ANSI-16 style, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
 internal/tui        the watch panel (list, session, walk, review, talk)
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity

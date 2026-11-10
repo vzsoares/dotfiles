@@ -2,6 +2,7 @@ package tui
 
 import (
 	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,9 +15,12 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
+	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
 
@@ -120,7 +124,7 @@ func (d *drv) send(msg tea.Msg) {
 var special = map[string]tea.KeyType{
 	"enter": tea.KeyEnter, "esc": tea.KeyEsc, "up": tea.KeyUp, "down": tea.KeyDown,
 	"ctrl+d": tea.KeyCtrlD, "ctrl+c": tea.KeyCtrlC, " ": tea.KeySpace, "pgdown": tea.KeyPgDown,
-	"pgup": tea.KeyPgUp,
+	"pgup": tea.KeyPgUp, "ctrl+u": tea.KeyCtrlU,
 }
 
 func (d *drv) keys(ks ...string) {
@@ -216,7 +220,7 @@ func TestQuestionScreenKeepsQuestionAndOptions(t *testing.T) {
 				t.Errorf("%dx%d: %q missing from\n%s", sz[0], sz[1], want, d.view())
 			}
 		}
-		f, _, _ := d.m.walkFit()
+		f, _ := d.m.walkFit()
 		if !slices.Equal(f.cuts, CutOrder[:len(f.cuts)]) || f.scroll {
 			t.Errorf("%dx%d: cuts %v scroll %v", sz[0], sz[1], f.cuts, f.scroll)
 		}
@@ -232,7 +236,7 @@ func TestCutOrderAsSpaceShrinks(t *testing.T) {
 	prev := -1
 	clipped := false
 	for h := 60; h >= 10; h-- {
-		f := fitWalk(dec, b, nil, 92, h, len(questionMenu(dec)), 1, 0)
+		f := fitWalk(dec, b, nil, 92, h, len(questionMenu(dec)), 1, 0, d.m.paint)
 		if len(f.cuts) < prev {
 			t.Fatalf("height %d cut %v after %d cuts", h, f.cuts, prev)
 		}
@@ -257,17 +261,20 @@ func TestOverflowingOptionsScrollInsteadOfClipping(t *testing.T) {
 	opts := []string{words(150), words(150), words(150)}
 	d.ask("7", "s1", "Which way?", opts...)
 	d.openWalk()
-	f, _, _ := d.m.walkFit()
+	f, _ := d.m.walkFit()
 	if !f.scroll {
 		t.Fatalf("expected a scrolling body, cuts %v", f.cuts)
 	}
 	seen := ""
-	for range 10 {
+	for range 60 {
 		d.fits()
 		if strings.Contains(d.view(), "…") {
 			t.Fatalf("option text clipped:\n%s", d.view())
 		}
 		seen += " " + d.text()
+		if !strings.Contains(d.view(), "↓ ") {
+			break
+		}
 		d.keys("pgdown")
 	}
 	for i, o := range opts {
@@ -275,7 +282,7 @@ func TestOverflowingOptionsScrollInsteadOfClipping(t *testing.T) {
 			t.Errorf("option %d never fully shown", i)
 		}
 	}
-	if !strings.Contains(d.view(), "pgup/dn") {
+	if !strings.Contains(d.view(), "^u/^d scroll") {
 		t.Error("footer does not offer scrolling")
 	}
 }
@@ -909,5 +916,225 @@ func TestStatusLineStates(t *testing.T) {
 	d.send(tea.WindowSizeMsg{Width: 14, Height: 10})
 	if got := last(d.view()); got != "◆ 3 open · sp…" {
 		t.Errorf("status wrapped or overflowed: %q", got)
+	}
+}
+
+// colour makes the panel render markdown with ANSI colours.
+func (d *drv) colour() {
+	lr := lipgloss.NewRenderer(io.Discard)
+	lr.SetColorProfile(termenv.ANSI)
+	d.m.md = md.New(lr)
+}
+
+var token = strings.Repeat("z", 120)
+
+func (d *drv) codeFixture() {
+	d.t.Helper()
+	ctx := "Today it runs `zen-inbox watch` from chief.\n\n```go\nfunc main() {\n\tfmt.Println(\"hi\") // greet\n}\n```\n\n" +
+		"```sh\nzen-inbox ask 7 -q 'Which?' | tee log\n```"
+	_, err := d.other.Ask(inbox.AskInput{Task: "611", Question: "Keep `md.Lines` as the only renderer?",
+		Options: []string{"yes, through `md.Lines` " + token, "no"}, Rec: "a", Context: ctx, SessionID: "s1",
+		Name: "spec-s1", Title: "Glamour", Brief: "Render with **glamour**."})
+	if err != nil {
+		d.t.Fatal(err)
+	}
+}
+
+// ansi16 fails on any 256 or true colour sequence.
+func (d *drv) ansi16() {
+	d.t.Helper()
+	v := d.view()
+	if strings.Contains(v, "38;5;") || strings.Contains(v, "38;2;") || strings.Contains(v, "48;5;") {
+		d.t.Errorf("non ANSI-16 colour in\n%q", v)
+	}
+}
+
+func TestPaintedScreensFit(t *testing.T) {
+	for _, sz := range sizes {
+		d := newDrv(t, sz[0], sz[1])
+		d.colour()
+		d.codeFixture()
+		d.poll()
+		check := func() { t.Helper(); d.fits(); d.ansi16() }
+		check()
+		d.keys("enter")
+		check()
+		if !strings.Contains(d.view(), "\x1b[36m") {
+			t.Errorf("%v: session screen has no code colour:\n%s", sz, d.view())
+		}
+		d.keys("ctrl+d")
+		check()
+		d.keys("enter")
+		for _, k := range []string{"?", "?", "down", "v", "ctrl+d", "down", "esc", "f", "esc", "a"} {
+			d.keys(k)
+			check()
+		}
+		if d.m.scr != scReview {
+			t.Fatalf("%v: expected review, got %d", sz, d.m.scr)
+		}
+	}
+}
+
+func TestWalkShowsRenderedOptions(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.colour()
+	d.codeFixture()
+	d.openWalk()
+	text := ansi.Strip(d.text())
+	for _, want := range []string{"611.1  Keep md.Lines as the only renderer?", "a) yes, through md.Lines zzz", "b) no"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("%q missing from\n%s", want, ansi.Strip(d.view()))
+		}
+	}
+	if strings.Contains(text, "`") {
+		t.Errorf("backticks shown:\n%s", text)
+	}
+	if !strings.Contains(strings.ReplaceAll(text, " ", ""), token+"←rec") {
+		t.Errorf("rec mark not after option a:\n%s", ansi.Strip(d.view()))
+	}
+}
+
+func TestClipPaintedLineEndsReset(t *testing.T) {
+	line := "\x1b[36m" + strings.Repeat("a", 30) + "\x1b[0m" + "\x1b[35m" + strings.Repeat("b", 30) + "\x1b[0m"
+	got := clip(line, 40)
+	if lipgloss.Width(got) > 40 || !strings.HasSuffix(got, "\x1b[0m") {
+		t.Fatalf("%q is %d wide", got, lipgloss.Width(got))
+	}
+	if s := ansi.Strip(got); strings.ContainsAny(s, "\x1b[") {
+		t.Fatalf("dangling escape in %q", got)
+	}
+}
+
+func TestDefaultRendererPaintsNothingUnderTest(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.codeFixture()
+	d.openWalk()
+	for _, k := range []string{"", "v"} {
+		if k != "" {
+			d.keys(k)
+		}
+		if strings.Contains(d.view(), "\x1b") {
+			t.Fatalf("escape bytes with the Ascii profile:\n%q", d.view())
+		}
+	}
+}
+
+const pinnedNow = "2026-11-10T12:00:00Z"
+
+func TestLongContextScrollsWithCtrlD(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 30)
+	ctx := make([]string, 40)
+	for i := range ctx {
+		ctx[i] = "context line " + strconv.Itoa(i+1)
+	}
+	if _, err := d.other.Ask(inbox.AskInput{Task: "669", Question: "Scroll?", Options: []string{"yes", "no"},
+		Context: strings.Join(ctx, "\n"), SessionID: "s1", Name: "spec-s1"}); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	d.keys("enter")
+	d.fits()
+	if !strings.Contains(d.view(), "more") || strings.Contains(d.view(), "context line 40") {
+		t.Fatalf("first page:\n%s", d.view())
+	}
+	golden(t, "scroll-session-top", d.view())
+	d.keys("ctrl+d", "ctrl+d", "ctrl+d")
+	d.fits()
+	if !strings.Contains(d.view(), "context line 40") || !strings.Contains(d.view(), "↑ ") {
+		t.Fatalf("ctrl+d did not reach the end:\n%s", d.view())
+	}
+	if !strings.Contains(d.view(), "› Answer") {
+		t.Fatalf("menu not pinned:\n%s", d.view())
+	}
+	golden(t, "scroll-session-end", d.view())
+	d.keys("ctrl+u", "ctrl+u", "ctrl+u")
+	if strings.Contains(d.view(), "↑ ") {
+		t.Fatalf("ctrl+u did not return to the top:\n%s", d.view())
+	}
+	d.send(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	if d.m.scroll != 3 || !strings.Contains(d.view(), "↑ 3 more") {
+		t.Fatalf("wheel scroll %d:\n%s", d.m.scroll, d.view())
+	}
+}
+
+func TestSelectedOptionStaysVisible(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 30)
+	d.ask("669", "s1", "Which way?", words(900), words(900), words(900))
+	d.openWalk()
+	if f, _ := d.m.walkFit(); !f.scroll {
+		t.Fatal("expected the walk body to scroll")
+	}
+	golden(t, "scroll-walk-top", d.view())
+	for _, k := range []string{"down", "ctrl+d", "down", "ctrl+d", "ctrl+d", "down", "ctrl+d", "down", "up"} {
+		d.keys(k)
+		d.fits()
+		if !strings.Contains(d.view(), "› ") {
+			t.Fatalf("after %s the selected option is gone:\n%s", k, d.view())
+		}
+	}
+}
+
+func (d *drv) manySessions(n int) {
+	d.t.Helper()
+	for i := range n {
+		sid := "t" + strconv.Itoa(i+10)
+		if _, err := d.other.Ask(inbox.AskInput{Task: strconv.Itoa(700 + i), Question: "Q?", Options: []string{"a", "b"},
+			SessionID: sid, Name: "spec-" + sid}); err != nil {
+			d.t.Fatal(err)
+		}
+	}
+	d.poll()
+}
+
+func TestTallListScrollsWithTheCursor(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 30)
+	d.manySessions(40)
+	d.fits()
+	if !strings.Contains(d.view(), "↓ ") {
+		t.Fatalf("no more marker:\n%s", d.view())
+	}
+	golden(t, "scroll-list-top", d.view())
+	for range 39 {
+		d.keys("down")
+	}
+	d.fits()
+	if !strings.Contains(d.view(), "› spec-t49") || !strings.Contains(d.view(), "↑ ") {
+		t.Fatalf("cursor row not in view:\n%s", d.view())
+	}
+	golden(t, "scroll-list-end", d.view())
+}
+
+func TestTallHelpScrolls(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 30)
+	d.manySessions(40)
+	d.keys("?")
+	if strings.Contains(d.view(), "One row per asking session") {
+		t.Fatalf("help should be below the fold:\n%s", d.view())
+	}
+	for range 4 {
+		d.keys("ctrl+d")
+	}
+	d.fits()
+	if !strings.Contains(d.view(), "One row per asking session") {
+		t.Fatalf("help not reached by scrolling:\n%s", d.view())
+	}
+	golden(t, "scroll-help-end", d.view())
+}
+
+func TestViewFullScrollsByLine(t *testing.T) {
+	d := newDrv(t, 40, 15)
+	d.longFixture()
+	d.openWalk()
+	d.keys("v")
+	if !strings.Contains(d.view(), "↓ ") {
+		t.Fatalf("view full does not mark more:\n%s", d.view())
+	}
+	d.keys("down")
+	if d.m.scroll != 1 || !strings.Contains(d.view(), "↑ 1 more") {
+		t.Fatalf("down scrolled to %d:\n%s", d.m.scroll, d.view())
 	}
 }

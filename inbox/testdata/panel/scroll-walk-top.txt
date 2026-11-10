@@ -1,0 +1,30 @@
+#669
+669.1  Which way?
+a) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor
+   sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit amet
+   consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur
+   adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed
+   do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem
+   ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit
+   amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur
+   adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed
+   do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem
+   ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit
+   amet consectetur adipiscing elit sed d
+b) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor
+   sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit amet
+   consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur
+   adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed
+   do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem
+   ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit
+↓ 16 more
+› a
+  b
+  c
+  Free text
+  Skip
+  Talk
+  View full
+  Back
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · esc back · ? help · ^u/^d scroll
+◆ 1 open · spec-s1

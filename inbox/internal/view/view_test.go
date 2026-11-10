@@ -1,12 +1,14 @@
 package view
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
+	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
@@ -52,6 +54,26 @@ func TestContextBlockBeforeQuestions(t *testing.T) {
 	bare := dec("570.1", "570", "s1", "2026-01-01T00:00:00+00:00", false)
 	if l := SessionLines([]inbox.Decision{bare}, sessions[:0], 80, at, false); l[0] != "#570" || l[1] != "asked by spec-s1 · gone · 1m" {
 		t.Fatalf("%q", l)
+	}
+}
+
+func TestPanelOptionsPrefixAndRecMark(t *testing.T) {
+	d := dec("7.1", "7", "s1", "2026-01-01T00:00:00+00:00", false)
+	d.Rec = "a"
+	d.Options = []inbox.Option{{Letter: "a", Text: strings.Repeat("x", 37)}, {Letter: "b", Text: "r"}}
+	var widths []int
+	same := func(k md.Key, text string) []string {
+		widths = append(widths, k.Width)
+		return []string{text}
+	}
+	got := PanelOptionLines(d, 40, same)
+	want := []string{"a) " + strings.Repeat("x", 37), "   ← rec", "b) r"}
+	if !slices.Equal(got, want) || !slices.Equal(widths, []int{37, 37}) {
+		t.Fatalf("%q at widths %v", got, widths)
+	}
+	d.Options[0].Text = "short"
+	if got := PanelOptionLines(d, 40, same); got[0] != "a) short  ← rec" {
+		t.Fatalf("%q", got)
 	}
 }
 

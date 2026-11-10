@@ -1,0 +1,30 @@
+↑ 22 more
+│ context line 19
+│ context line 20
+│ context line 21
+│ context line 22
+│ context line 23
+│ context line 24
+│ context line 25
+│ context line 26
+│ context line 27
+│ context line 28
+│ context line 29
+│ context line 30
+│ context line 31
+│ context line 32
+│ context line 33
+│ context line 34
+│ context line 35
+│ context line 36
+│ context line 37
+│ context line 38
+│ context line 39
+│ context line 40
+a) yes
+b) no
+› Answer
+  Talk
+  Back
+↑↓ · enter · t talk · esc back · ? help · ^u/^d scroll
+◆ 1 open · spec-s1

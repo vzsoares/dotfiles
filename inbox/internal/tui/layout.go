@@ -35,27 +35,24 @@ type walkFit struct {
 	menuH int
 	help  bool
 	cuts  []string
-	// scroll means body overflows and is shown through a window of rows.
+	// scroll means body overflows the pane and scrolls.
 	scroll bool
-	rows   int
 }
 
 // fitWalk cuts in CutOrder until the question, its options and the menu
 // fit; when the question and options alone overflow, everything (context
 // included) goes into a scrolling body so no option text is ever clipped.
-func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, items, footer, helpRows int) walkFit {
+func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, items, footer, helpRows int,
+	p view.Painter) walkFit {
 	head := view.WrapRest(b.Head(), width, "", "  ")
-	var text []string
-	if !pyfmt.Blank(b.Text) {
-		text = view.Wrap(b.Text, width, "  ")
-	}
+	text := view.PanelBriefText(b, width, p)
 	var asked []string
 	if b.AskedBy != "" {
 		asked = view.Wrap(b.AskedBy, width, "")
 	}
-	question := view.QuestionLines(d, width)
-	ctx := view.ContextLines(d, width)
-	opts := view.OptionLines(d, width)
+	question := view.PanelQuestionLines(d, width, p)
+	ctx := view.PanelContextLines(d, width, p)
+	opts := view.PanelOptionLines(d, width, p)
 	full := []int{items}
 	var paged []int
 	for h := items - 1; h >= 1; h-- {
@@ -98,9 +95,16 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, ite
 				help: st.help, cuts: append([]string(nil), CutOrder[:st.cuts]...)}
 		}
 	}
-	rows := max(height-footer-1, 1)
-	return walkFit{body: slices.Concat(question, ctx, opts), menuH: 1, cuts: append([]string(nil), CutOrder...),
-		scroll: true, rows: rows}
+	// The title stays pinned while the rest scrolls, when that leaves room.
+	top := slices.Concat(banner, head)
+	if height-footer-1-len(top) < 3 {
+		top = nil
+	}
+	// Leave the body three rows, its two more-markers and a footer row for
+	// the scroll hint.
+	menuH := max(min(items, height-footer-1-len(top)-5), 1)
+	return walkFit{top: top, body: slices.Concat(question, ctx, opts), menuH: menuH, help: true,
+		cuts: append([]string(nil), CutOrder...), scroll: true}
 }
 
 // fitText picks the first variant that fits above a full menu, else above a
@@ -160,7 +164,12 @@ var helps = map[screen]string{
 func footerLines(s screen, width int, scroll bool) []string {
 	keys := footers[s]
 	if scroll {
-		keys = append(append([]key(nil), keys...), key{"pgup/dn", "scroll"})
+		// ctrl+u/d edit text on the input screens, so only pgup/dn scroll there.
+		hint := key{"^u/^d", "scroll"}
+		if s == scFree || s == scTalkNote {
+			hint = key{"pgup/dn", "scroll"}
+		}
+		keys = append(append([]key(nil), keys...), hint)
 	}
 	parts := make([]string, len(keys))
 	for i, k := range keys {
@@ -174,13 +183,6 @@ func helpLines(s screen, width int) []string {
 		return nil
 	}
 	return view.Wrap(helps[s], width, "")
-}
-
-// window is the slice of n rows starting at off, clamped.
-func window(lines []string, off, n int) ([]string, int) {
-	off = max(min(off, len(lines)-n), 0)
-	end := min(off+n, len(lines))
-	return lines[off:end], off
 }
 
 // menuWindow renders n rows of items around the cursor.
