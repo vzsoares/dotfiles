@@ -739,10 +739,10 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = min(m.cursor+1, max(n-1, 0))
 		return m, nil
 	case "pgdown", "ctrl+f":
-		m.scroll += max(m.h/2, 1)
+		m.scroll += max(m.rows()/2, 1)
 		return m, nil
 	case "pgup", "ctrl+b":
-		m.scroll = max(m.scroll-max(m.h/2, 1), 0)
+		m.scroll = max(m.scroll-max(m.rows()/2, 1), 0)
 		return m, nil
 	case "?":
 		m.showHelp = !m.showHelp

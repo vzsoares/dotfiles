@@ -69,10 +69,9 @@ func (m *Model) View() string {
 		return ""
 	}
 	var secs []section
-	switch {
-	case m.busy != "":
+	if m.busy != "" {
 		secs = m.viewBusy()
-	default:
+	} else {
 		secs = m.viewScreen()
 	}
 	var out []string
@@ -141,11 +140,11 @@ func (m *Model) status() (string, lipgloss.Style) {
 		text := "» " + strings.ToLower(m.busy[:1]) + m.busy[1:]
 		return pyfmt.Clip(text, max(m.w-2, 0)) + " " + m.sp.View(), busyStyle
 	case len(m.snap.undelivered) > 0:
-		var names []string
-		for _, b := range m.snap.undelivered {
-			names = append(names, b.Decisions[0].SessionName)
+		name := m.snap.undelivered[0].Decisions[0].SessionName
+		if n := len(m.snap.undelivered) - 1; n > 0 {
+			name += " +" + strconv.Itoa(n)
 		}
-		return pyfmt.Clip("✕ delivery failed · "+strings.Join(names, ", ")+" · r retry", m.w), failStyle
+		return pyfmt.Clip("✕ delivery failed · "+name+" · r retry", m.w), failStyle
 	case !m.loaded:
 		return "○ loading…", footerStyle
 	case len(m.snap.open) == 0:
