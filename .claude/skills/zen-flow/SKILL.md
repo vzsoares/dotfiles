@@ -108,7 +108,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   gates as numbered decisions and lists Human Only work. It never waits on sessions,
   merges or releases. After an agent-manager restart it revives the orchestrator.
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
-  scope, required tests, settled decisions, out of scope, Human Only steps. Open
+  scope, required tests, expected load, settled decisions, out of scope, Human Only
+  steps. Open
   decisions go to chief as numbered questions. Its only board write is that page body.
   Ends with `SPEC_READY <id>`.
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
@@ -119,13 +120,14 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
   trailer), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
-  code under test, catch-all fallbacks, RLS/auth bypass).
+  code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
+  ponytail" coding rules, adopted from ponytail.
 
 The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
 orchestrator:
 
 - checks green was reported, one `/code-review` round ran, and the branch diff has no
-  banned way to get green
+  banned way to get green; each `shortcut:` marker in the diff becomes a To Do task
 - merges into `dev` in the repo's main checkout (`git merge --ff-only`; for a real
   merge, re-runs the repo's checks first), runs `zen-release --dev --yes --bump patch`,
   and marks the task Done (**done**) with the release tag in a note
