@@ -212,6 +212,54 @@ def test_vault_config(tmp_path: Path) -> None:
     assert sweep.vault_config(tmp_path / "nobody") == {}
 
 
+def _models(repo: Path) -> list[str]:
+    findings = sweep.sweep_repo(repo, live_dirs=set(), personal=True).findings
+    return sorted(f.detail for f in findings if f.kind == "branch-model")
+
+
+def test_branch_model_dev_or_prod_alone(tmp_path: Path) -> None:
+    assert _models(_init(tmp_path / "d", branch="dev")) == ["dev without prod"]
+    assert _models(_init(tmp_path / "p", branch="prod")) == ["prod without dev"]
+
+
+@pytest.mark.parametrize("old", ["main", "master"])
+def test_branch_model_leftover_single_branch(tmp_path: Path, old: str) -> None:
+    repo = _init(tmp_path / "r", branch="dev")
+    _git("branch", "prod", cwd=repo)
+    assert _models(repo) == []
+    _git("branch", old, cwd=repo)
+    assert _models(repo) == [f"leftover {old} beside dev+prod"]
+
+
+def test_branch_model_origin_head(remote_repo: Path) -> None:
+    _git("branch", "prod", cwd=remote_repo)
+    assert _models(remote_repo) == []
+    _git("remote", "set-head", "origin", "--delete", cwd=remote_repo)
+    assert _models(remote_repo)[0].startswith("origin/HEAD is unset, not origin/dev")
+    _git("push", "-q", "origin", "prod", cwd=remote_repo)
+    _git("remote", "set-head", "origin", "prod", cwd=remote_repo)
+    assert _models(remote_repo)[0].startswith("origin/HEAD is origin/prod")
+
+
+@pytest.mark.parametrize("single", ["main", "master"])
+def test_branch_model_single_branch_is_valid(tmp_path: Path, single: str) -> None:
+    repo = _init(tmp_path / "r", branch=single)
+    assert _models(repo) == []
+
+
+def test_branch_model_dev_prod_without_remote(tmp_path: Path) -> None:
+    repo = _init(tmp_path / "r", branch="dev")
+    _git("branch", "prod", cwd=repo)
+    assert _models(repo) == []
+
+
+def test_branch_model_only_for_personal_repos(tmp_path: Path) -> None:
+    work = _init(tmp_path / "work" / "api", branch="dev")
+    mine = _init(tmp_path / "personal" / "core", branch="dev")
+    result = sweep.run_sweep([work, mine], set(), tmp_path / "personal")
+    assert [(f.repo, f.kind) for f in result.findings] == [(str(mine), "branch-model")]
+
+
 def test_run_sweep_notes_missing_agent_manager(tmp_path: Path) -> None:
     repo = _init(tmp_path / "r")
     result = sweep.run_sweep([repo], None)

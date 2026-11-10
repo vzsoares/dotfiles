@@ -175,17 +175,6 @@ def test_lands_releases_and_cleans_up(setup: Setup) -> None:
     assert not merge.state_path("task").exists()
 
 
-def test_no_dev_branch_skips_release(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    s = _make(tmp_path, monkeypatch, base="master")
-    state = merge.land("task", "dev")
-    assert (state.base, state.tag, state.release) == ("master", "push pending", False)
-    assert s.fake.releases == 0
-    assert s.fake.boards[0][1].startswith("push pending · ")
-    assert (s.main / "b.txt").exists()
-
-
 def test_dry_run_changes_nothing(setup: Setup, monkeypatch: pytest.MonkeyPatch) -> None:
     head = _git("rev-parse", "HEAD", cwd=setup.main)
     monkeypatch.setattr(merge, "DRY_RUN", True)
@@ -272,14 +261,57 @@ def test_name_prefers_live_session(setup: Setup) -> None:
     assert state.session_id == "s1"
 
 
-def test_refuses_prod_and_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _make(tmp_path, monkeypatch, base="main")
-    with pytest.raises(merge.Stop) as exc:
-        merge.land("task", "main")
-    assert exc.value.code == merge.EXIT_REFUSED
+@pytest.mark.parametrize("single", ["master", "main"])
+def test_single_branch_lands_without_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, single: str
+) -> None:
+    s = _make(tmp_path, monkeypatch, base=single)
+    state = merge.land("task", "dev")
+    assert (state.base, state.tag, state.release) == (single, "push pending", False)
+    assert s.fake.releases == 0
+    assert s.fake.boards[0][1].startswith("push pending · ")
+    assert (s.main / "b.txt").exists()
+
+
+@pytest.mark.parametrize("on", ["prod", "feature"])
+def test_no_dev_and_other_checkout_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, on: str
+) -> None:
+    s = _make(tmp_path, monkeypatch, base=on)
+    head = _git("rev-parse", "HEAD", cwd=s.main)
     with pytest.raises(merge.Stop) as exc:
         merge.land("task", "dev")
     assert exc.value.code == merge.EXIT_REFUSED
+    assert repr(on) in str(exc.value) and "Branch model" in str(exc.value)
+    assert _git("rev-parse", "HEAD", cwd=s.main) == head
+    assert s.worktree.exists()
+    assert s.fake.releases == 0
+
+
+def test_base_prod_refused(setup: Setup) -> None:
+    _git("branch", "prod", cwd=setup.main)
+    with pytest.raises(merge.Stop) as exc:
+        merge.land("task", "prod")
+    assert exc.value.code == merge.EXIT_REFUSED
+    assert "b.txt" not in _git("ls-tree", "--name-only", "prod", cwd=setup.main)
+
+
+def test_explicit_non_dev_base_never_releases(setup: Setup) -> None:
+    _git("branch", "staging", cwd=setup.main)
+    _git("checkout", "-q", "staging", cwd=setup.main)
+    state = merge.land("task", "staging")
+    assert (state.tag, setup.fake.releases) == ("push pending", 0)
+
+
+def test_single_branch_saved_target_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _make(tmp_path, monkeypatch, base="main")
+    common = _git("rev-parse", "--git-common-dir", cwd=s.main).strip()
+    (s.main / common / "zen-release.json").write_text(
+        json.dumps({"branches": {"source": "dev", "target": "main"}})
+    )
+    assert _code() == merge.EXIT_REFUSED
 
 
 def test_refuses_release_target(setup: Setup) -> None:

@@ -27,7 +27,9 @@ Re-run `setup` to heal it.
 
 **Per-repo** — `.git/zen-release.json`, **uncommitted** (sits next to the state
 file). *What this repo wants done.* Created on first run: asks for source/target
-branches, then a gum checklist of the optional phases (pre-checked by detection).
+branches (pre-filled `dev`/`prod` when both exist, else empty; a headless run with
+no saved config uses the same defaults unless `--source`/`--target` is given), then
+a gum checklist of the optional phases (pre-checked by detection).
 
 ### Branch resolution — the merge chain
 
@@ -88,10 +90,25 @@ hooks → secret_scan → branch+version → merge → write_version → changel
 - **Core / always run:** merge, write_version, tag, push, rebase_source — gated by `no_merge`.
   `merge` walks every leg of the chain; `rebase_source` syncs them back down.
 - **Dev mode** (`--dev`): bump to `-dev.N`, tag + push the current branch only.
-  Stateless (no resume), since each step is idempotent.
+  Stateless (no resume), since each step is idempotent. Refused (exit 1, no tag,
+  no push) on `prod`, `main`, `master` and the saved target branch.
 - **Headless** (`--yes --bump <level>`): no gum prompts — confirms auto-accept,
   secret findings **abort**, no changelog editor. `--source`/`--target` override
   the saved branch config (else the chain is built from where you stand).
+
+## Branch models
+
+Repos follow one of two models (zen-flow skill, Branch model section):
+
+- **dev + prod**: workers land on `dev` and `zen-merge` cuts a `--dev` release
+  there; `prod` moves only through a full release (`dev → prod`).
+- **single-branch** (`main` or `master` only): `zen-merge` lands locally with no
+  release and reports `push pending`.
+
+Every push, tag, release or deploy on `prod`/`main`/`master` needs the user's
+approval for that one action, filed as a `zen-inbox ask`. The scripts do not check
+the approval; the guards above only stop `--dev` and `zen-merge` from touching
+prod branches. `zen-sweep` reports `branch-model` drift in personal repos.
 
 ## State & resume
 

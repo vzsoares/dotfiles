@@ -30,6 +30,7 @@
 #      --restart       Discard saved state and start over.
 #      --dry-run       Echo mutating commands instead of running them.
 #      --dev           Dev release: bump to -dev.N, tag + push current branch.
+#                      Refused on prod, main, master and the saved target.
 #      --no-scan       Skip the gitleaks secret scan.
 #      --no-changelog  Skip changelog generation.
 #      --amend-changelog  Fold the changelog into the version-bump commit.
@@ -51,8 +52,9 @@
 #      Required tools (git, gum) must be present or `setup` refuses to save.
 #
 #      On its first run in a repo it asks (once) for the source/target branches
-#      and which optional phases to enable, saving them to a per-repo config so
-#      later runs don't re-ask. Change those answers later with --reconfigure.
+#      (pre-filled dev -> prod when both exist) and which optional phases to
+#      enable, saving them to a per-repo config so later runs don't re-ask.
+#      Change those answers later with --reconfigure.
 #
 #      The branch you're on is the source: running from a feature branch merges
 #      it into the configured target. Only when you're already on the target is
@@ -191,6 +193,7 @@ TOOL_BY_NAME: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
 CONFIG_SCHEMA = 1
 STATE_SCHEMA = 1
 REPO_SCHEMA = 1
+PROD_BRANCHES = ("prod", "main", "master")
 
 # Optional phases a repo can toggle on/off in its per-repo config. Core phases
 # (merge, write_version, tag, push, rebase_source) always run, gated by no_merge.
@@ -559,19 +562,33 @@ def detected_phase_defaults(state: State, config: Config) -> dict[str, bool]:
     }
 
 
+def local_branch_exists(name: str) -> bool:
+    return git("rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0
+
+
+def default_branches() -> tuple[str, str]:
+    """(source, target) for a first run: dev -> prod when both exist, else empty."""
+    if local_branch_exists("dev") and local_branch_exists("prod"):
+        return "dev", "prod"
+    return "", ""
+
+
 def create_repo_config(state: State, config: Config) -> RepoConfig:
     """First-run interactive setup for this repo (branches + phase toggles)."""
     banner("First run — configure this repo")
 
-    # Empty defaults — you type the branches. Empty source = no merge; the
-    # target branch is always asked so it can be set even without a source.
+    # Empty source = no merge; the target is always asked so it can be set
+    # even without a source.
+    default_source, default_target = default_branches()
     source = gum_input(
         "Source branch to merge FROM (empty = no merge)",
         placeholder="e.g. develop",
+        value=default_source,
     )
     target = gum_input(
         "Target branch to release ON" + (" / merge INTO" if source else ""),
         placeholder="e.g. master",
+        value=default_target,
     )
 
     defaults = detected_phase_defaults(state, config)
@@ -595,11 +612,13 @@ def headless_repo_config(
 ) -> RepoConfig:
     """Ephemeral repo config for a headless run with no saved one (not persisted).
 
-    Branches come from --source/--target; an empty source means the branch you're
-    on is used (the current branch is merged into the target, or released directly
-    when you're already on it). Phases default to detection. Run interactively once
-    to persist real choices.
+    Branches come from --source/--target, else dev -> prod when both exist; an
+    empty source means the branch you're on is used (the current branch is merged
+    into the target, or released directly when you're already on it). Phases
+    default to detection. Run interactively once to persist real choices.
     """
+    if not source and not target:
+        source, target = default_branches()
     defaults = detected_phase_defaults(state, config)
     info("No repo config — using detection defaults (run interactively once to save).")
     return RepoConfig(
@@ -1407,12 +1426,11 @@ def phase_publish(state: State) -> None:
             result = run(["npm", "publish"], title="npm publish...")
             if result.returncode == 0:
                 state.published = f"npm: {name}@{state.version}"
-    elif state.project_type == "python":
-        if gum_confirm("uv build && uv publish?"):
-            run(["uv", "build"], title="uv build...")
-            result = run(["uv", "publish"], title="uv publish...")
-            if result.returncode == 0:
-                state.published = f"pypi: {name} {state.version}"
+    elif state.project_type == "python" and gum_confirm("uv build && uv publish?"):
+        run(["uv", "build"], title="uv build...")
+        result = run(["uv", "publish"], title="uv publish...")
+        if result.returncode == 0:
+            state.published = f"pypi: {name} {state.version}"
 
 
 def phase_github_release(state: State) -> None:
@@ -1699,6 +1717,7 @@ def do_release(
 def do_dev_release(dry_run: bool, yes: bool = False, bump: str = "") -> None:
     """Lightweight dev release: tag a -dev.N version on the current branch.
 
+    Refused on prod, main, master and the saved release target.
     No merge, changelog, publish, GitHub release, or hook/scan gates — just bump
     the version files, tag, and push the current branch (parity with the old
     release-dev.sh). **Stateless**: no resume/state file. Dev runs are short and
@@ -1713,6 +1732,14 @@ def do_dev_release(dry_run: bool, yes: bool = False, bump: str = "") -> None:
     preflight(resume=False, restart=False, title="Dev Release")
 
     current = git("branch", "--show-current").stdout.strip()
+    saved = load_repo_config()
+    guarded = {*PROD_BRANCHES, saved.target_branch if saved else ""} - {""}
+    if current in guarded:
+        fail(
+            f"Refusing a dev release on {current!r}: it is a prod branch. "
+            "Run a full release once the user approves it."
+        )
+        raise typer.Exit(1)
     state = State(dev=True, no_merge=True, target_branch=current)
     info(f"Branch: {current}")
 

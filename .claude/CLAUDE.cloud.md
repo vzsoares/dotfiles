@@ -47,7 +47,9 @@ and must work on the first try:
 
 `zen-commit` / `zen-release` are not available in the cloud. Use Conventional
 Commits by hand (`feat:`, `fix:`, `chore:` …), scan the diff for secrets before
-committing, and never create release tags from a cloud session.
+committing, and never create release tags from a cloud session. A push, tag,
+release or deploy that targets `prod`, `main` or `master` needs my approval for that
+one action; the cloud has no `zen-inbox`, so ask me in chat and wait for it.
 
 # Task workflow — `/zen-flow`
 

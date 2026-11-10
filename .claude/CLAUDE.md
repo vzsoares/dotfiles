@@ -56,10 +56,14 @@ hand-rolling commits / releases.
 Both are gum-driven; without the headless flags they prompt, so run those forms
 in a real terminal.
 
-**Prod is mine alone.** Never run a prod release or deploy (`zen-release` without
-`--dev`, `STAGE=prod just deploy`, pipelines, tags on `prod`/`main`) and never merge
-into a prod branch. Handing me prod commands to run myself is fine. Dev releases
-(`zen-release --dev --yes --bump patch`) and dev deploys are fine when I ask.
+**Prod needs my approval, every time.** A push, tag, release or deploy that
+targets `prod`, `main` or `master` (`zen-release` without `--dev`,
+`STAGE=prod just deploy`, pipelines, `git push` of those branches) is first filed as
+`zen-inbox ask <task> -q "<action> <repo> <branch>@<sha>?" -o "Approve" -o "Hold" --rec a`.
+It runs only after "Approve", once per action; no standing permission. Workers never
+run one; the orchestrator or chief may after an approved ask. Never ff-merge a
+worker branch into `prod`. Handing me prod commands to run myself is fine. Dev
+releases (`zen-release --dev --yes --bump patch`) and dev deploys are fine when I ask.
 
 # Task workflow — `/zen-flow` (always use)
 

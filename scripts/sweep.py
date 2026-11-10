@@ -33,6 +33,9 @@
 #        orphan-branch   am/* branch with no worktree
 #        orphan-worktree linked worktree with no live agent-manager session
 #        merged          branch already merged into its base (dev, else main/master)
+#        branch-model    personal repos only: dev without prod (or the reverse),
+#                        a main/master left beside dev+prod, or a dev+prod
+#                        origin/HEAD that is not dev. main/master-only is valid.
 #      A linked worktree with a live session (lib/sessions.py is_live) is a
 #      running worker: it and its branch yield no findings and are listed once
 #      as a `live worker: <path> (<branch>)` note. The main checkout is always
@@ -185,20 +188,44 @@ def worktrees(repo: Path) -> list[Worktree]:
     return out
 
 
+def has_branch(repo: Path, name: str) -> bool:
+    return (
+        git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode
+        == 0
+    )
+
+
 def base_branch(repo: Path) -> str:
-    for name in ("dev", "main", "master"):
-        if (
-            git(
-                repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"
-            ).returncode
-            == 0
-        ):
-            return name
-    return ""
+    return next((n for n in ("dev", "main", "master") if has_branch(repo, n)), "")
 
 
-def sweep_repo(repo: Path, live_dirs: set[str] | None) -> Sweep:
-    """Findings for one repo. live_dirs=None skips the session check."""
+def branch_model(repo: Path) -> list[str]:
+    """Drift from the dev+prod model; a main/master-only repo is valid."""
+    dev, prod = has_branch(repo, "dev"), has_branch(repo, "prod")
+    if dev != prod:
+        return ["dev without prod" if dev else "prod without dev"]
+    if not dev:
+        return []
+    problems = [
+        f"leftover {name} beside dev+prod"
+        for name in ("main", "master")
+        if has_branch(repo, name)
+    ]
+    if "origin" in git(repo, "remote").stdout.split():
+        head = git(
+            repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"
+        ).stdout.strip()
+        if head != "origin/dev":
+            problems.append(
+                f"origin/HEAD is {head or 'unset'}, not origin/dev"
+                " (git remote set-head origin -a after changing it)"
+            )
+    return problems
+
+
+def sweep_repo(repo: Path, live_dirs: set[str] | None, personal: bool = False) -> Sweep:
+    """Findings for one repo. live_dirs=None skips the session check; only a
+    personal repo gets the branch-model check."""
     name = str(repo)
     result = Sweep()
     found = result.findings
@@ -255,6 +282,9 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None) -> Sweep:
             ):
                 found.append(Finding(name, "merged", f"{branch} (into {base})"))
 
+    if personal:
+        found += [Finding(name, "branch-model", p) for p in branch_model(repo)]
+
     stashes = git(repo, "stash", "list").stdout.splitlines()
     if stashes:
         found.append(
@@ -278,14 +308,18 @@ def live_session_dirs() -> set[str] | None:
     }
 
 
-def run_sweep(repos: list[Path], live_dirs: set[str] | None) -> Sweep:
+def run_sweep(
+    repos: list[Path], live_dirs: set[str] | None, personal_root: Path | None = None
+) -> Sweep:
     result = Sweep()
+    root = personal_root.resolve() if personal_root else None
     if live_dirs is None:
         result.notes.append(
             "agent-manager unavailable: live-worker and orphan-worktree checks skipped"
         )
     for repo in repos:
-        swept = sweep_repo(repo, live_dirs)
+        personal = root is not None and repo.resolve().is_relative_to(root)
+        swept = sweep_repo(repo, live_dirs, personal)
         result.findings += swept.findings
         result.notes += swept.notes
     return result
@@ -302,8 +336,9 @@ app = typer.Typer(add_completion=False, help=__doc__)
 def main(as_json: bool = typer.Option(False, "--json", help="JSON output.")) -> None:
     """Report loose ends across every repo; exit 1 on findings. Never changes anything."""
     home = Path.home()
-    repos = collect_repos(vault_config(home), home / "code" / "personal")
-    result = run_sweep(repos, live_session_dirs())
+    personal = home / "code" / "personal"
+    repos = collect_repos(vault_config(home), personal)
+    result = run_sweep(repos, live_session_dirs(), personal)
     if as_json:
         print(
             json.dumps(

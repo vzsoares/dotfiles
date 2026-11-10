@@ -52,8 +52,8 @@ Never write project names or Notion IDs into this file or any other public repo 
 
 ### Tags (labels)
 
-- `Human Only` — a step only the user can do (deploys, visual review, messages to
-  colleagues, CMS edits, pushes of the public dotfiles). When a session leaves such steps
+- `Human Only` — a step only the user can do (visual review, messages to
+  colleagues, CMS edits, GitHub settings). When a session leaves such steps
   behind, create one task per step with this tag so the board says what to do next.
   One task with a checklist is fine when the steps share a kind or a release (device
   checks, a prod rollout); append new items to an open checklist task instead of
@@ -108,6 +108,11 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
 - `🗑️ Won't Do`, deleting, or editing a task's title/body: ask first. Exception: a
   spec-writer writes its spec into the body of the task it was spawned for (its only
   board write).
+- Prod actions: a push, tag, release or deploy that targets `prod`, `main` or
+  `master` is filed as `zen-inbox ask <task> -q "<action> <repo> <branch>@<sha>?"
+  -o "Approve" -o "Hold" --rec a` and runs only after "Approve", once per action, in
+  every repo (Approva included). Workers never run one; chief or the orchestrator
+  may after an approved ask. Never ff-merge a worker branch into `prod`.
 
 ## Linking tasks to code
 
@@ -135,7 +140,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
   decisions (see Decision inbox), keeps the `decisions` watcher running, records answers
   the user gives in chat with `zen-inbox answer`, and lists Human Only work. It never
-  waits on sessions, merges or releases. After an agent-manager restart it revives the
+  waits on sessions, merges or cuts dev releases; a prod action it runs only after an
+  approved ask (Write permissions). After an agent-manager restart it revives the
   orchestrator and the watcher. At its first start each ISO week it runs the telemetry
   review (see Telemetry).
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
@@ -149,7 +155,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   relaunch on Opus on the same branch; anything else becomes a gate in the inbox
   (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
-  trailer), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
+  trailer), never pushes or releases (a prod push it needs goes in its final
+  message), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
   code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
   ponytail" coding rules, adopted from ponytail.
@@ -163,14 +170,16 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
   stops; 0 done marker, 10 escalation, 11 idle, 20 dead, 124 timeout.
 - `zen-gate [--base dev]` (worker, before `WORKER_DONE`): banned ways to get green
   in the branch diff; exceptions in `.zen-gate-allow`.
-- `zen-merge <session>` (orchestrator, on exit 0): gate, ff-merge, dev release,
+- `zen-merge <session>` (orchestrator, on exit 0): gate, ff-merge, dev release
+  (base `dev` only; a single-branch repo lands locally as `push pending`),
   archive, worktree and branch cleanup, then marks the task Done via `zen-board`
   with the tag and shas in a note (`--phase N/M` on a non-final phase only appends
   the note and leaves the task open; `--task <id>` overrides the recovered ID);
-  2 gate, 3 not ff, 4 dirty, 5 release, 7 board.
+  2 gate, 3 not ff, 4 dirty, 5 release, 6 refused (see Branch model), 7 board.
 - `zen-board` (everyone): the routine board ops above, over REST.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
-  trees, unpushed work, stashes, orphan branches and worktrees.
+  trees, unpushed work, stashes, orphan branches and worktrees, and `branch-model`
+  drift in personal repos.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
 - `zen-telemetry` (hook on every agent tool call; chief weekly): see Telemetry.
 
@@ -212,20 +221,23 @@ The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then 
 orchestrator:
 
 - checks green was reported and one `/code-review` round ran, then runs `zen-merge`:
-  `zen-gate` on the branch diff, `git merge --ff-only` into `dev` in the repo's main
-  checkout, `zen-release --dev --yes --bump patch`, then cleanup (below); each
+  `zen-gate` on the branch diff, `git merge --ff-only` into the base (`dev`, or the
+  single branch) in the repo's main checkout, `zen-release --dev --yes --bump patch`
+  on `dev` only, then cleanup (below); each
   shortcut follow-up it prints becomes a To Do task
 - leaves **done** to `zen-merge`'s board phase (tag and shas in the note); on
   exit 7 it reruns `zen-merge` or marks it Done via MCP, and on `board skipped`
   (no `Task:` trailer) it marks it Done itself
-- files open review findings as To Do tasks, and device, prod, data or
+- files open review findings as To Do tasks, and device, data, remote-settings or
   messages-to-people steps as Human Only tasks
 - leaves cleanup to `zen-merge`: archive the session, `git worktree remove <path>`,
   `git branch -d <branch>` (`-D` once `git merge-base --is-ancestor <branch> dev`
   confirms it); then sends chief one line
 
-Repos without `dev` (dotfiles on master): the orchestrator merges locally and leaves
-the push to the user. Prod merges, prod releases and deploys stay the user's.
+Single-branch repos (`main` or `master` only, such as dotfiles): `zen-merge` lands
+locally and reports `push pending`; the orchestrator files the push as a prod-action
+ask (Write permissions) and pushes only after "Approve". Prod releases and deploys of
+dev+prod repos go through the same ask.
 
 Start chief from any shell; check `agent-manager sessions` first so only one runs:
 
@@ -251,4 +263,48 @@ Each batch of work on a dev branch ends the same way, in every repo touched
    2026-10-14).
 3. Board: **done** (or a status note) on the task, with the release tag in the note.
 
-Prod releases and deploys are never run here — the user does them (`~/.claude/CLAUDE.md`).
+Single-branch repos skip step 2: `zen-release --dev` refuses `prod`, `main`,
+`master` and the saved release target. Prod releases and deploys are not part of
+this routine; each one needs an approved prod-action ask (`~/.claude/CLAUDE.md`).
+
+## Branch model
+
+Two models; the tooling detects which one a repo uses from its local branches.
+
+- **dev + prod**: agents land and dev-release on `dev`; `prod` is reached only by a
+  prod release (`zen-release`, `.git/zen-release.json` branches `dev → prod`).
+  `zen-merge` picks this model when the repo has a `dev` branch.
+- **single-branch** (`main` or `master` only): agents land on that branch locally,
+  never cut a dev release, and the push waits for an approved ask. `zen-merge` picks
+  this model when there is no `dev` and the main checkout is on `main` or `master`.
+
+Anything else (no `dev`, checkout on another branch) is refused with exit 6;
+`zen-merge` never creates a `dev`. Landing on `prod` or the saved release target is
+always refused. `zen-release` pre-fills `dev → prod` on a first run when both exist.
+`zen-sweep` reports `branch-model` drift in personal repos only: `dev` without
+`prod` (or the reverse), a `main`/`master` left beside dev+prod, or a dev+prod repo
+whose `origin/HEAD` is not `dev`.
+
+| Repo | Model | Default branch |
+| --- | --- | --- |
+| core | dev+prod | dev |
+| moranduba | dev+prod | dev |
+| labinfra | dev+prod | dev |
+| me | dev+prod | dev |
+| dotfiles | single `master` | master (raw URLs and clones depend on it) |
+| valt | single `main` | main (never a worker target, never released) |
+| Approva repos | unchanged; approva-node is single `master` | unchanged |
+
+Moving a repo to dev+prod, in its main checkout with a clean tree (local steps):
+
+1. Keep the released history as `prod`: `git branch -m main prod` (or `master`).
+   Never cut `prod` from `dev`.
+2. Create `dev` if missing: `git branch dev prod`, then `git switch dev`.
+3. Delete a leftover `main`/`master` already merged into `prod`: `git branch -d main`.
+4. Write `.git/zen-release.json` with `"branches": {"source": "dev", "target":
+   "prod"}` (or run `zen-release --reconfigure` and accept the defaults).
+
+Remote steps are prod actions or Human Only: pushing `dev` and `prod` goes through an
+approved ask; the GitHub default branch (`dev`) and branch protection on `prod` are
+Human Only. After the default branch changes, `git remote set-head origin -a`
+refreshes the local `origin/HEAD` that `zen-sweep` checks.

@@ -25,8 +25,9 @@
 #
 #  OPTIONS
 #      --base BRANCH  Branch to land on. Default dev; a repo without `dev`
-#                     lands on its main checkout's branch. Without
-#                     a `dev` branch no base is released.
+#                     lands on its main checkout's branch when that is main
+#                     or master (no release, "push pending"), else exit 6.
+#                     Only base dev is released.
 #      --phase N/M    The merge is phase N of M of a phased task. A non-final
 #                     phase appends a note and leaves the task open; only
 #                     N == M (or no flag) marks it Done.
@@ -52,8 +53,8 @@
 #                (a branch merged by hand), else the saved shas still on the
 #                branch, else the branch tip.
 #
-#      Never merges into, or releases from, prod, main or the zen-release
-#      target branch.
+#      Never merges into, or releases from, prod or the zen-release target
+#      branch.
 #
 #  EXIT CODES
 #      0 landed   2 gate hit   3 not fast-forward   4 dirty tree / wrong branch
@@ -90,7 +91,8 @@ EXIT_RELEASE = 5
 EXIT_REFUSED = 6
 EXIT_BOARD = 7
 
-PROTECTED = ("prod", "main")
+PROTECTED = ("prod",)
+SINGLE_BRANCH = ("main", "master")
 PUSH_PENDING = "push pending"
 BOARD = Path(__file__).resolve().parent / "board.py"
 
@@ -333,15 +335,25 @@ def phase_resolve(state: State, base: str) -> None:
             EXIT_ERROR, f"{worktree} is the main checkout, not a worker worktree"
         )
 
+    guarded = protected_branches(state.main)
+    if base in guarded:
+        raise Stop(EXIT_REFUSED, f"refusing to land on protected branch {base!r}")
     if branch_exists(state.main, base):
-        state.base, state.release = base, branch_exists(state.main, "dev")
+        state.base = base
     elif base == "dev":
-        state.base, state.release = current_branch(state.main), False
+        on = current_branch(state.main)
+        if on not in SINGLE_BRANCH:
+            raise Stop(
+                EXIT_REFUSED,
+                f"no dev branch and the main checkout is on {on!r},"
+                " not main/master; see Branch model in the zen-flow skill",
+            )
+        state.base = on
     else:
         raise Stop(EXIT_ERROR, f"no branch {base!r} in {state.main}")
+    state.release = state.base == "dev"
 
-    guarded = protected_branches(state.main)
-    if state.base in guarded or not state.base:
+    if state.base in guarded:
         raise Stop(EXIT_REFUSED, f"refusing to land on protected branch {state.base!r}")
     if state.branch in guarded or state.branch == state.base:
         raise Stop(EXIT_REFUSED, f"refusing to merge branch {state.branch!r}")

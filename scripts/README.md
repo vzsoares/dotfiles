@@ -14,12 +14,12 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | Script | Command | What it does |
 |---|---|---|
 | `commit.py` | `zen-commit` | Conventional-Commit helper: stage → secret-scan → AI message (claude haiku) → commit. |
-| `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. |
+| `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. `--dev` refuses prod/main/master and the saved target. |
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note. |
-| `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes and orphan branches/worktrees. |
+| `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees and `branch-model` drift. |
 | `../inbox/` (Go) | `zen-inbox` | Decision inbox: agents `ask`, a Bubble Tea watcher answers by pick, free text or talk; batched delivery. See `inbox/README.md`. |
 | `telemetry/` (Go) | `zen-telemetry` | Hook that logs every agent tool call to `zen-flow.db`; weekly time-sink report for chief. |
 | `pgp.py` | `zen-pgp` | gum-driven `gpg` encrypt/decrypt helper (symmetric or to a recipient key). |
@@ -56,7 +56,7 @@ plaintext `.env` to `.env.gpg` does not get past it.
 ```
 zen-release setup          # run once per repo: detect tools, configure branches/phases
 zen-release                # full release
-zen-release --dev          # quick dev (-dev.N) release on current branch
+zen-release --dev          # quick dev (-dev.N) release on current branch; refused on prod/main/master/target
 zen-release --resume        # continue a release interrupted mid-run
 zen-release --yes --bump <patch|minor|major>   # headless
 ```
@@ -68,7 +68,8 @@ configured source → the target (e.g. `feature/x → develop → master`). On a
 feature branch it merges up through the source; on the target with no source it
 releases in place (no merge, no checkout). `--source`/`--target` override the
 saved config for one run. See `docs/wiki/architecture/release-tooling.md` for the
-full design, `BACKLOG.md` for future work.
+full design, `BACKLOG.md` for future work. A first run pre-fills source `dev`,
+target `prod` when both branches exist (also headless with no saved config).
 
 ### Agent orchestration (zen-await, zen-gate, zen-merge, zen-sweep)
 
@@ -97,9 +98,9 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 - **zen-gate** scans only added lines (docs skipped). `shortcut:` markers print as
   follow-ups, not failures. `.zen-gate-allow` takes `<path glob> [rule]` per line.
 - **zen-merge** keeps state in `~/.local/state/zen-merge/<session>.json`; rerun to
-  resume. A repo without `dev` lands on its main checkout's branch and reports
-  "push pending"; without `dev` it never releases, even with `--base`.
-  It refuses prod, main and the zen-release target branch.
+  resume. A repo without `dev` whose main checkout is on `main` or `master` lands
+  there and reports "push pending"; any other checkout exits 6. Only base `dev` is
+  released. It refuses (exit 6) prod and the zen-release target branch.
   Its last phase runs `zen-board done <task> --note "<tag> · <shas>"` from the
   branch's `Task:` trailer, or the base reflog's `merge <branch>:` range once merged
   by hand, or `--task` (skipped without an ID); exit 7 = that step failed.
@@ -109,6 +110,9 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   `~/code/personal/*`, and every worktree of each. A linked worktree with a live
   session is skipped and noted as `live worker: <path> (<branch>)`; the main checkout
   is always checked. Session parsing is shared in `scripts/lib/sessions.py`.
+  Repos under `~/code/personal` also get `branch-model`: `dev` without `prod` (or
+  the reverse), a `main`/`master` beside dev+prod, or a dev+prod `origin/HEAD`
+  other than `dev`. Single-branch repos are valid.
 
 ### zen-inbox
 ```

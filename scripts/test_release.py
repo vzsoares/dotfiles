@@ -19,6 +19,7 @@ import importlib.util
 import subprocess
 import sys
 from pathlib import Path
+from typing import Self
 
 import pytest
 import typer
@@ -78,7 +79,7 @@ def xdg_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def offline_gum(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
+def offline_gum(monkeypatch: pytest.MonkeyPatch):
     """Silence gum styling and replace `run` with a plain (no gum-spin) runner."""
     monkeypatch.setattr(release, "gum_style", lambda *a, **k: None)
 
@@ -185,11 +186,11 @@ def test_probe_tool_present() -> None:
     assert "git" in status.version.lower()
 
 
-def _enabled(name: str):  # noqa: ANN202 — release.ToolStatus, dynamically imported
+def _enabled(name: str):
     return release.ToolStatus(enabled=True, path=f"/bin/{name}", version="v1")
 
 
-def _disabled():  # noqa: ANN202 — release.ToolStatus, dynamically imported
+def _disabled():
     return release.ToolStatus(enabled=False, path="", version="")
 
 
@@ -389,7 +390,7 @@ def test_already_published_python(
     class _Resp:
         status = 200
 
-        def __enter__(self) -> _Resp:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *_a: object) -> None:
@@ -546,7 +547,7 @@ def test_render_changelog_groups() -> None:
     assert "- random commit" in out
 
 
-def _empty_config():  # noqa: ANN202 — release.Config, dynamically imported
+def _empty_config():
     return release.Config(schema=release.CONFIG_SCHEMA, created_at=0.0, tools={})
 
 
@@ -555,7 +556,9 @@ def test_changelog_amend_folds_into_bump_commit(
 ) -> None:
     """--amend-changelog puts CHANGELOG.md in the bump commit, no separate commit."""
     (git_repo / "package.json").write_text('{"name": "x", "version": "1.0.0"}\n')
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)  # don't edit
+    monkeypatch.setattr(
+        release, "gum_confirm", lambda prompt, default=True: False
+    )  # don't edit
     state = release.State(version="1.1.0", no_merge=True, target_branch="main")
     release.phase_write_version(state)  # makes the "chore: bump version to 1.1.0"
     bump_commit = _git("rev-parse", "HEAD").strip()
@@ -740,9 +743,7 @@ def test_apply_branches_on_target_uses_configured_source(
     assert state.target_branch == "main"
 
 
-def test_apply_branches_cli_overrides_config(
-    git_repo: Path, offline_gum: None
-) -> None:
+def test_apply_branches_cli_overrides_config(git_repo: Path, offline_gum: None) -> None:
     """--source/--target override the saved repo config for a single run."""
     _git("branch", "prod")
     _git("checkout", "-q", "-b", "feature/xyz")
@@ -769,9 +770,7 @@ def test_apply_branches_cli_source_still_chains_from_current(
         schema=1, source_branch="", target_branch="main", phases={}
     )
     state = release.State()
-    release.apply_branches_from_repo(
-        state, cfg, cli_source="dev", cli_target="prod"
-    )
+    release.apply_branches_from_repo(state, cfg, cli_source="dev", cli_target="prod")
     assert state.branches == ["feature/xyz", "dev", "prod"]
     assert state.source_branch == "dev"
     assert state.target_branch == "prod"
@@ -931,8 +930,73 @@ def test_headless_dev_release(
 ) -> None:
     write_config()
     _add_bare_remote(git_repo)
+    _git("switch", "-q", "-c", "dev")
     release.do_dev_release(dry_run=False, yes=True, bump="patch")
     assert "v0.0.1-dev.1" in _git("tag").split()
+
+
+@pytest.mark.parametrize("branch", ["prod", "main", "master", "release"])
+def test_dev_release_refused_on_prod_branches(
+    git_repo: Path,
+    xdg_home: Path,
+    offline_gum: None,
+    monkeypatch: pytest.MonkeyPatch,
+    branch: str,
+) -> None:
+    write_config()
+    write_repo_config(source="dev", target="release")
+    _add_bare_remote(git_repo)
+    if branch != "main":
+        _git("switch", "-q", "-c", branch)
+    head = _git("rev-parse", "HEAD")
+    cmds: list[list[str]] = []
+    monkeypatch.setattr(release, "run", lambda cmd, *, title="": cmds.append(cmd))
+    messages: list[str] = []
+    monkeypatch.setattr(release, "fail", messages.append)
+
+    with pytest.raises(typer.Exit):
+        release.do_dev_release(dry_run=False, yes=True, bump="patch")
+
+    assert cmds == []
+    assert _git("tag") == ""
+    assert _git("rev-parse", "HEAD") == head
+    assert any(repr(branch) in m for m in messages)
+
+
+@pytest.mark.parametrize(
+    ("branches", "expected"),
+    [(("dev", "prod"), ("dev", "prod")), (("dev",), ("", "")), ((), ("", ""))],
+)
+def test_first_run_branch_defaults(
+    git_repo: Path,
+    xdg_home: Path,
+    offline_gum: None,
+    monkeypatch: pytest.MonkeyPatch,
+    branches: tuple[str, ...],
+    expected: tuple[str, str],
+) -> None:
+    for name in branches:
+        _git("branch", name)
+    write_config()
+    config = release.load_config()
+    assert config is not None
+
+    values: list[str] = []
+
+    def fake_input(header: str, placeholder: str = "", value: str = "") -> str:
+        values.append(value)
+        return value
+
+    monkeypatch.setattr(release, "gum_input", fake_input)
+    monkeypatch.setattr(release, "gum_choose_multi", lambda h, opts, sel: [])
+    cfg = release.create_repo_config(release.State(), config)
+    assert tuple(values) == expected
+    assert (cfg.source_branch, cfg.target_branch) == expected
+
+    headless = release.headless_repo_config(release.State(), config, "", "")
+    assert (headless.source_branch, headless.target_branch) == expected
+    explicit = release.headless_repo_config(release.State(), config, "", "main")
+    assert (explicit.source_branch, explicit.target_branch) == ("", "main")
 
 
 def test_decide_version_headless_bump(
@@ -992,8 +1056,11 @@ def test_e2e_dev_release(
     """--dev: bump to -dev.N, tag current branch; no merge/changelog/repo-config."""
     write_config()  # NOTE: no repo config written — dev mode must not need one
     monkeypatch.setattr(release, "gum_choose", lambda h, opts: opts[0])  # patch -dev.1
-    monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)  # skip push
+    monkeypatch.setattr(
+        release, "gum_confirm", lambda prompt, default=True: False
+    )  # skip push
 
+    _git("switch", "-q", "-c", "dev")
     release.do_dev_release(dry_run=False)
 
     assert "v0.0.1-dev.1" in _git("tag").split()
@@ -1015,6 +1082,7 @@ def test_dev_release_is_stateless(
 
     monkeypatch.setattr(release, "gum_choose", lambda h, opts: opts[0])
     monkeypatch.setattr(release, "gum_confirm", lambda prompt, default=True: False)
+    _git("switch", "-q", "-c", "dev")
     release.do_dev_release(dry_run=False)
 
     # The dev run tagged its own version and left the full-release state intact.
@@ -1170,7 +1238,11 @@ def test_secret_scan_skipped_when_disabled(
     state = release.State(no_merge=True, target_branch="main")
     calls: list[list[str]] = []
     monkeypatch.setattr(
-        release, "run", lambda cmd, **k: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+        release,
+        "run",
+        lambda cmd, **k: (
+            calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+        ),
     )
     release.phase_secret_scan(state, config, no_scan=False)
     assert not any(c[0] == "gitleaks" for c in calls)
@@ -1183,7 +1255,11 @@ def test_secret_scan_skipped_with_no_scan_flag(
     state = release.State(no_merge=True, target_branch="main")
     calls: list[list[str]] = []
     monkeypatch.setattr(
-        release, "run", lambda cmd, **k: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+        release,
+        "run",
+        lambda cmd, **k: (
+            calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+        ),
     )
     release.phase_secret_scan(state, config, no_scan=True)
     assert not any(c[0] == "gitleaks" for c in calls)
