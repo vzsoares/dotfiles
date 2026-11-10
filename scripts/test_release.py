@@ -1913,11 +1913,13 @@ class _PushRecorder:
     def __init__(self, code: int = 0) -> None:
         self.code = code
         self.envs: list[dict[str, str] | None] = []
+        self.titles: list[str] = []
 
     def __call__(
         self, cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         self.envs.append(env)
+        self.titles.append(title)
         return subprocess.CompletedProcess(cmd, self.code, "", "")
 
 
@@ -1943,6 +1945,8 @@ def test_phase_push_without_approval_or_dev_sets_nothing(
     release.phase_push(release.State(target_branch="prod"))
     release.phase_push(release.State(target_branch="dev", dev=True, approval_id="x"))
     assert push_recorder.envs == [None, None]
+    # Unapproved, the hook prompts on the tty, so no spinner covers it.
+    assert push_recorder.titles == ["", "Pushing dev..."]
 
 
 def test_phase_push_manual_hint_has_prefix(

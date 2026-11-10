@@ -1472,12 +1472,16 @@ def phase_push(state: State) -> None:
     if state.approval_id and not state.dev:
         env = {**os.environ, "ZEN_PROD_RELEASE": state.approval_id}
         prefix = f"ZEN_PROD_RELEASE={state.approval_id} "
+    # Unapproved, the hook asks on the tty; a spinner would draw over it.
+    spin = state.dev or env is not None
     result = run(
         ["git", "push", "origin", target, "--follow-tags"],
-        title=f"Pushing {target}...",
+        title=f"Pushing {target}..." if spin else "",
         env=env,
     )
     if result.returncode != 0:
+        if result.stderr:
+            info(result.stderr.strip())
         fail("Push failed. Resolve the issue and push manually:")
         info(f"  {prefix}git push origin {target} --follow-tags")
         raise typer.Exit(1)

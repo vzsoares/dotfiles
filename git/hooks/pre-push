@@ -88,7 +88,8 @@ if [ -n "$gated" ]; then
 		command -v gum >/dev/null 2>&1 || refuse "gum not found to confirm the push; $bypass"
 		while read -r branch sha; do
 			[ -n "$branch" ] || continue
-			gum confirm --default=false "Push $repo $branch@${sha:0:12} without an inbox approval?" <"$tty" ||
+			# shellcheck disable=SC2094 # the tty is the prompt's input and output
+			gum confirm --default=false "Push $repo $branch@${sha:0:12} without an inbox approval?" <"$tty" >"$tty" 2>&1 ||
 				refuse "push to $branch cancelled"
 		done <<EOF
 $gated
