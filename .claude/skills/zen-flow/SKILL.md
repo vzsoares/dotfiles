@@ -109,9 +109,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   merges or releases. After an agent-manager restart it revives the orchestrator.
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
   scope, required tests, expected load, settled decisions, out of scope, Human Only
-  steps. Open
-  decisions go to chief as numbered questions. Its only board write is that page body.
-  Ends with `SPEC_READY <id>`.
+  steps. Open decisions go to chief as numbered questions. Its only board write is that
+  page body. Ends with `SPEC_READY <id>`.
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
   cross-cutting work, Sonnet for pattern or spec work; max 3; `list_reservations`
   before a second worker in one repo) and waits on them. A stuck Sonnet worker gets one
