@@ -35,7 +35,8 @@ message.
    one / Cancel. The open session updates live (2 s poll): an amended question shows
    its new text, a staged answer to it goes stale and is asked again before the
    review, one answered elsewhere shows `answered elsewhere: <answer>` and leaves the
-   walk, and new questions join its end. At Send the `rev` check stays the backstop:
+   walk, and new questions join its end. (The spec said `answered by <who>`; the db records no
+   answerer and schema changes were out of scope, so it names the answer instead.) At Send the `rev` check stays the backstop:
    one closed elsewhere is reported and skipped, one amended is shown again. Talk opens `tmux display-popup` on
    the agent's session, then a multi-select resolves the decisions it settled (as
    `talk`, optional note); the rest stay open.
