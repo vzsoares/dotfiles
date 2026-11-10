@@ -66,8 +66,8 @@ it needs `--approval <id>`, an ask filed with `zen-inbox ask <task> --prod relea
 first mutating phase, and must match the repo (main checkout name), target branch
 and full tip sha of the chain's first branch; otherwise it exits 3 and prints the ask
 to file. A TTY run in your own terminal may go without one after a default-No
-confirm. `--resume` reuses the consumed id; `--dry-run` never consumes. `--dev`
-needs no approval.
+confirm. `--resume` reuses the consumed id unless the branch moved before the
+merge; `--dry-run` never consumes. `--dev` needs no approval.
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them.
 

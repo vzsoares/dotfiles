@@ -54,7 +54,8 @@
 #      the target branch and the full tip sha of the chain's first branch.
 #      Only a TTY run in your own terminal may go without one, after a
 #      default-No confirm. --dry-run checks an approval but never consumes it.
-#      --resume reuses the id saved in the state; --restart needs a new one.
+#      --resume reuses the id saved in the state unless the branch moved
+#      before the merge; --restart needs a new one.
 #
 #  EXIT CODES
 #      0 ok · 1 failure or refusal · 3 approval missing, rejected or used
@@ -470,6 +471,7 @@ class State:
     github_release_url: str = ""
     # zen-inbox prod-action ask consumed by this run; --resume needs no other.
     approval_id: str = ""
+    approval_sha: str = ""
 
     def status(self, phase: str) -> str:
         return self.phases.get(phase, "pending")
@@ -753,6 +755,12 @@ def refuse_approval(text: str) -> NoReturn:
 def gate_prod_release(state: State, approval: str) -> None:
     """Fail closed: consume an approved prod-action ask before anything mutates."""
     if state.approval_id:
+        # Until merged, the approved sha is what ships, so a moved branch voids it.
+        if state.status("merge") != "done" and release_sha(state) != state.approval_sha:
+            refuse_approval(
+                f"{merge_chain(state)[0]} moved since approval {state.approval_id}; "
+                "rerun with --restart and a new approval."
+            )
         info(f"Approved by {state.approval_id} (resumed)")
         return
     repo, branch, sha = repo_name(), state.target_branch, release_sha(state)
@@ -778,7 +786,7 @@ def gate_prod_release(state: State, approval: str) -> None:
     ok, msg = inbox_approval("use", approval, repo, branch, sha)
     if not ok:
         refuse_approval(f"Approval refused: {msg}")
-    state.approval_id = approval
+    state.approval_id, state.approval_sha = approval, sha
     save_state(state)
     good(f"Approval {approval}: {msg}")
 

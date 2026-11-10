@@ -127,8 +127,9 @@ closed on it. Right after branch resolution, before hooks or any mutating phase:
   exit, a missing binary included, becomes exit 3 with zen-inbox's reason (`not
   answered`, `answered Hold`, `already used by … at …`, `sha mismatch: approved a,
   releasing b`, …). A mismatch leaves the approval unused.
-- **Resume.** The consumed id is saved as `approval_id` in
-  `.git/release-state.json`; `--resume` needs nothing new. A state without it
+- **Resume.** The consumed id and sha are saved as `approval_id`/`approval_sha` in
+  `.git/release-state.json`; `--resume` needs nothing new unless the chain's first
+  branch moved before the merge finished (exit 3). A state without it
   follows the rules above again; `--restart` clears it and needs a fresh approval.
 - **Dry run** never consumes and never refuses: it runs `approval check` when given
   an id, else prints that a real run needs one.

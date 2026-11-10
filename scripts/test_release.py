@@ -1928,6 +1928,27 @@ def test_resume_reuses_the_consumed_approval(
     assert not release.state_path().exists()
 
 
+def test_resume_refuses_when_branch_moved_before_merge(
+    dev_prod: Path, monkeypatch: pytest.MonkeyPatch, failures: list[str]
+) -> None:
+    approval = file_approval("prod", dev_tip())
+
+    def failing_merge(state: release.State) -> None:
+        raise typer.Exit(1)
+
+    monkeypatch.setattr(release, "phase_merge", failing_merge)
+    with pytest.raises(typer.Exit):
+        full_release(approval=approval)
+    (dev_prod / "late.txt").write_text("late\n")
+    _git("add", ".")
+    _git("commit", "-q", "-m", "feat: unapproved change")
+    with pytest.raises(typer.Exit) as exc:
+        full_release(resume=True)
+    assert exc.value.exit_code == release.APPROVAL_EXIT
+    assert any("moved since approval" in m for m in failures)
+    assert remote_refs() == ""
+
+
 def test_restart_needs_a_fresh_approval(
     dev_prod: Path, monkeypatch: pytest.MonkeyPatch, failures: list[str]
 ) -> None:
