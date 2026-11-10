@@ -75,8 +75,8 @@ CREATE TABLE decision_briefs (
 );
 `
 
-// Migrations maps a schema version to the SQL that reaches it; inbox.py's
-// SCHEMA and BRIEFS, so fixtures can build a db of any version.
+// Migrations maps a schema version to the SQL that reaches it, so fixtures
+// can build a db of any version.
 var Migrations = map[int]string{1: schemaV1, 2: schemaV2}
 
 // Error carries the exit code the CLI reports it with.
@@ -163,7 +163,7 @@ func (d Decision) OptionText(letter string) string {
 	return ""
 }
 
-// JSON is inbox.py's Decision.to_json(), keys in dataclass order.
+// JSON is the decision's --json shape; key order is part of the output.
 func (d Decision) JSON() pyfmt.Object {
 	opts := make([]pyfmt.Object, len(d.Options))
 	for i, o := range d.Options {
@@ -349,6 +349,9 @@ func (ib *Inbox) Close() error {
 }
 
 func dbErr(err error) error {
+	if err == nil {
+		return nil
+	}
 	var ie *Error
 	if errors.As(err, &ie) {
 		return err
@@ -455,14 +458,7 @@ func (ib *Inbox) Select(where string, args ...any) ([]Decision, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	ds, err := ib.sel(where, args...)
-	return ds, dbErr0(err)
-}
-
-func dbErr0(err error) error {
-	if err == nil {
-		return nil
-	}
-	return dbErr(err)
+	return ds, dbErr(err)
 }
 
 func (ib *Inbox) get(id string) (Decision, error) {
@@ -480,7 +476,7 @@ func (ib *Inbox) Get(id string) (Decision, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	d, err := ib.get(id)
-	return d, dbErr0(err)
+	return d, dbErr(err)
 }
 
 func (ib *Inbox) sessionOpen(sid string) ([]Decision, error) {
@@ -491,7 +487,7 @@ func (ib *Inbox) SessionOpen(sid string) ([]Decision, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	ds, err := ib.sessionOpen(sid)
-	return ds, dbErr0(err)
+	return ds, dbErr(err)
 }
 
 func ids(ds []Decision) []string {
@@ -511,7 +507,7 @@ func (ib *Inbox) OpenIDs(sid string) ([]string, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	out, err := ib.openIDs(sid)
-	return out, dbErr0(err)
+	return out, dbErr(err)
 }
 
 // ---------------------------------------------------------------- ID order --
@@ -564,7 +560,7 @@ func keyOf(id string) idKey {
 	return k
 }
 
-// CompareID is inbox.py's id_key order: numeric tasks first by value, then
+// CompareID orders IDs: numeric tasks first by value, then
 // plain IDs before gates, then the sequence number by value.
 func CompareID(a, b string) int {
 	ka, kb := keyOf(a), keyOf(b)

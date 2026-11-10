@@ -4,6 +4,8 @@ package tui
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -99,26 +101,9 @@ func (p *pass) stopped(how string) string {
 	return strings.Join(append([]string{how + ": " + kept}, p.notes...), "; ")
 }
 
-func (p *pass) queued(id string) bool {
-	if id == p.cur {
-		return true
-	}
-	for _, q := range p.queue {
-		if q == id {
-			return true
-		}
-	}
-	return false
-}
+func (p *pass) queued(id string) bool { return id == p.cur || slices.Contains(p.queue, id) }
 
-func (p *pass) seen(id string) bool {
-	for _, v := range p.visited {
-		if v == id {
-			return true
-		}
-	}
-	return false
-}
+func (p *pass) seen(id string) bool { return slices.Contains(p.visited, id) }
 
 // Model is the panel. Every db read and subprocess runs in a tea.Cmd.
 type Model struct {
@@ -210,17 +195,19 @@ func load(ib *inbox.Inbox, client am.Client, ids []string, sessions am.Sessions,
 }
 
 func (m *Model) watchedIDs() []string {
-	var ids []string
+	set := map[string]bool{}
 	for id := range m.known {
-		ids = append(ids, id)
+		set[id] = true
 	}
 	if m.p != nil {
-		ids = append(append(ids, m.p.visited...), m.p.queue...)
+		for _, id := range append(append([]string(nil), m.p.visited...), m.p.queue...) {
+			set[id] = true
+		}
 	}
 	for _, d := range m.talkOpen {
-		ids = append(ids, d.ID)
+		set[d.ID] = true
 	}
-	return ids
+	return slices.Collect(maps.Keys(set))
 }
 
 func (m *Model) loadCmd(refresh bool) tea.Cmd {
@@ -261,11 +248,17 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		m.sessionsAt = m.now()
 	}
 	cmds := m.ring()
+	// A send or talk in flight changes the db under the pass; its own reply
+	// message reconciles the screen instead.
 	switch {
+	case m.busy != "":
 	case m.scr == scSession:
 		m.liveSession()
 	case m.p != nil:
 		m.livePass()
+	}
+	if n := m.menuLen(); n > 0 {
+		m.cursor = min(m.cursor, n-1)
 	}
 	return cmds
 }
@@ -459,20 +452,8 @@ func (m *Model) stage(s view.Staged) {
 }
 
 func (m *Model) sendCmd() tea.Cmd {
-	type job struct {
-		id string
-		s  view.Staged
-	}
-	var jobs []job
-	for id, s := range m.p.staged {
-		jobs = append(jobs, job{id, s})
-	}
-	ids := make([]string, len(jobs))
-	byID := map[string]view.Staged{}
-	for i, j := range jobs {
-		ids[i] = j.id
-		byID[j.id] = j.s
-	}
+	byID := maps.Clone(m.p.staged)
+	ids := slices.Collect(maps.Keys(byID))
 	inbox.SortIDs(ids)
 	ib, client, sid, name, prior := m.ib, m.am, m.sid, m.sname, m.p.result
 	watched, sessions := m.watchedIDs(), m.snap.sessions
@@ -519,6 +500,10 @@ func (m *Model) onSent(msg sentMsg) {
 	p := m.p
 	m.busy = ""
 	m.snap = msg.snap
+	if p == nil {
+		m.toList(msg.flash)
+		return
+	}
 	p.staged = map[string]view.Staged{}
 	p.recorded = append(p.recorded, msg.recorded...)
 	p.notes = append(p.notes, msg.notes...)

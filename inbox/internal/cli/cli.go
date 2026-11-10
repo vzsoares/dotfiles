@@ -1,5 +1,5 @@
-// Package cli is zen-inbox's command line: the same subcommands, flags,
-// output and exit codes as the inbox.py it replaced.
+// Package cli is zen-inbox's command line; its output and exit codes are
+// pinned by the golden files in testdata/golden.
 package cli
 
 import (

@@ -113,7 +113,7 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 		return Decision{}, err
 	}
 	d, err := ib.get(id)
-	return d, dbErr0(err)
+	return d, dbErr(err)
 }
 
 func nonEmpty(s string) *string {
@@ -254,7 +254,7 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 		return Decision{}, err
 	}
 	d, err := ib.get(id)
-	return d, dbErr0(err)
+	return d, dbErr(err)
 }
 
 type closeArgs struct {

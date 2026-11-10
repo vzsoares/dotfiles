@@ -1,6 +1,6 @@
 // Package pyfmt reproduces the Python string and JSON behaviour zen-inbox's
-// output depended on (textwrap, repr, json.dumps, str.splitlines), so the
-// Go binary prints byte for byte what inbox.py printed.
+// output depends on (textwrap, repr, json.dumps, str.splitlines), so output
+// stays byte for byte with the golden files.
 package pyfmt
 
 import (

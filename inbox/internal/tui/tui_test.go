@@ -713,3 +713,35 @@ func TestKeysAndFooterPerScreen(t *testing.T) {
 		t.Fatal("q did not quit")
 	}
 }
+
+func TestPollDuringSendKeepsThePass(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.openWalk()
+	d.keys("a")
+	_, cmd := d.m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	sent := cmd()
+	d.poll()
+	d.send(sent)
+	if d.m.scr != scList || !strings.HasPrefix(d.m.flash, "sent 7.1 to spec-s1") {
+		t.Fatalf("flash %q", d.m.flash)
+	}
+	if strings.Contains(d.m.flash, "elsewhere") {
+		t.Fatalf("own answer reported as elsewhere: %q", d.m.flash)
+	}
+}
+
+func TestListCursorFollowsShrinkingList(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Q?", "a", "b")
+	d.ask("8", "s2", "Q?", "a", "b")
+	d.poll()
+	d.keys("down")
+	if _, err := d.other.Withdraw("8.1", "s2", false); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	if !strings.Contains(d.view(), "› spec-s1") {
+		t.Fatalf("no row under the cursor:\n%s", d.view())
+	}
+}

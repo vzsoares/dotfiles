@@ -16,8 +16,8 @@ bin=$bindir/zen-inbox
 
 stale() {
     [ -x "$bin" ] || return 0
-    [ -n "$(find "$here" \( -name '*.go' -o -name go.mod -o -name go.sum \) \
-        -newer "$bin" -print -quit)" ]
+    [ -n "$(find "$here" \( -name '*.go' ! -name '*_test.go' \
+        -o -name go.mod -o -name go.sum \) -newer "$bin" -print -quit)" ]
 }
 
 find_go() {

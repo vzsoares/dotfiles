@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -55,13 +56,6 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, ite
 	question := view.QuestionLines(d, width)
 	ctx := view.ContextLines(d, width)
 	opts := view.OptionLines(d, width)
-	cat := func(parts ...[]string) []string {
-		var out []string
-		for _, p := range parts {
-			out = append(out, p...)
-		}
-		return out
-	}
 	full := []int{items}
 	var paged []int
 	for h := items - 1; h >= 1; h-- {
@@ -74,12 +68,12 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, ite
 		help    bool
 		heights []int
 	}{
-		{0, cat(banner, head, text, asked, []string{""}), false, true, full},
-		{1, cat(banner, head, asked, []string{""}), false, true, full},
-		{2, cat(banner, head, asked), true, true, full},
-		{3, cat(banner, head), true, true, full},
-		{4, cat(banner, head), true, false, full},
-		{5, cat(banner, head), true, false, paged},
+		{0, slices.Concat(banner, head, text, asked, []string{""}), false, true, full},
+		{1, slices.Concat(banner, head, asked, []string{""}), false, true, full},
+		{2, slices.Concat(banner, head, asked), true, true, full},
+		{3, slices.Concat(banner, head), true, true, full},
+		{4, slices.Concat(banner, head), true, false, full},
+		{5, slices.Concat(banner, head), true, false, paged},
 		{6, nil, true, false, paged},
 	}
 	for _, st := range stages {
@@ -100,12 +94,12 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, width, height, ite
 			if st.clip {
 				shown = view.ClipLines(ctx, room, width)
 			}
-			return walkFit{top: st.top, body: cat(question, shown, opts), menuH: h,
+			return walkFit{top: st.top, body: slices.Concat(question, shown, opts), menuH: h,
 				help: st.help, cuts: append([]string(nil), CutOrder[:st.cuts]...)}
 		}
 	}
 	rows := max(height-footer-1, 1)
-	return walkFit{body: cat(question, ctx, opts), menuH: 1, cuts: append([]string(nil), CutOrder...),
+	return walkFit{body: slices.Concat(question, ctx, opts), menuH: 1, cuts: append([]string(nil), CutOrder...),
 		scroll: true, rows: rows}
 }
 
