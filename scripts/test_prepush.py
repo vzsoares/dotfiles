@@ -510,7 +510,31 @@ def test_interactive_without_gum_refuses(human: Env) -> None:
 # --------------------------------------------------------------------------- #
 # Fail closed                                                                  #
 # --------------------------------------------------------------------------- #
-# zen-release push (fake inbox)                                                #
+
+
+def test_inbox_missing_refuses(env: Env) -> None:
+    env.no_fake("zen-inbox")
+    r = env.run("push", "origin", "master")
+    assert_refused(r, "zen-inbox not found", "git push --no-verify")
+    assert env.remote_sha("master") == ""
+
+
+@pytest.mark.parametrize("rc", ["3", "4"])
+def test_inbox_error_refuses(env: Env, rc: str) -> None:
+    env.vars["FAKE_CHECK"] = rc
+    r = env.run("push", "origin", "master")
+    assert_refused(r, f"zen-inbox exited {rc}", "git push --no-verify")
+    assert env.remote_sha("master") == ""
+
+
+def test_use_failure_refuses(env: Env) -> None:
+    env.vars["FAKE_USE"] = "1"
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+    assert env.remote_sha("master") == ""
+
+
+# --------------------------------------------------------------------------- #
+# zen-release push (fake inbox)                                              #
 # --------------------------------------------------------------------------- #
 
 VERSION_FILES = {
@@ -520,7 +544,7 @@ VERSION_FILES = {
     '  "packages": {\n    "": {\n      "version": "1.0.0"\n    }\n  }\n}\n',
     "pyproject.toml": '[project]\nname = "app"\nversion = "1.0.0"\n'
     'dependencies = ["typer"]\n',
-    "app/pubspec.yaml": "name: app\nversion: 1.0.0+3\n",
+    "app/pubspec.yaml": "name: app\nversion: 1.0.0+3 # store build\n",
     "app/config.py": 'VERSION: str = "1.0.0"\nDEBUG = False\n',
 }
 
@@ -589,7 +613,7 @@ BUMPED = {
     .replace("1.0.0", "1.0.1")
     .replace('"app"', '"app2"'),
     "pyproject.toml": VERSION_FILES["pyproject.toml"].replace("1.0.0", "1.0.1"),
-    "app/pubspec.yaml": "name: app\nversion: 1.0.1+4\n",
+    "app/pubspec.yaml": "name: app\nversion: 1.0.1+4 # store build\n",
     "app/config.py": 'VERSION: str = "1.0.1"\n\nDEBUG = False\n',
     "CHANGELOG.md": "## v1.0.1\n\n- anything goes here\n",
 }

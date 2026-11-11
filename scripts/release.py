@@ -1478,6 +1478,10 @@ def phase_push(state: State) -> None:
             info(result.stderr.strip())
         fail("Push failed. Resolve the issue, then rerun zen-release --resume")
         info(f"  or push it yourself: git push origin {target} --follow-tags")
+        if state.approval_id:
+            info(
+                "  The approval's one push may be spent; a retry may need a --prod push ask."
+            )
         raise typer.Exit(1)
     good(f"Pushed {target}")
 

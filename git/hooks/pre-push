@@ -208,9 +208,9 @@ version_lines() {
 		line ~ /^[ \t]*$/ { next }
 		(kind == "json" || kind == "lock") && line ~ /^[ \t]*"version"[ \t]*:[ \t]*"[^"]*",?[ \t]*$/ { next }
 		kind == "lock" && line ~ /^[ \t]*"name"[ \t]*:[ \t]*"[^"]*",?[ \t]*$/ { next }
-		kind == "toml" && line ~ /^[ \t]*version[ \t]*=[ \t]*"[^"]*"[ \t]*$/ { next }
-		kind == "pubspec" && line ~ /^version:[ \t]*[^ \t+#]+(\+[0-9]+)?[ \t]*$/ { next }
-		kind == "py" && line ~ /^[ \t]*(VERSION|VERSAO|__version__)([ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_]*)?[ \t]*=[ \t]*"[^"]*"[ \t]*$/ { next }
+		kind == "toml" && line ~ /^[ \t]*version[ \t]*=[ \t]*"[^"]*"[ \t]*(#.*)?$/ { next }
+		kind == "pubspec" && line ~ /^version:[ \t]*[^ \t+#]+(\+[0-9]+)?[ \t]*(#.*)?$/ { next }
+		kind == "py" && line ~ /^[ \t]*(VERSION|VERSAO|__version__)([ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_]*)?[ \t]*=[ \t]*"[^"]*"[ \t]*(#.*)?$/ { next }
 		{ bad = 1 }
 		END { exit bad }'
 }

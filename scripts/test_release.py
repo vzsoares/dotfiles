@@ -1955,7 +1955,10 @@ def test_phase_push_failure_hints_resume(
     monkeypatch.setattr(release, "fail", lambda *a: None)
     with pytest.raises(typer.Exit):
         release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
-    assert hints == ["  or push it yourself: git push origin prod --follow-tags"]
+    assert hints == [
+        "  or push it yourself: git push origin prod --follow-tags",
+        "  The approval's one push may be spent; a retry may need a --prod push ask.",
+    ]
 
 
 def test_release_through_the_real_hook_consumes_once(
