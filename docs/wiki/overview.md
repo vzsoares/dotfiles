@@ -31,7 +31,7 @@ Root-level dotfiles linked to `~`: `.zshrc`, `.gitconfig`, `biome.json`.
 Each tool is symlinked into place (always **absolute paths**) by a `link` script. Symlinks point back at the repo, so editing a config in the repo immediately affects the live environment.
 
 - `./link` — `.zshrc`, `.gitconfig`, `biome.json` → `~` (requires oh-my-zsh already installed)
-- `./link-claude` — `.claude/{CLAUDE.md,settings.json,skills}` → `~/.claude/`
+- `./link-claude` — `.claude/{CLAUDE.md,settings.json,skills,agents}` → `~/.claude/`
 - `alacritty/link` — `.alacritty.toml` → `~/.config/alacritty/alacritty.toml`,
   plus `macos.toml`/`linux.toml` (chosen by `uname`) → `local.toml`, which the
   shared config pulls in via `[general] import`

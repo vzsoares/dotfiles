@@ -155,7 +155,7 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
 
 ## Agent roles
 
-Four agent-manager presets (`agent-manager/config.json`). Presets hold instructions
+Five agent-manager presets (`agent-manager/config.json`). Presets hold instructions
 only; model and effort are set per session (`create_session` `model`/`effort`, or
 `agent-manager spawn --model --effort`).
 
@@ -165,6 +165,7 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
 | spec-writer  | `spec-writer`  | Opus · high             | one per task, short-lived; project group; no worktree |
 | orchestrator | `orchestrator` | Opus · high             | one, long-running; group `chief`; no worktree         |
 | worker       | `worker-rules` | Opus or Sonnet · medium | one per task and repo; project group; worktree        |
+| designer     | `designer`     | Fable 5.2 · high        | design or Fable entries; project group; worktree      |
 
 - **chief** reads the board, gets the user's approval, spawns a spec-writer per task
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator

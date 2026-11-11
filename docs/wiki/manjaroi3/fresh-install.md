@@ -63,7 +63,7 @@ From the repo root:
 
 ```bash
 ./link            # .zshrc, .gitconfig, biome.json → ~
-./link-claude     # .claude/{CLAUDE.md,settings.json,skills} → ~/.claude/
+./link-claude     # .claude/{CLAUDE.md,settings.json,skills,agents} → ~/.claude/
 ( cd alacritty && ./link )
 ( cd i3 && ./link )
 ( cd nvim && ./link )
