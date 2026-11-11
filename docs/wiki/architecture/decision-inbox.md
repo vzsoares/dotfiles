@@ -172,10 +172,12 @@ whole command, wrapped. `approval use|check <id> --action run --repo R --cmd C`
 (or `--match`) consumes it only when the command matches byte for byte, once.
 `--cmd` with any other action, or `--branch`/`--sha` with `run`, is exit 2.
 
-Both serve the global `git/hooks/pre-push` gate (#703): an agent push to
-`prod`/`main`/`master` runs `check --match` for every gated ref, then `use --match`
-for each; zen-release's own push passes via `ZEN_PROD_RELEASE=<id>` and `approval
-used`. See [[release-tooling]].
+Both serve the global `git/hooks/pre-push` gate (#703, #788): an agent, force or
+delete push to `prod`/`main`/`master` runs `check --match` for every gated ref, then
+`use --match` for each. zen-release's own push passes on a single-use
+`<git-common-dir>/zen-release-token` (`<id> <branch> <sha>`) that the hook consumes,
+plus `approval used`; `zen-release-ledger` binds each id to the first sha it let
+through. See [[release-tooling]].
 
 ### Only the user answers one (#691)
 

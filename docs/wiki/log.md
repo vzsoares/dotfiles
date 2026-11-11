@@ -58,7 +58,7 @@ The store refuses `answer`/`resolve` on a prod-action ask unless `Inbox.User`, a
 Pages updated: architecture/decision-inbox.md
 
 ## [2026-11-10] update | Prod push hook (#703)
-Global `core.hooksPath` = `git/hooks`: pre-push refuses an agent push to prod/main/master unless `zen-inbox approval use --match --action push` consumes an approved ask for that repo, branch and sha; deletion and force are refused; a human push gets a default-No gum confirm; zen-release's push passes via `ZEN_PROD_RELEASE` + read-only `approval used`. Every other hook name dispatches to the repo's own `.git/hooks`. zen-sweep reports `hooks-path` repos that skip it.
+Global `core.hooksPath` = `git/hooks`: pre-push refuses an agent push to prod/main/master unless `zen-inbox approval use --match --action push` consumes an approved ask for that repo, branch and sha; deletion and force are refused; a human push gets a default-No gum confirm; zen-release's push passes via `ZEN_PROD_RELEASE` + read-only `approval used` (replaced by a single-use token in #788). Every other hook name dispatches to the repo's own `.git/hooks`. zen-sweep reports `hooks-path` repos that skip it.
 Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
 
 ## [2026-11-11] update | zen-inbox notes (#707)
@@ -84,3 +84,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-11] update | cockpit Claude quota (#790)
 The clawd-status statusline writes `~/.cache/zen/claude-quota.json` (five_hour and seven_day `used_percentage` / `resets_at`, plus `updated_at`) from Claude Code's `rate_limits`, atomically and at most every 10 s; its git cache now reads mtimes with GNU or BSD `stat`. The cockpit header shows the quota on the right with warning and error colours, a stale age and `quota n/a`.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-11] update | Prod push hook hardening (#788)
+`ZEN_PROD_RELEASE` is gone: zen-release writes a single-use `<git-common-dir>/zen-release-token` (`<id> <branch> <sha>`) before its target push; the hook deletes it on read and passes only that branch and sha as a create or update when `approval used` gives an ancestor sha and `zen-release-ledger` binds the id to no other sha (recorded after the repo's own pre-push passes). Agents are also found by process tree (claude/codex binaries or install dirs, the `tmux -L agentmgr` server; unreadable = agent). Each gated ref is create, update, force or delete; force and delete always need an approved ask. The secret scan runs gitleaks once per pushed tip with that tip's own config.
+Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
