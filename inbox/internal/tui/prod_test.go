@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -159,4 +160,38 @@ func TestProdRunConfirmShowsFullCommand(t *testing.T) {
 			t.Fatalf("%v: %v", sz, err)
 		}
 	}
+}
+
+func TestWrapCmdBreaksAtWhitespaceThenSeparators(t *testing.T) {
+	long := strings.Repeat("a", 30) + "/" + strings.Repeat("b", 30) + "," + strings.Repeat("c", 40)
+	cases := []struct {
+		cmd   string
+		width int
+		want  []string
+	}{
+		{"one two three four", 9, []string{"one two", "three", "four"}},
+		{"keep  two  spaces", 40, []string{"keep  two  spaces"}},
+		{"x " + long, 40, []string{"x", strings.Repeat("a", 30) + "/", strings.Repeat("b", 30) + ",", strings.Repeat("c", 40)}},
+		{strings.Repeat("z", 25), 10, []string{"zzzzzzzzzz", "zzzzzzzzzz", "zzzzz"}},
+		{"a\nb c", 10, []string{"a", "b c"}},
+	}
+	for _, c := range cases {
+		if got := wrapCmd(c.cmd, c.width); !slices.Equal(got, c.want) {
+			t.Errorf("wrapCmd(%q, %d) = %q, want %q", c.cmd, c.width, got, c.want)
+		}
+	}
+}
+
+func TestProdRunConfirmWrapsAtTokensNotMidWord(t *testing.T) {
+	const path = "/srv/releases/2026-11-10/widgets/hero/assets/images/banner-large-retina@2x.webp"
+	cmd := "rsync -av --delete " + path + "," + path + "," + path + " core:/srv/www"
+	d := newDrvWith(t, 92, 30, func(d *drv) { d.ib.User = true })
+	if _, err := d.other.AskProd(inbox.AskInput{Task: "736", SessionID: "s1", Name: "spec-s1"},
+		inbox.ProdAction{Action: inbox.RunAction, Repo: "core", Cmd: cmd}); err != nil {
+		t.Fatal(err)
+	}
+	d.openWalk()
+	d.keys("a")
+	d.fits()
+	golden(t, "confirm-run-longtoken-92x30", d.view())
 }

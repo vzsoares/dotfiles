@@ -1,0 +1,30 @@
+736.1  prod approval
+action run
+repo   core
+command
+rsync -av --delete
+/srv/releases/2026-11-10/widgets/hero/assets/images/banner-large-retina@2x.webp,/srv/
+releases/2026-11-10/widgets/hero/assets/images/banner-large-retina@2x.webp,/srv/releases/
+2026-11-10/widgets/hero/assets/images/banner-large-retina@2x.webp core:/srv/www
+
+Approve? y/N
+y approve · n/esc back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+◆ 1 open · spec-s1
