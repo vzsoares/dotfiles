@@ -1235,7 +1235,7 @@ func (m *Model) saveFree(send bool) tea.Cmd {
 	d, ok := m.decision(m.p.cur)
 	text := m.ta.Value()
 	if !ok || pyfmt.Blank(text) {
-		m.scr = scWalk
+		m.scr, m.flash = scWalk, ""
 		return nil
 	}
 	if d.Rev != m.freeRev {

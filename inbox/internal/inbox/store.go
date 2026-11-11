@@ -300,7 +300,11 @@ func lockDir(dir string) (unlock func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+	for errors.Is(err, syscall.EINTR) {
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+	}
+	if err != nil {
 		_ = f.Close()
 		return nil, err
 	}
