@@ -32,10 +32,10 @@ pre-push: secret scan refused this push.
 EOF
 }
 
-# One git-log range over every pushed ref, empty when nothing is new. Commits
-# reachable from a remote tip or remote-tracking ref are already on a remote.
+# One git-log range per pushed tip, none when nothing is new. Commits reachable
+# from any pushed ref's remote tip or a remote-tracking ref are already on a remote.
 scan_ranges() {
-	local lsha rsha base tip range pairs="" tips=""
+	local lsha rsha base tip range neg="" tips=""
 	while read -r _ lsha _ rsha; do
 		[ -n "$lsha" ] || continue
 		zero "$lsha" && continue
@@ -43,14 +43,13 @@ scan_ranges() {
 		lsha=$(git rev-parse -q --verify "$lsha^{commit}") || continue
 		case " $tips " in *" $lsha "*) ;; *) tips="$tips $lsha" ;; esac
 		if ! zero "$rsha" && base=$(git rev-parse -q --verify "$rsha^{commit}"); then
-			pairs="$pairs$lsha $base
-"
+			neg="$neg $base"
 		fi
 	done <<EOF
 $input
 EOF
 	for tip in $tips; do
-		range="$tip --not$(printf '%s' "$pairs" | awk -v t="$tip" '$1 == t { printf " %s", $2 }') --remotes"
+		range="$tip --not$neg --remotes"
 		# shellcheck disable=SC2086 # the range is several rev-list arguments
 		[ -z "$(git rev-list -n 1 $range)" ] || echo "$range"
 	done

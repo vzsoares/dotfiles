@@ -572,6 +572,16 @@ def test_release_sha_after_launcher_stderr(env: Env) -> None:
     assert [c.split()[1] for c in env.calls()] == ["used"]
 
 
+def test_release_token_not_bound_when_repo_hook_fails(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    head = env.commit("bump")
+    release_token(env, f"680.1 master {head}")
+    repo_hook(env, "pre-push", "exit 1\n")
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": approved})
+    assert env.run("push", "origin", "master").returncode != 0
+    assert not ledger(env).exists()
+
+
 def test_release_token_replayed_for_new_sha_falls_back(env: Env) -> None:
     approved = env.git("rev-parse", "HEAD")
     ledger(env).write_text(f"680.1 {approved}\n")
@@ -814,6 +824,19 @@ def test_scan_skips_commits_already_on_a_remote(env: Env) -> None:
     assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
     (call,) = scans(env)
     assert_log_opts(call, f"{merge} --not {old} --remotes")
+
+
+def test_scan_excludes_every_pushed_ref_remote_tip(env: Env) -> None:
+    base = env.git("rev-parse", "HEAD")
+    seed(env, "a")
+    env.git("update-ref", "-d", "refs/remotes/origin/a")
+    new = env.commit("new")
+    tip = env.commit("tip")
+    r = env.run("push", "origin", f"{new}:refs/heads/b", "HEAD:refs/heads/a")
+    assert r.returncode == 0, r.stderr
+    calls = " | ".join(scans(env))
+    for sha in (new, tip):
+        assert f"--log-opts {sha} --not {base} --remotes --config " in calls
 
 
 def test_scan_owner_remote_runs_ggshield(env: Env) -> None:
