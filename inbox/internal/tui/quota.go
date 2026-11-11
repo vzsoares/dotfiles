@@ -83,7 +83,7 @@ func (w window) part(name string, loc *time.Location, reset func(time.Time) stri
 	return quotaPart{full, short}, pct
 }
 
-// quotaText is the header's quota segment no wider than width, or "" when
+// text is the header's quota segment no wider than width, or "" when
 // even the short form does not fit.
 func (q quota) text(now time.Time, loc *time.Location, width int) string {
 	if !q.ok {
