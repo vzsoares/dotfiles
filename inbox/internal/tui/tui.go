@@ -215,7 +215,10 @@ type Model struct {
 	// loc is where its reset times are shown.
 	quota     quota
 	quotaFile string
-	loc       *time.Location
+	// stateFile keeps notesFolded across restarts.
+	stateFile   string
+	notesFolded bool
+	loc         *time.Location
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -229,7 +232,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()),
-		prodBlock: "guard not run", drafts: map[string]view.Staged{}, quotaFile: quotaPath(), loc: time.Local,
+		prodBlock: "guard not run", drafts: map[string]view.Staged{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -316,7 +319,10 @@ func (m *Model) loadCmd(refresh bool) tea.Cmd {
 	}
 }
 
-func (m *Model) Init() tea.Cmd { return m.loadCmd(true) }
+func (m *Model) Init() tea.Cmd {
+	m.notesFolded = readState(m.stateFile).NotesFolded
+	return m.loadCmd(true)
+}
 
 // decision is the freshest copy of id: from the open list, else by id.
 func (m *Model) decision(id string) (inbox.Decision, bool) {
@@ -1203,8 +1209,10 @@ func (m *Model) listKeys() []ranked {
 		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
 	case "r", "nr":
 		keys = append(keys, ranked{key{"enter", "retry"}, 0})
+	case "nh":
+		keys = append(keys, ranked{key{"enter", "expand"}, 0})
 	case "n":
-		keys = append(keys, ranked{key{"enter", "open"}, 0})
+		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"z", "fold"}, 6})
 		if n, ok := m.cursorNote(); ok {
 			mark := "read"
 			if !n.Unread() {
@@ -1243,6 +1251,10 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 		return m, m.retryFirst()
 	case "c":
 		return m, m.openChief()
+	case "z":
+		if kind, _, _ := strings.Cut(m.focusedRow(), ":"); kind == "n" || kind == "nh" {
+			m.foldNotes(!m.notesFolded)
+		}
 	case "m":
 		if n, ok := m.cursorNote(); ok {
 			return m, m.markCmd(n.ID, false, n.Unread())
@@ -1279,6 +1291,9 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 			return m, m.retryNoteCmd(id)
 		case "n":
 			m.openNote(sid)
+			return m, nil
+		case "nh":
+			m.foldNotes(false)
 			return m, nil
 		}
 		m.enterSession(sid)

@@ -127,6 +127,7 @@ func newDrvWith(t *testing.T, w, h int, setup func(*drv)) *drv {
 	d := &drv{t: t, ib: ib, other: other, am: fake}
 	d.m = New(ib, fake)
 	d.m.quotaFile, d.m.loc = filepath.Join(t.TempDir(), "claude-quota.json"), time.UTC
+	d.m.stateFile = filepath.Join(t.TempDir(), "inbox-panel.json")
 	d.m.after = func(time.Duration, tea.Msg) tea.Cmd { return nil }
 	if setup != nil {
 		setup(d)

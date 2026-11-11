@@ -30,8 +30,36 @@ type noteSentMsg struct {
 
 func noteValue(n inbox.Note) string { return strconv.FormatInt(n.ID, 10) }
 
-// noteItems are the list's note rows, after every decision and retry row.
+// notesHead is the Notes group's header text; folded, it says all read
+// instead of counting zero.
+func (m *Model) notesHead() string {
+	n := inbox.Unread(m.snap.notes)
+	if n == 0 && m.notesFolded {
+		return "Notes · all read"
+	}
+	return "Notes · " + strconv.Itoa(n) + " unread"
+}
+
+// foldNotes collapses or expands the Notes group, keeps the cursor on it
+// and saves the choice.
+func (m *Model) foldNotes(fold bool) {
+	m.notesFolded = fold
+	row := "nh:"
+	if !fold && len(m.snap.notes) > 0 {
+		row = "n:" + noteValue(m.snap.notes[0])
+	}
+	m.refocus(row)
+	if err := writeState(m.stateFile, panelState{NotesFolded: fold}); err != nil {
+		m.flash, m.flashOK = "could not save fold state: "+err.Error(), false
+	}
+}
+
+// noteItems are the list's note rows, after every decision and retry row;
+// folded, the one header row stands for them.
 func (m *Model) noteItems(room int) []item {
+	if m.notesFolded && len(m.snap.notes) > 0 {
+		return []item{{pyfmt.Clip(m.notesHead(), room), "nh:"}}
+	}
 	out := make([]item, len(m.snap.notes))
 	for i, n := range m.snap.notes {
 		out[i] = item{pyfmt.Clip(view.NoteLabel(n, m.now()), room), "n:" + noteValue(n)}
@@ -41,11 +69,20 @@ func (m *Model) noteItems(room int) []item {
 
 // cursorNote is the note under the list cursor.
 func (m *Model) cursorNote() (inbox.Note, bool) {
-	i := m.cursor - (len(m.listItems()) - len(m.snap.notes))
-	if i < 0 || i >= len(m.snap.notes) {
+	items := m.listItems()
+	if m.cursor >= len(items) {
 		return inbox.Note{}, false
 	}
-	return m.snap.notes[i], true
+	id, ok := strings.CutPrefix(items[m.cursor].value, "n:")
+	if !ok {
+		return inbox.Note{}, false
+	}
+	for _, n := range m.snap.notes {
+		if noteValue(n) == id {
+			return n, true
+		}
+	}
+	return inbox.Note{}, false
 }
 
 // refreshNote takes the open note's latest row from the snapshot.

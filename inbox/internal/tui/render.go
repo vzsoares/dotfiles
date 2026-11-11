@@ -358,8 +358,21 @@ func (m *Model) viewList() frame {
 			return nil
 		})
 	}
-	if len(m.snap.notes) > 0 {
-		body = group(body, "Notes · "+strconv.Itoa(inbox.Unread(m.snap.notes))+" unread", &bannerStyle)
+	if len(m.snap.notes) > 0 && m.notesFolded {
+		prefix, st := "  ", &readStyle
+		if inbox.Unread(m.snap.notes) > 0 {
+			st = &bannerStyle
+		}
+		if i == m.cursor {
+			prefix, st = "› ", &cursorStyle
+		}
+		body = group(body, prefix+m.notesHead(), st)
+		if i == m.cursor {
+			cur = count(body) - 1
+		}
+		i++
+	} else if len(m.snap.notes) > 0 {
+		body = group(body, m.notesHead(), &bannerStyle)
 		add(len(m.snap.notes), func(j int) *lipgloss.Style {
 			if m.snap.notes[j].Unread() {
 				return &unreadStyle

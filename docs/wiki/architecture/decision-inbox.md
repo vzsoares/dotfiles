@@ -228,6 +228,10 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
   id and width, `↩ replied: …`), which scrolls like View full. `m` toggles read on the
   list row or the note, `M` marks every visible note read; opening never marks read.
   Notes bind none of `←`, `→`, `shift+tab`, `l`.
+- **Fold (#801).** `z` on a note row collapses the group to one selectable header,
+  `Notes · n unread` (yellow) or `Notes · all read` (dim); `enter` or `z` on it expands.
+  New notes still raise the count and the banner. The state persists in
+  `~/.cache/zen/inbox-panel.json` (`notes_folded`), not the db, so there is no migration.
 - **Reply.** `f` opens the textarea; `ctrl+d` sends one reply per note through the
   answer send path (`agent-manager send … --from zen-inbox`, the refusal fallback, the
   30 s timeout and the stuck-paste follow-up) as `[zen-inbox] Reply to your note n12
