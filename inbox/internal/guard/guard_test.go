@@ -66,6 +66,7 @@ func TestAgentAncestor(t *testing.T) {
 		{"tmux", "tmux", ""},
 		{"coincidental name", "/usr/bin/claude-notes-viewer", ""},
 		{"agent name as file argument", "vim claude.txt", ""},
+		{"claude-code shim", "/opt/x/claude-code --resume", "claude-code"},
 		{"dir named claude-tools", "/home/x/code/claude-tools/bin/zen-inbox", ""},
 		{"dir named claude", "/home/x/code/claude/tools/zen-inbox watch", ""},
 		{"dir named codex under node", "node /home/x/codex/server.js", ""},

@@ -16,7 +16,7 @@ import (
 var EnvVars = []string{"AGENT_MANAGER_SESSION_ID", "AGENT_MANAGER_AGENT_PID", "CLAUDECODE"}
 
 // Binaries are the executable names of an agent CLI.
-var Binaries = []string{"claude", "codex"}
+var Binaries = []string{"claude", "claude-code", "codex"}
 
 // runtimes execute a script whose path names the agent.
 var runtimes = []string{"node", "bun", "deno"}

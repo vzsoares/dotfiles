@@ -308,7 +308,7 @@ func (ib *Inbox) replyTarget(n Note) (string, error) {
 	var live []string
 	for _, s := range sessions {
 		id, _ := s["id"].(string)
-		if name, _ := s["name"].(string); name == n.SessionName && id != "" && am.Status(s) != "gone" {
+		if name, _ := s["name"].(string); n.SessionName != "" && name == n.SessionName && id != "" && am.Status(s) != "gone" {
 			live = append(live, id)
 		}
 	}
