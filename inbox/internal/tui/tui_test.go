@@ -125,6 +125,7 @@ func newDrvWith(t *testing.T, w, h int, setup func(*drv)) *drv {
 	t.Cleanup(func() { _ = ib.Close(); _ = other.Close() })
 	d := &drv{t: t, ib: ib, other: other, am: fake}
 	d.m = New(ib, fake)
+	d.m.quotaFile, d.m.loc = filepath.Join(t.TempDir(), "claude-quota.json"), time.UTC
 	d.m.after = func(time.Duration, tea.Msg) tea.Cmd { return nil }
 	if setup != nil {
 		setup(d)
@@ -965,11 +966,11 @@ func TestStatusLineStates(t *testing.T) {
 	d.ask("8", "s2", "Q2?", "a", "b")
 	d.poll()
 	golden(t, "status-open", d.view())
-	if got := d.line(0); got != "cockpit · 3 open" {
+	if got := d.head(); got != "cockpit · 3 open" {
 		t.Errorf("header %q", got)
 	}
 	d.send(tea.WindowSizeMsg{Width: 14, Height: 10})
-	if got := d.line(0); got != "cockpit · 3 o…" {
+	if got := d.head(); got != "cockpit · 3 o…" {
 		t.Errorf("header wrapped or overflowed: %q", got)
 	}
 	if got := d.last(); got != "enter open" {

@@ -1,4 +1,4 @@
-cockpit · ✕ delivery failed · spec-s1 · r retry
+cockpit · ✕ delivery failed · spec-s1 · r retry                        quota n/a
 Failed delivery · 1
 › retry spec-s1: 1 answer(s) · failed
 

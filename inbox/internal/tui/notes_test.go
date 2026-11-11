@@ -60,6 +60,11 @@ func (d *drv) last() string {
 // line is the view's row i.
 func (d *drv) line(i int) string { return strings.Split(d.view(), "\n")[i] }
 
+// head is the header's status, without the quota on its right.
+func (d *drv) head() string {
+	return strings.TrimRight(strings.TrimSuffix(d.line(0), "quota n/a"), " ")
+}
+
 func TestNotesListGoldens(t *testing.T) {
 	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	for _, sz := range [][2]int{{92, 30}, {60, 20}, {40, 15}} {
@@ -72,8 +77,8 @@ func TestNotesListGoldens(t *testing.T) {
 		}
 		d.fits()
 		golden(t, "notes-list-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]), v)
-		if d.line(0) != pyfmtClip("cockpit · 1 open · ✉ 1 unread", sz[0]) {
-			t.Errorf("header %q", d.line(0))
+		if d.head() != pyfmtClip("cockpit · 1 open · ✉ 1 unread", sz[0]) {
+			t.Errorf("header %q", d.head())
 		}
 		if !strings.HasPrefix(d.last(), "enter open · a answer") && !strings.HasPrefix(d.last(), "↑↓ · enter open · a answer") {
 			t.Errorf("footer %q", d.last())
@@ -91,13 +96,13 @@ func pyfmtClip(s string, w int) string {
 
 func TestNotesOnlyStatusAndCursorAcrossRows(t *testing.T) {
 	d := newDrv(t, 60, 12)
-	if d.line(0) != "cockpit · all clear" {
-		t.Fatal(d.line(0))
+	if d.head() != "cockpit · all clear" {
+		t.Fatal(d.head())
 	}
 	d.addNote("", "one", "")
 	d.poll()
-	if d.line(0) != "cockpit · ✉ 1 unread" {
-		t.Fatalf("%q", d.line(0))
+	if d.head() != "cockpit · ✉ 1 unread" {
+		t.Fatalf("%q", d.head())
 	}
 	if d.last() != "enter open · m read · f reply · c chief · ? help · q quit" {
 		t.Fatalf("footer %q", d.last())
@@ -248,7 +253,7 @@ func TestFailedReplyRetryRowAndStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.poll()
-	if !strings.Contains(d.view(), "retry reply n1") || d.line(0) != "cockpit · ✕ delivery failed · chief · r retry" {
+	if !strings.Contains(d.view(), "retry reply n1") || d.head() != "cockpit · ✕ delivery failed · chief · r retry" {
 		t.Fatalf("%s", d.view())
 	}
 	d.fits()

@@ -57,6 +57,7 @@ hooks/hooks.json             session state tracking
 lib/sprite.sh                frames + half-block renderer
 lib/state.sh                 shared runtime state
 scripts/statusline.sh        main status line
+scripts/test_statusline.sh   tests for the quota file
 scripts/subagent.sh          subagent rows
 scripts/state-hook.sh        hook handler
 bin/clawd-status             preview / frames / hide / install / doctor
@@ -68,3 +69,11 @@ skills/clawd/SKILL.md        how to drive and edit it
 The status line runs locally and burns no tokens. One bash process plus one
 `jq` per tick, ~30ms, with git output cached for 3s. The `PostToolUse` hook
 forks nothing — no jq, no sed — so it adds a bare bash startup per tool call.
+
+## Quota file
+
+When Claude Code's input carries `rate_limits`, the status line also writes
+`~/.cache/zen/claude-quota.json` (tmp + mv, at most every 10 s): the
+`five_hour` and `seven_day` windows, each `used_percentage` and `resets_at`
+(epoch seconds), plus `updated_at`. `zen-inbox watch` shows it in the cockpit
+header. Without `rate_limits` nothing is written.

@@ -100,6 +100,12 @@ message.
   last), never a cut word. Other screens wrap whole keys onto two rows. Keys are
   bold, labels plain. A success flash (`» sent …`) tops the list for a few seconds;
   polls clear it.
+- **Claude quota (#790).** Each poll reads `~/.cache/zen/claude-quota.json`, which
+  the clawd-status statusline writes from Claude Code's `rate_limits`; the header
+  shows it on the right: `5h 42% · resets 15:20  ·  week 63% · resets Fri` (local
+  time), yellow from 80 %, red from 95 %, dimmed with `· <age> old` past 15 min,
+  `quota n/a` when the file is missing or unreadable. A long status gets `5h 42%  ·
+  week 63%`, and a narrower header drops the quota.
 - **`c` message chief.** On the list, `c` opens a multi-line compose box sized to the
   pane (crush-style): `ctrl+d` sends (as in free text), `enter` adds a line, `esc`
   cancels and keeps the draft for the next `c`. Sending runs `zen-chief --json`

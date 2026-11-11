@@ -80,3 +80,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-11] update | cockpit layout (#785)
 `zen-inbox watch` puts a `cockpit · counts` header on the top row and the key footer on the last rows of every screen; the old bottom status line folded into the header. The list groups failed deliveries, asks (prod first, marked), notes and held answers under labels, its footer follows the cursor and drops whole keys by rank when narrow, and an empty inbox shows a centred `Nothing waiting for you` with when the last item closed. `a` answers and `f` replies straight from the list.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-11] update | cockpit Claude quota (#790)
+The clawd-status statusline writes `~/.cache/zen/claude-quota.json` (five_hour and seven_day `used_percentage` / `resets_at`, plus `updated_at`) from Claude Code's `rate_limits`, atomically and at most every 10 s; its git cache now reads mtimes with GNU or BSD `stat`. The cockpit header shows the quota on the right with warning and error colours, a stale age and `quota n/a`.
+Pages updated: architecture/decision-inbox.md

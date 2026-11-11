@@ -1,4 +1,4 @@
-cockpit · 2 open · 1 prod
+cockpit · 2 open · 1 prod                                                          quota n/a
 Asks · 2 open
 › PROD · spec-s2 · #680 · 1 open · 0s · [idle]
   spec-s1 · #7 · 1 open · 0s · [idle]

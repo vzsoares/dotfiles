@@ -75,7 +75,10 @@ type snapshot struct {
 }
 
 type tickMsg struct{}
-type loadedMsg struct{ snap snapshot }
+type loadedMsg struct {
+	snap  snapshot
+	quota quota
+}
 type sentMsg struct {
 	recorded, amended, notes []string
 	res                      *inbox.Delivery
@@ -208,6 +211,11 @@ type Model struct {
 	chief   chiefMsg
 	// replyFor is the note the textarea holds a reply for.
 	replyFor int64
+	// quota is the Claude rate-limit file each poll reads from quotaFile;
+	// loc is where its reset times are shown.
+	quota     quota
+	quotaFile string
+	loc       *time.Location
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -221,7 +229,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()),
-		prodBlock: "guard not run", drafts: map[string]view.Staged{},
+		prodBlock: "guard not run", drafts: map[string]view.Staged{}, quotaFile: quotaPath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -300,11 +308,11 @@ func (m *Model) watchedIDs() []string {
 }
 
 func (m *Model) loadCmd(refresh bool) tea.Cmd {
-	ib, client, ids, sessions, gen := m.ib, m.am, m.watchedIDs(), m.snap.sessions, m.draftGen
+	ib, client, ids, sessions, gen, qpath := m.ib, m.am, m.watchedIDs(), m.snap.sessions, m.draftGen, m.quotaFile
 	return func() tea.Msg {
 		s := load(ib, client, ids, sessions, refresh)
 		s.gen = gen
-		return loadedMsg{s}
+		return loadedMsg{s, readQuota(qpath)}
 	}
 }
 
@@ -981,6 +989,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, m.loadCmd(m.now().Sub(m.sessionsAt) >= SessionsEvery)
 	case loadedMsg:
+		m.quota = msg.quota
 		cmds := m.apply(msg.snap)
 		return m, tea.Batch(append(cmds, m.after(PollEvery, tickMsg{}))...)
 	case sentMsg:

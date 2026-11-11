@@ -18,7 +18,7 @@ input=$(cat)
 # One jq call for everything; the script runs up to a few times a second.
 # Fields are joined with US (0x1f) rather than a tab: tab counts as IFS
 # whitespace, so `read` would collapse runs of it and drop empty fields.
-IFS=$'\x1f' read -r cwd model ctx quota effort fast session < <(
+IFS=$'\x1f' read -r cwd model ctx quota effort fast session quota_json < <(
   printf '%s' "$input" | "$JQ" -r '[
     (.cwd // .workspace.current_dir // ""),
     (.model.display_name // ""),
@@ -26,17 +26,36 @@ IFS=$'\x1f' read -r cwd model ctx quota effort fast session < <(
     (.rate_limits.five_hour.used_percentage // 0 | floor | tostring),
     (.effort.level // ""),
     (.fast_mode // false | tostring),
-    (.session_id // "default")
+    (.session_id // "default"),
+    (if .rate_limits then {
+      five_hour: (.rate_limits.five_hour // {} | {used_percentage, resets_at}),
+      seven_day: (.rate_limits.seven_day // {} | {used_percentage, resets_at}),
+      updated_at: (now | floor)
+    } | tojson else "" end)
   ] | join("\u001f")' 2>/dev/null
 )
 cwd=${cwd:-$PWD}
 session=${session:-default}
 
+# mtime <file> -> epoch seconds, 0 when missing (GNU stat, else BSD)
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+
+# --- quota for zen-inbox's cockpit header, written at most every 10s --------
+
+if [[ -n ${quota_json:-} ]]; then
+  quota_file="$HOME/.cache/zen/claude-quota.json"
+  if (( $(date +%s) - $(mtime "$quota_file") >= 10 )); then
+    mkdir -p "${quota_file%/*}" 2>/dev/null
+    { printf '%s\n' "$quota_json" >"$quota_file.$$" && mv -f "$quota_file.$$" "$quota_file"; } 2>/dev/null ||
+      rm -f "$quota_file.$$"
+  fi
+fi
+
 # --- git, cached (this script runs on a 1s timer) ---------------------------
 
 git_cache="$CLAWD_DIR/git-$(printf '%s' "$cwd" | cksum | cut -d' ' -f1)"
 branch="" dirty=""
-if [[ -f $git_cache ]] && (( $(date +%s) - $(stat -c %Y "$git_cache" 2>/dev/null || echo 0) < 3 )); then
+if [[ -f $git_cache ]] && (( $(date +%s) - $(mtime "$git_cache") < 3 )); then
   IFS=$'\t' read -r branch dirty <"$git_cache"
 else
   branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null) ||

@@ -1,4 +1,4 @@
-cockpit · 2 open · 1 held
+cockpit · 2 open · 1 held                                                          quota n/a
 Asks · 2 open
 › spec-s1 · #7 · 1 open · 0s · [idle]
   spec-s2 · #8 · 1 open · 0s · [idle]

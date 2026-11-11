@@ -203,8 +203,7 @@ func (m *Model) View() string {
 		out = out[:m.rows()]
 	}
 	if m.h >= 2 {
-		line, style := m.header()
-		out = append([]string{style.Render(line)}, out...)
+		out = append([]string{m.headerLine()}, out...)
 	}
 	return strings.Join(out, "\n")
 }
@@ -247,6 +246,18 @@ func (m *Model) frame() frame {
 // menu, cursor or key hints, since keys are ignored until it finishes.
 func (m *Model) viewBusy() []section {
 	return []section{{lines: view.WrapRest(m.sp.View()+" "+m.busy, m.w, "", "  "), style: &busyStyle}}
+}
+
+// headerLine is the header with the Claude quota on its right when both fit.
+func (m *Model) headerLine() string {
+	line, style := m.header()
+	left := style.Render(line)
+	gap := 2
+	q := m.quota.text(m.now(), m.loc, m.w-lipgloss.Width(line)-gap)
+	if q == "" {
+		return left
+	}
+	return left + strings.Repeat(" ", m.w-lipgloss.Width(line)-lipgloss.Width(q)) + q
 }
 
 // header is the top row: what needs attention now, else the counts.

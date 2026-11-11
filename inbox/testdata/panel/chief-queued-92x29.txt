@@ -1,4 +1,4 @@
-cockpit · ✉ chief · message 42 queued
+cockpit · ✉ chief · message 42 queued                                              quota n/a
 » message 42 queued for chief
 
 

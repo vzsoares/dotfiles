@@ -1,4 +1,4 @@
-cockpit · ✕ delivery failed · chief · r retry
+cockpit · ✕ delivery failed · chief · r retry      quota n/a
 Failed delivery · 1
 › retry reply n1 to chief · gone
 
