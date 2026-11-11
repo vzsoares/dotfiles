@@ -1,7 +1,8 @@
 #!/bin/bash
 # Refuses an agent push to prod/main/master unless it consumes an approved,
-# unused `zen-inbox ask --prod push` for that repo, branch and sha, then runs
-# the repo's own pre-push. A guard rail, not a boundary: --no-verify skips it.
+# unused `zen-inbox ask --prod push` for that repo, branch and sha. The repo's
+# own pre-push runs before the consume, so its failure leaves the approval
+# unused. A guard rail, not a boundary: --no-verify skips it.
 # Known limit: git push --dry-run runs this hook too, so it consumes.
 set -e
 
@@ -20,6 +21,15 @@ bypass="run it yourself with git push --no-verify"
 refuse() {
 	zen_say "$*"
 	exit 1
+}
+
+hook="$common/hooks/pre-push"
+repo_hook_ran=""
+repo_hook() {
+	repo_hook_ran=1
+	if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
+		"$hook" "$@" < <(printf '%s' "$input")
+	fi
 }
 
 ask_line() {
@@ -71,7 +81,7 @@ if [ -n "$ZEN_PROD_RELEASE" ] && [ -n "$gated" ]; then
 	while read -r branch sha; do
 		[ -n "$branch" ] || continue
 		if inbox approval used "$ZEN_PROD_RELEASE" --action release --repo "$repo" --branch "$branch" &&
-			git merge-base --is-ancestor "$out" "$sha" 2>/dev/null; then
+			git merge-base --is-ancestor "${out##*$'\n'}" "$sha" 2>/dev/null; then
 			continue
 		fi
 		pending="$pending$branch $sha
@@ -111,6 +121,7 @@ EOF
 $gated
 EOF
 		[ -z "$failed" ] || refuse "file the ask above, wait for Approve in the panel, then push again"
+		repo_hook "$@"
 		while read -r branch sha; do
 			[ -n "$branch" ] || continue
 			inbox approval use --match --action push --repo "$repo" --branch "$branch" --sha "$sha" ||
@@ -122,7 +133,4 @@ EOF
 	fi
 fi
 
-hook="$common/hooks/pre-push"
-if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
-	exec "$hook" "$@" < <(printf '%s' "$input")
-fi
+[ -n "$repo_hook_ran" ] || repo_hook "$@"

@@ -1945,7 +1945,7 @@ def test_phase_push_without_approval_or_dev_sets_nothing(
     release.phase_push(release.State(target_branch="prod"))
     release.phase_push(release.State(target_branch="dev", dev=True, approval_id="x"))
     assert push_recorder.envs == [None, None]
-    # Unapproved, the hook prompts on the tty, so no spinner covers it.
+    # The hook may prompt on the tty, so no prod push runs under a spinner.
     assert push_recorder.titles == ["", "Pushing dev..."]
 
 

@@ -171,8 +171,9 @@ pass without calling zen-inbox. It is a guard rail for agents: `--no-verify` ski
   its approval.
 - **Dispatchers.** A global hooksPath hides each repo's `.git/hooks`, so every
   other standard hook name in `git/hooks/` links to `dispatch`, which execs
-  `<git-common-dir>/hooks/<name>` with args and stdin; pre-push chains to the
-  repo's own pre-push with the buffered stdin. `push-to-checkout` replays git's
+  `<git-common-dir>/hooks/<name>` with args and stdin; pre-push runs the
+  repo's own pre-push with the buffered stdin before consuming, so its failure
+  leaves the approval unused. `push-to-checkout` replays git's
   built-in `updateInstead` when the repo has none. A repo with its own local
   `core.hooksPath` (husky) skips all of this; `zen-sweep` reports it as
   `hooks-path`.

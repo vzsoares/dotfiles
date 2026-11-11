@@ -337,6 +337,22 @@ def test_release_ancestor_passes_without_match(env: Env) -> None:
     ]
 
 
+def test_release_sha_after_launcher_stderr(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    head = env.commit("bump")
+    env.vars.update(
+        {
+            "ZEN_PROD_RELEASE": "680.1",
+            "FAKE_USED": "0",
+            "FAKE_USED_SHA": f"go: downloading x\n{approved}",
+        }
+    )
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert env.remote_sha("master") == head
+    assert [c.split()[1] for c in env.calls()] == ["used"]
+
+
 def test_release_non_ancestor_falls_back(env: Env) -> None:
     env.git("checkout", "-q", "-b", "side")
     side = env.commit("side")
@@ -372,7 +388,7 @@ def test_repo_pre_push_failure_blocks(env: Env) -> None:
     repo_hook(env, "pre-push", "exit 1\n")
     assert env.run("push", "origin", "master").returncode != 0
     assert env.remote_sha("master") == ""
-    assert [c.split()[1] for c in env.calls()] == ["check", "use"]
+    assert [c.split()[1] for c in env.calls()] == ["check"]
 
 
 def test_repo_pre_push_gets_same_stdin_and_args(env: Env) -> None:
