@@ -169,6 +169,7 @@ type Model struct {
 	draftGen int
 	draftOps []draftOp
 	saving   bool
+	quitting bool
 	jumpFrom screen
 
 	ta textarea.Model
@@ -621,6 +622,16 @@ func (m *Model) writeDrafts() tea.Cmd {
 	}
 }
 
+// quit leaves once every queued draft write has landed; a second ctrl+c
+// leaves at once.
+func (m *Model) quit() tea.Cmd {
+	if !m.saving && len(m.draftOps) == 0 {
+		return tea.Quit
+	}
+	m.quitting = true
+	return m.writeDrafts()
+}
+
 func (m *Model) onDraftsSaved(msg draftsSavedMsg) tea.Cmd {
 	// A poll started while the write ran may have read the db before it.
 	m.saving = false
@@ -633,7 +644,10 @@ func (m *Model) onDraftsSaved(msg draftsSavedMsg) tea.Cmd {
 			m.flash, m.flashOK = note, false
 		}
 	}
-	return m.writeDrafts()
+	if cmd := m.writeDrafts(); cmd != nil || !m.quitting {
+		return cmd
+	}
+	return tea.Quit
 }
 
 func (p *pass) answers() int {
@@ -944,7 +958,10 @@ var reviewMenu = []item{{"Send", "send"}, {"Change one", "change"}, {"Cancel", "
 func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	if k == "ctrl+c" {
-		return m, tea.Quit
+		if m.quitting {
+			return m, tea.Quit
+		}
+		return m, m.quit()
 	}
 	if m.busy != "" {
 		return m, nil
@@ -1048,7 +1065,7 @@ func (m *Model) undeliveredName(sid string) string {
 func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "q", "esc":
-		return m, tea.Quit
+		return m, m.quit()
 	case "r":
 		if len(m.snap.undelivered) > 0 {
 			return m, m.retryCmd(m.snap.undelivered[0].SessionID)
@@ -1193,6 +1210,12 @@ func (m *Model) keyFree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.scr = scWalk
+		d, ok := m.decision(m.p.cur)
+		if text := m.ta.Value(); ok && !pyfmt.Blank(text) {
+			s := view.Staged{Kind: "text", Text: text, Rev: d.Rev}
+			m.p.staged[d.ID] = s
+			return m, m.saveDraft(d.ID, s)
+		}
 		return m, nil
 	case "ctrl+d":
 		text := m.ta.Value()

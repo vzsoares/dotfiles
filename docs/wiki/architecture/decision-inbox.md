@@ -29,7 +29,7 @@ message.
    name (group, repo) · status · age`; without a brief just `#task` and the asker),
    then the questions in ID order.
 4. **answer** — Answer walks the open questions one screen each: `a`-`d` pick, `f`
-   free text (a textarea, `ctrl+d` sends), `s` skip, `t` talk, `v` view full, `esc`
+   free text (a textarea, `ctrl+d` sends, `esc` keeps the text as a draft), `s` skip, `t` talk, `v` view full, `esc`
    back; `?` toggles help and the footer always lists the screen's keys. Answers are
    staged with the decision's `rev` and kept as drafts (see Drafts under Panel); a
    review screen offers Send / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
@@ -65,7 +65,10 @@ message.
   closes or is amended (`closeOne`, `Amend`), `Drafts()` loads only those at the
   current `rev`, and a send clears the session's drafts. An `Approve` on a `--prod`
   ask is never written (store and panel both refuse), so after a restart it is asked
-  again with its y/N confirm. Cancel and esc keep drafts.
+  again with its y/N confirm. Cancel and esc keep drafts. Esc on free text keeps
+  non-blank typed text as that question's draft (blank stages nothing). `q`, esc on
+  the list and `ctrl+c` quit only after the queued writes land; a second `ctrl+c`
+  quits at once.
 - **Moving in the walk.** `←` or `shift+tab` shows the previous question of the pass
   (from the review, the last one) with the cursor on its drafted option, and free
   text reopens with its text; `→` goes forward without changing anything (on the

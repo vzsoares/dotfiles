@@ -159,7 +159,7 @@ var footers = map[screen][]key{
 	scWalk:     {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 	scReview:   {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
 	scJump:     {{"↑↓", ""}, {"enter", "jump"}, {"esc", "back"}},
-	scFree:     {{"ctrl+d", "send"}, {"esc", "cancel"}},
+	scFree:     {{"ctrl+d", "send"}, {"esc", "keep"}},
 	scFull:     {{"↑↓", "scroll"}, {"esc", "back"}},
 	scTalkPick: {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote: {{"enter", "done"}, {"esc", "no note"}},

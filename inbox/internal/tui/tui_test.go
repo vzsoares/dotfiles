@@ -716,7 +716,7 @@ func TestKeysAndFooterPerScreen(t *testing.T) {
 	if d.m.scr != scFree {
 		t.Fatal("enter on Free text did not open it")
 	}
-	footer("ctrl+d send", "esc cancel")
+	footer("ctrl+d send", "esc keep")
 	d.keys("esc", "v")
 	footer("esc back")
 	d.keys("esc", "s")
@@ -1160,5 +1160,73 @@ func TestWalkKeepsScrollAcrossViewFull(t *testing.T) {
 	d.keys("v", "down", "esc")
 	if d.m.scroll != before {
 		t.Fatalf("walk scroll %d, want %d", d.m.scroll, before)
+	}
+}
+
+func TestEscOnFreeTextKeepsTypedText(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.ask("7", "s1", "And then?", "up", "down")
+	d.openWalk()
+	d.keys("f", "half typed", "esc")
+	if d.m.scr != scWalk {
+		t.Fatalf("esc did not return to the question:\n%s", d.view())
+	}
+	ds, err := d.ib.Drafts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ds) != 1 {
+		t.Fatalf("drafts after esc: %+v", ds)
+	}
+	for _, dr := range ds {
+		if dr.Kind != "text" || dr.Text != "half typed" {
+			t.Fatalf("draft after esc: %+v", dr)
+		}
+	}
+	d.keys("f")
+	if d.m.scr != scFree || d.m.ta.Value() != "half typed" {
+		t.Fatalf("free text reopened with %q", d.m.ta.Value())
+	}
+}
+
+func TestEscOnBlankFreeTextStagesNothing(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.openWalk()
+	d.keys("f", " ", "esc")
+	if ds, err := d.ib.Drafts(); err != nil || len(ds) != 0 {
+		t.Fatalf("drafts %+v, err %v", ds, err)
+	}
+}
+
+func TestQuitWaitsForQueuedDraftWrites(t *testing.T) {
+	for _, k := range []string{"q", "ctrl+c"} {
+		d := newDrv(t, 92, 29)
+		d.ask("7", "s1", "Which way?", "left", "right")
+		d.ask("7", "s1", "And then?", "up", "down")
+		d.openWalk()
+		// A write in flight: the staged answer queues behind it.
+		d.m.saving = true
+		d.keys("a")
+		if len(d.m.draftOps) != 1 {
+			t.Fatalf("queued ops %+v", d.m.draftOps)
+		}
+		d.keys("esc")
+		if k == "q" {
+			d.keys("esc")
+		}
+		d.keys(k)
+		if d.quit {
+			t.Fatalf("%s quit with a draft unwritten", k)
+		}
+		d.m.saving = false
+		d.send(draftsSavedMsg{})
+		if !d.quit {
+			t.Fatalf("%s did not quit once the writes landed", k)
+		}
+		if ds, err := d.ib.Drafts(); err != nil || len(ds) != 1 {
+			t.Fatalf("%s: drafts %+v, err %v", k, ds, err)
+		}
 	}
 }
