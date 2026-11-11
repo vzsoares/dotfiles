@@ -1,3 +1,4 @@
+cockpit · 1 open · 1 prod
 736.1  prod approval
 action run
 repo   core
@@ -7,23 +8,22 @@ hero,footer,banner,carousel,testimonials,pricing,faq,contact --log-level debug -
 2026_11_10_add_widget_order_and_visibility_flags
 
 Approve? y/N
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 y approve · n/esc back
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-◆ 1 open · spec-s1

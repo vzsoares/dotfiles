@@ -22,6 +22,9 @@ var (
 	busyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
 	okStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 	failStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	headerStyle = lipgloss.NewStyle().Bold(true)
+	keyStyle    = lipgloss.NewStyle().Bold(true)
+	sepStyle    = lipgloss.NewStyle().Faint(true)
 )
 
 type section struct {
@@ -42,7 +45,7 @@ type frame struct {
 	help bool
 }
 
-// rows is the height left for a screen: the last row is the status line.
+// rows is the height left for a screen: the first row is the header.
 func (m *Model) rows() int {
 	if m.h < 2 {
 		return m.h
@@ -159,10 +162,10 @@ func (m *Model) layout(follow bool) ([]string, int, int) {
 		body = append(body, m.lines([]section{{lines: helpLines(f.s, m.w), style: &footerStyle}})...)
 	}
 	menu := m.lines(f.menu)
-	foot := m.lines([]section{{lines: footerLines(f.s, m.w, false), style: &footerStyle}})
+	foot := m.lines([]section{{lines: m.footer(f.s, false)}})
 	room := m.rows() - len(top) - len(menu) - len(foot)
 	if len(body) > room {
-		foot = m.lines([]section{{lines: footerLines(f.s, m.w, true), style: &footerStyle}})
+		foot = m.lines([]section{{lines: m.footer(f.s, true)}})
 		room = m.rows() - len(top) - len(menu) - len(foot)
 	}
 	cur := -1
@@ -179,6 +182,10 @@ func (m *Model) layout(follow bool) ([]string, int, int) {
 		out = append(out, footerStyle.Render(clip("↓ "+strconv.Itoa(len(body)-end)+" more", m.w)))
 	}
 	out = append(out, menu...)
+	// The footer stays on the last rows.
+	for len(out)+len(foot) < m.rows() {
+		out = append(out, "")
+	}
 	return append(out, foot...), start, end - start
 }
 
@@ -196,11 +203,8 @@ func (m *Model) View() string {
 		out = out[:m.rows()]
 	}
 	if m.h >= 2 {
-		for len(out) < m.rows() {
-			out = append(out, "")
-		}
-		line, style := m.status()
-		out = append(out, style.Render(line))
+		line, style := m.header()
+		out = append([]string{style.Render(line)}, out...)
 	}
 	return strings.Join(out, "\n")
 }
@@ -245,90 +249,148 @@ func (m *Model) viewBusy() []section {
 	return []section{{lines: view.WrapRest(m.sp.View()+" "+m.busy, m.w, "", "  "), style: &busyStyle}}
 }
 
-// status is the one-line bottom row agent-manager shows as the terminal's
-// last output.
-func (m *Model) status() (string, lipgloss.Style) {
+// header is the top row: what needs attention now, else the counts.
+func (m *Model) header() (string, lipgloss.Style) {
+	const name = "cockpit · "
 	switch {
 	case m.busy != "":
-		text := "» " + strings.ToLower(m.busy[:1]) + m.busy[1:]
+		text := name + "» " + strings.ToLower(m.busy[:1]) + m.busy[1:]
 		return pyfmt.Clip(text, max(m.w-2, 0)) + " " + m.sp.View(), busyStyle
 	case len(m.snap.undelivered) > 0 || len(m.snap.failedNotes) > 0:
-		var name string
+		var who string
 		if len(m.snap.undelivered) > 0 {
-			name = m.snap.undelivered[0].Decisions[0].SessionName
+			who = m.snap.undelivered[0].Decisions[0].SessionName
 		} else {
-			name = m.snap.failedNotes[0].SessionName
+			who = m.snap.failedNotes[0].SessionName
 		}
 		if n := len(m.snap.undelivered) + len(m.snap.failedNotes) - 1; n > 0 {
-			name += " +" + strconv.Itoa(n)
+			who += " +" + strconv.Itoa(n)
 		}
-		return pyfmt.Clip("✕ delivery failed · "+name+" · r retry", m.w), failStyle
+		return pyfmt.Clip(name+"✕ delivery failed · "+who+" · r retry", m.w), failStyle
 	case m.chief.id != "":
-		return m.chiefStatusLine(), footerStyle
+		return pyfmt.Clip(name+m.chiefStatusLine(), m.w), headerStyle
 	case !m.loaded:
-		return "○ loading…", footerStyle
+		return pyfmt.Clip(name+"loading…", m.w), headerStyle
 	}
-	unread := inbox.Unread(m.snap.notes)
-	mail := "✉ " + strconv.Itoa(unread) + " unread"
-	switch {
-	case len(m.snap.open) == 0 && unread == 0:
-		return "○ inbox empty", footerStyle
-	case len(m.snap.open) == 0:
-		return pyfmt.Clip(mail, m.w), footerStyle
+	parts := []string{"cockpit"}
+	if n := len(m.snap.open); n > 0 {
+		parts = append(parts, strconv.Itoa(n)+" open")
 	}
-	var names []string
-	for _, r := range view.Rows(m.snap.open, m.snap.sessions) {
-		names = append(names, r.Name)
+	prod := 0
+	for _, d := range m.snap.open {
+		if d.Prod != nil {
+			prod++
+		}
 	}
-	line := "◆ " + strconv.Itoa(len(m.snap.open)) + " open · " + strings.Join(names, ", ")
-	if unread > 0 {
-		line += " · " + mail
+	if prod > 0 {
+		parts = append(parts, strconv.Itoa(prod)+" prod")
 	}
-	return pyfmt.Clip(line, m.w), footerStyle
+	if n := inbox.Unread(m.snap.notes); n > 0 {
+		parts = append(parts, "✉ "+strconv.Itoa(n)+" unread")
+	}
+	if n := len(m.snap.held); n > 0 {
+		parts = append(parts, strconv.Itoa(n)+" held")
+	}
+	if len(parts) == 1 {
+		parts = append(parts, "all clear")
+	}
+	return pyfmt.Clip(strings.Join(parts, " · "), m.w), headerStyle
 }
 
+// group appends a labelled block to body, a blank row apart from the last.
+func group(body []section, head string, style *lipgloss.Style) []section {
+	if count(body) > 0 {
+		body = append(body, section{lines: []string{""}})
+	}
+	return append(body, section{lines: []string{head}, style: style})
+}
+
+// viewList is the cockpit: failed deliveries, asks, notes and held answers,
+// in that order, each under its label; the rows follow listItems' order.
 func (m *Model) viewList() frame {
-	var flash, top []string
+	var body []section
 	if m.flash != "" {
-		flash = append(view.WrapRest("» "+m.flash, m.w, "", "  "), "")
+		style := &bannerStyle
+		if m.flashOK {
+			style = &okStyle
+		}
+		body = append(body, section{lines: view.WrapRest("» "+m.flash, m.w, "", "  "), style: style})
 	}
-	for _, s := range view.StatusLines(m.snap.held, m.snap.open, m.snap.undelivered) {
-		top = append(top, view.WrapRest(s, m.w, "", "    ")...)
-	}
-	flashStyle := &bannerStyle
-	if m.flashOK {
-		flashStyle = &okStyle
-	}
-	body := []section{{lines: flash, style: flashStyle}, {lines: top, style: &bannerStyle}}
 	items := m.listItems()
-	if len(items) == 0 {
-		empty := "inbox empty"
-		if !m.loaded {
-			empty = "loading…"
-		}
-		return frame{s: scList, body: append(body, section{lines: []string{empty}}), cur: -1, help: true}
+	held := view.HeldLines(m.snap.held, m.snap.open)
+	if len(items) == 0 && len(held) == 0 {
+		return frame{s: scList, body: append(body, m.emptySections(count(body))...), cur: -1, help: true}
 	}
-	cur := len(flash) + len(top) + m.cursor
-	first := len(items) - len(m.snap.notes)
-	if first > 0 {
-		c := m.cursor
-		if c >= first {
-			c = -1
-		}
-		body = append(body, menuSection(items[:first], c, first, m.w)...)
-	}
-	if first == len(items) {
-		return frame{s: scList, body: body, cur: cur, help: true}
-	}
-	gap := first > 0
-	if m.cursor >= first {
-		cur++
-		if gap {
-			cur++
+	rows, prod := m.askRows()
+	nFail := len(m.snap.undelivered) + len(m.snap.failedNotes)
+	cur, i := -1, 0
+	add := func(n int, style func(j int) *lipgloss.Style) {
+		for j := 0; j < n; j, i = j+1, i+1 {
+			prefix, st := "  ", style(j)
+			if i == m.cursor {
+				prefix, st, cur = "› ", &cursorStyle, count(body)
+			}
+			body = append(body, section{lines: []string{prefix + items[i].label}, style: st})
 		}
 	}
-	body = append(body, m.noteSections(items[first:], m.cursor-first, gap)...)
-	return frame{s: scListNotes, body: body, cur: cur, help: true}
+	if nFail > 0 {
+		body = group(body, "Failed delivery · "+strconv.Itoa(nFail), &failStyle)
+		add(nFail, func(int) *lipgloss.Style { return &failStyle })
+	}
+	if len(rows) > 0 {
+		head := "Asks · " + strconv.Itoa(len(m.snap.open)) + " open"
+		body = group(body, head, &bannerStyle)
+		add(len(rows), func(j int) *lipgloss.Style {
+			if prod[rows[j].SessionID] {
+				return &failStyle
+			}
+			return nil
+		})
+	}
+	if len(m.snap.notes) > 0 {
+		body = group(body, "Notes · "+strconv.Itoa(inbox.Unread(m.snap.notes))+" unread", &bannerStyle)
+		add(len(m.snap.notes), func(j int) *lipgloss.Style {
+			if m.snap.notes[j].Unread() {
+				return &unreadStyle
+			}
+			return &readStyle
+		})
+	}
+	if len(held) > 0 {
+		body = group(body, "Held · sent when the session's asks close", &bannerStyle)
+		for _, h := range held {
+			body = append(body, section{lines: view.WrapRest("  "+h, m.w, "", "    "), style: &readStyle})
+		}
+	}
+	return frame{s: scList, body: body, cur: cur, help: true}
+}
+
+// emptySections centres the nothing-waiting message in the rows left above
+// the footer.
+func (m *Model) emptySections(used int) []section {
+	msg := []string{"Nothing waiting for you"}
+	if !m.loaded {
+		msg = []string{"loading…"}
+	} else if m.snap.lastClosed != "" {
+		msg = append(msg, "last item closed "+view.Age(m.snap.lastClosed, m.now())+" ago")
+	}
+	room := m.rows() - used - m.footRows(scList)
+	if m.showHelp {
+		room -= len(helpLines(scList, m.w))
+	}
+	var out []section
+	if pad := (room - len(msg)) / 2; pad > 0 {
+		out = append(out, section{lines: make([]string, pad)})
+	}
+	for i, line := range msg {
+		style := &readStyle
+		if i == 0 {
+			style = &headerStyle
+		}
+		indent := strings.Repeat(" ", max((m.w-lipgloss.Width(line))/2, 0))
+		out = append(out, section{lines: []string{indent + line}, style: style})
+	}
+	return out
 }
 
 func (m *Model) markerLines() []string {
@@ -339,7 +401,19 @@ func (m *Model) markerLines() []string {
 	return out
 }
 
-func (m *Model) footRows(s screen) int { return len(footerLines(s, m.w, false)) }
+func (m *Model) footRows(s screen) int { return len(m.footer(s, false)) }
+
+// footer is the screen's key rows; the list's follow the cursor.
+func (m *Model) footer(s screen, scroll bool) []string {
+	if s != scList {
+		return footerLines(s, m.w, scroll)
+	}
+	keys := m.listKeys()
+	if scroll {
+		keys = append(keys, ranked{scrollKey(s), 8})
+	}
+	return []string{paintKeys(fitKeys(keys, m.w))}
+}
 
 func (m *Model) viewSession() frame {
 	markers := m.markerLines()

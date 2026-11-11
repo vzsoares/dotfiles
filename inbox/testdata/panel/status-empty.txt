@@ -1,10 +1,10 @@
-inbox empty
-↑↓ · enter open · c chief · q quit · ? help
+cockpit · all clear
+
+
+
+                  Nothing waiting for you
 
 
 
 
-
-
-
-○ inbox empty
+c chief · ? help · q quit

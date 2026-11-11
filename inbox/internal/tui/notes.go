@@ -83,8 +83,10 @@ func (m *Model) markCmd(id int64, all, read bool) tea.Cmd {
 }
 
 func (m *Model) onNotes(msg notesMsg) {
+	focused := m.focusedRow()
 	m.snap = msg.snap
 	m.refreshNote()
+	m.refocus(focused)
 	if msg.err != nil {
 		m.flash, m.flashOK = msg.err.Error(), false
 	}
@@ -185,28 +187,6 @@ func (m *Model) keyReply(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
 	return m, cmd
-}
-
-// noteSections are the list's Notes header and rows; cursor is the note
-// row's index, or -1.
-func (m *Model) noteSections(items []item, cursor int, gap bool) []section {
-	var out []section
-	if gap {
-		out = append(out, section{lines: []string{""}})
-	}
-	head := "Notes · " + strconv.Itoa(inbox.Unread(m.snap.notes)) + " unread"
-	out = append(out, section{lines: []string{head}, style: &bannerStyle})
-	for i, it := range items {
-		prefix, style := "  ", &readStyle
-		if m.snap.notes[i].Unread() {
-			style = &unreadStyle
-		}
-		if i == cursor {
-			prefix, style = "› ", &cursorStyle
-		}
-		out = append(out, section{lines: []string{prefix + pyfmt.Clip(it.label, max(m.w-2, 1))}, style: style})
-	}
-	return out
 }
 
 func (m *Model) viewNote() frame {

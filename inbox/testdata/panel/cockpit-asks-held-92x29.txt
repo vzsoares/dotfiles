@@ -1,0 +1,29 @@
+cockpit · 2 open · 1 held
+Asks · 2 open
+› spec-s1 · #7 · 1 open · 0s · [idle]
+  spec-s2 · #8 · 1 open · 0s · [idle]
+
+Held · sent when the session's asks close
+  spec-s1: 7.1 held until 7.2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter open · a answer · c chief · ? help · q quit

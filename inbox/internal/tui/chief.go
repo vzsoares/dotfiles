@@ -137,7 +137,7 @@ func (m *Model) viewChief() frame {
 		body: []section{{lines: strings.Split(m.chiefTA.View(), "\n")}}, cur: -1, help: true}
 }
 
-// chiefStatusLine is the status row's text while a message is tracked.
+// chiefStatusLine is the header's text while a message is tracked.
 func (m *Model) chiefStatusLine() string {
-	return pyfmt.Clip("✉ chief · message "+m.chief.id+" "+m.chief.status, m.w)
+	return "✉ chief · message " + m.chief.id + " " + m.chief.status
 }

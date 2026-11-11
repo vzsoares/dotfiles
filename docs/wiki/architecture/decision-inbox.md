@@ -1,7 +1,7 @@
 ---
 title: Decision Inbox — zen-inbox
 category: architecture
-updated: 2026-11-10
+updated: 2026-11-11
 related: [overview, release-tooling]
 ---
 
@@ -84,11 +84,22 @@ message.
 - **Busy loader.** A send, retry, resolve or talk runs in a `tea.Cmd`; while it runs
   the panel shows a spinner screen (`m.busy`, MiniDot spinner) instead of freezing,
   and polls keep running.
-- **Status line.** The last row is one status line, as agent-manager shows a
-  terminal's last output: `» <busy text> ⠋` while busy, `✕ delivery failed · name ·
-  r retry` when answers are undelivered, `◆ n open · names` otherwise, `○ inbox
-  empty` / `○ loading…`. A success flash (`» sent …`) tops the list for a few
-  seconds; polls clear it.
+- **Cockpit layout (#785).** Every screen has a header row on top and its key footer
+  pinned to the last rows. The header is `cockpit · » <busy text> ⠋` while busy,
+  `cockpit · ✕ delivery failed · name · r retry` on a failed delivery, the chief
+  message status, else counts: `cockpit · n open · k prod · ✉ u unread · h held`
+  (`all clear` when none). The list shows labelled groups, most urgent first:
+  `Failed delivery` (retry rows with the reason), `Asks` (sessions with a prod ask
+  first, marked `PROD ·`), `Notes`, then `Held` (answers waiting for the session's
+  open asks; not selectable). With nothing listed, `Nothing waiting for you` and
+  `last item closed <age> ago` (latest decision close or note read) sit centred.
+  The list footer is one row of keys for the row under the cursor (`enter open` /
+  `a answer` on a session, `enter retry` on a failure, `enter open · m read|unread ·
+  f reply` on a note) plus `r retry`, `c chief`, `M all read`, `? help`, `q quit`;
+  when the row is too narrow it drops whole keys by rank (↑↓ first, the focused key
+  last), never a cut word. Other screens wrap whole keys onto two rows. Keys are
+  bold, labels plain. A success flash (`» sent …`) tops the list for a few seconds;
+  polls clear it.
 - **`c` message chief.** On the list, `c` opens a multi-line compose box sized to the
   pane (crush-style): `enter` sends, `ctrl+j` or `alt+enter` adds a line, `esc`
   cancels and keeps the draft for the next `c`. Sending runs `zen-chief --json`
@@ -212,9 +223,8 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
   twice. Success marks the note read; a failure keeps the reply and its error, shows
   a `retry reply n12` row and the `✕ delivery failed` status, and `r` / `zen-inbox
   retry <session>` resend it (answers first; a `sending` claim whose `claimed_at` is older than 60 s counts).
-- **Status and bell.** `◆ n open · names · ✉ k unread`, or `✉ k unread` alone;
-  `○ inbox empty` only when both are zero. Notes never ring zen-bell and refresh on
-  the same 2 s poll.
+- **Header and bell.** Unread notes count in the header (`✉ k unread`). Notes never
+  ring zen-bell and refresh on the same 2 s poll.
 
 ## IDs
 

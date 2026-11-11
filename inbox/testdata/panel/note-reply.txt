@@ -1,3 +1,4 @@
+cockpit · ✉ 1 unread
 reply to n1  Task 707 merged
 ┃ thanks, ship it                                           
 ┃                                                           
@@ -14,7 +15,6 @@ reply to n1  Task 707 merged
 ┃                                                           
 ┃                                                           
 ┃                                                           
+
+
 ctrl+d send · esc back
-
-
-✉ 1 unread

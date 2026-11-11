@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
@@ -152,9 +154,8 @@ type key struct{ key, label string }
 var spare = map[string]bool{"t talk": true, "v full": true}
 
 // Footer labels stay short so the walk's keys fit in two rows at 40 columns;
-// ? adds the longer explanation.
+// ? adds the longer explanation. The list builds its own from the cursor.
 var footers = map[screen][]key{
-	scList:      {{"↑↓", ""}, {"enter", "open"}, {"c", "chief"}, {"q", "quit"}, {"?", "help"}},
 	scSession:   {{"↑↓", ""}, {"enter", ""}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
 	scWalk:      {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 	scReview:    {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
@@ -165,7 +166,6 @@ var footers = map[screen][]key{
 	scTalkPick:  {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote:  {{"enter", "done"}, {"esc", "no note"}},
 	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
-	scListNotes: {{"↑↓", ""}, {"enter", "open"}, {"m", "mark"}, {"M", "all read"}, {"c", "chief"}, {"q", "quit"}, {"?", "help"}},
 	scNote:      {{"↑↓", ""}, {"m", "mark"}, {"f", "reply"}, {"esc", "back"}, {"?", "help"}},
 	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
 	scChief:     {{"enter", "send"}, {"ctrl+j", "newline"}, {"esc", "cancel"}},
@@ -173,43 +173,114 @@ var footers = map[screen][]key{
 }
 
 var helps = map[screen]string{
-	scList:    "One row per asking session, oldest first. Open one to see its tasks and questions. c writes a message to chief.",
+	scList: "Failed deliveries, asks (prod first), notes from chief and held answers, most urgent first." +
+		" enter opens the row under the cursor, a answers a session's asks, f replies to a note," +
+		" m marks a note read or unread, M marks them all read, r retries a failed delivery, c writes to chief.",
 	scSession: "Answer walks the questions one by one; Talk opens the agent in a popup.",
 	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything. ← or shift+tab goes back a question, → forward, l lists them all. Answers are kept as drafts, even across esc and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
 	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
-	scListNotes: "One row per asking session, oldest first. Open one to see its tasks and questions." +
-		" Notes from chief follow: m marks the one under the cursor read or unread, M marks them all read.",
-	scNote:  "m marks this note read or unread; opening it does not. f writes one reply to the sender and marks it read.",
-	scChief: "enter sends the message to the live chief session, ctrl+j or alt+enter adds a line. esc cancels and keeps the draft for the next c.",
-	scReply: "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
+	scNote:    "m marks this note read or unread; opening it does not. f writes one reply to the sender and marks it read.",
+	scChief:   "enter sends the message to the live chief session, ctrl+j or alt+enter adds a line. esc cancels and keeps the draft for the next c.",
+	scReply:   "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
+}
+
+func (k key) text() string { return strings.TrimSpace(k.key + " " + k.label) }
+
+// paintKeys is one footer row: keys bold, labels plain, faint separators.
+func paintKeys(keys []key) string {
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = keyStyle.Render(k.key)
+		if k.label != "" {
+			parts[i] += " " + k.label
+		}
+	}
+	return strings.Join(parts, sepStyle.Render(" · "))
+}
+
+func keysWidth(keys []key) int {
+	n := 0
+	for i, k := range keys {
+		if i > 0 {
+			n += lipgloss.Width(" · ")
+		}
+		n += lipgloss.Width(k.text())
+	}
+	return n
+}
+
+// packKeys fills rows of width with whole keys, never splitting one.
+func packKeys(keys []key, width int) [][]key {
+	var rows [][]key
+	var row []key
+	for _, k := range keys {
+		if len(row) > 0 && keysWidth(append(slices.Clone(row), k)) > width {
+			rows = append(rows, row)
+			row = nil
+		}
+		row = append(row, k)
+	}
+	if len(row) > 0 {
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// scrollKey is the scroll hint; ctrl+u/d edit text on the input screens,
+// so only pgup/dn scroll there.
+func scrollKey(s screen) key {
+	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply || s == scChief {
+		return key{"pgup/dn", "scroll"}
+	}
+	return key{"^u/^d", "scroll"}
 }
 
 func footerLines(s screen, width int, scroll bool) []string {
 	keys := footers[s]
 	if scroll {
-		// ctrl+u/d edit text on the input screens, so only pgup/dn scroll there.
-		hint := key{"^u/^d", "scroll"}
-		if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply || s == scChief {
-			hint = key{"pgup/dn", "scroll"}
-		}
-		keys = append(append([]key(nil), keys...), hint)
+		keys = append(slices.Clone(keys), scrollKey(s))
 	}
-	wrap := func(all bool) []string {
-		var parts []string
-		for _, k := range keys {
-			part := strings.TrimSpace(k.key + " " + k.label)
-			if all || !spare[part] {
-				parts = append(parts, part)
+	rows := packKeys(keys, width)
+	if len(rows) > 2 {
+		keys = slices.DeleteFunc(slices.Clone(keys), func(k key) bool { return spare[k.text()] })
+		rows = packKeys(keys, width)
+	}
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = paintKeys(r)
+	}
+	return out
+}
+
+// ranked is a list footer key; the highest rank is dropped first when the
+// row is too narrow.
+type ranked struct {
+	key
+	rank int
+}
+
+// fitKeys keeps keys in order, dropping the highest-ranked (the last of a
+// tie) until they fit one row.
+func fitKeys(keys []ranked, width int) []key {
+	keys = slices.Clone(keys)
+	for {
+		plain := make([]key, len(keys))
+		for i, k := range keys {
+			plain[i] = k.key
+		}
+		if len(keys) <= 1 || keysWidth(plain) <= width {
+			return plain
+		}
+		drop := 0
+		for i, k := range keys {
+			if k.rank >= keys[drop].rank {
+				drop = i
 			}
 		}
-		return view.WrapRest(strings.Join(parts, " · "), width, "", "")
+		keys = slices.Delete(keys, drop, drop+1)
 	}
-	if out := wrap(true); len(out) <= 2 {
-		return out
-	}
-	return wrap(false)
 }
 
 func helpLines(s screen, width int) []string {

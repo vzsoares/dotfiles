@@ -1,6 +1,6 @@
-failed · spec-s1: 7.1 (failed); zen-inbox retry s1
-› retry spec-s1: 1 answer(s)
-↑↓ · enter open · c chief · q quit · ? help
+cockpit · ✕ delivery failed · spec-s1 · r retry
+Failed delivery · 1
+› retry spec-s1: 1 answer(s) · failed
 
 
 
@@ -9,4 +9,4 @@ failed · spec-s1: 7.1 (failed); zen-inbox retry s1
 
 
 
-✕ delivery failed · spec-s1 · r retry
+enter retry · c chief · ? help · q quit

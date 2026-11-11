@@ -1,3 +1,5 @@
+cockpit · 40 open
+Asks · 40 open
 › spec-t10 · #700 · 1 open · 0s · [gone]
   spec-t11 · #701 · 1 open · 0s · [gone]
   spec-t12 · #702 · 1 open · 0s · [gone]
@@ -24,7 +26,5 @@
   spec-t33 · #723 · 1 open · 0s · [gone]
   spec-t34 · #724 · 1 open · 0s · [gone]
   spec-t35 · #725 · 1 open · 0s · [gone]
-  spec-t36 · #726 · 1 open · 0s · [gone]
-↓ 13 more
-↑↓ · enter open · c chief · q quit · ? help · ^u/^d scroll
-◆ 40 open · spec-t10, spec-t11, spec-t12, spec-t13, spec-t14, spec-t15, spec-t16, spec-t17,…
+↓ 14 more
+↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d scroll

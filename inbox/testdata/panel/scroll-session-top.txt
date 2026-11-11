@@ -1,3 +1,4 @@
+cockpit · 1 open
 #669
 asked by spec-s1 · idle · 0s
 
@@ -27,4 +28,3 @@ asked by spec-s1 · idle · 0s
   Talk
   Back
 ↑↓ · enter · t talk · esc back · ? help · ^u/^d scroll
-◆ 1 open · spec-s1

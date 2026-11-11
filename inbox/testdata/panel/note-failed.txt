@@ -1,9 +1,9 @@
-› retry reply n1
+cockpit · ✕ delivery failed · chief · r retry
+Failed delivery · 1
+› retry reply n1 to chief · gone
 
 Notes · 1 unread
   ● Task 707 merged · chief · #707 · 0s ↩
-↑↓ · enter open · m mark · M all read · c chief · q quit · ?
-help
 
 
 
@@ -17,4 +17,4 @@ help
 
 
 
-✕ delivery failed · chief · r retry
+↑↓ · enter retry · c chief · M all read · ? help · q quit

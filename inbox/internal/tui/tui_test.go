@@ -326,7 +326,7 @@ func TestOverflowingOptionsScrollInsteadOfClipping(t *testing.T) {
 func TestLoadingUntilFirstRead(t *testing.T) {
 	m := New(nil, &fakeAM{})
 	m.Update(tea.WindowSizeMsg{Width: 92, Height: 29})
-	if !strings.HasPrefix(m.View(), "loading…") {
+	if !strings.HasPrefix(m.View(), "cockpit · loading…") {
 		t.Fatalf("%q", m.View())
 	}
 }
@@ -740,7 +740,7 @@ func TestKeysAndFooterPerScreen(t *testing.T) {
 		t.Fatal("j did not move")
 	}
 	d.keys("k", "?")
-	footer("One row per asking session")
+	footer("most urgent first")
 	d.keys("?", "enter")
 	if d.m.scr != scSession {
 		t.Fatal("enter did not open the session")
@@ -926,7 +926,7 @@ func TestSentFlashShowsThenExpires(t *testing.T) {
 	d := newDrv(t, 60, 12)
 	d.ask("7", "s1", "Which way?", "left", "right")
 	d.run(d.startSend())
-	if !d.m.flashOK || !strings.HasPrefix(d.view(), "» sent 7.1 to spec-s1") {
+	if !d.m.flashOK || !strings.HasPrefix(d.line(1), "» sent 7.1 to spec-s1") {
 		t.Fatalf("flash %q ok=%v:\n%s", d.m.flash, d.m.flashOK, d.view())
 	}
 	golden(t, "sent-flash", d.view())
@@ -947,7 +947,7 @@ func TestFailedSendKeepsErrorAndRetryHint(t *testing.T) {
 	}
 	d.poll()
 	golden(t, "status-failed", d.view())
-	if !strings.Contains(d.view(), "r retry") || !strings.Contains(d.view(), "zen-inbox retry s1") {
+	if !strings.Contains(d.view(), "r retry") || !strings.Contains(d.view(), "1 answer(s) · failed") {
 		t.Fatalf("failure hint gone:\n%s", d.view())
 	}
 	d.keys("r")
@@ -965,16 +965,15 @@ func TestStatusLineStates(t *testing.T) {
 	d.ask("8", "s2", "Q2?", "a", "b")
 	d.poll()
 	golden(t, "status-open", d.view())
-	last := func(v string) string {
-		lines := strings.Split(v, "\n")
-		return lines[len(lines)-1]
-	}
-	if got := last(d.view()); got != "◆ 3 open · spec-s1, spec-s2" {
-		t.Errorf("open status %q", got)
+	if got := d.line(0); got != "cockpit · 3 open" {
+		t.Errorf("header %q", got)
 	}
 	d.send(tea.WindowSizeMsg{Width: 14, Height: 10})
-	if got := last(d.view()); got != "◆ 3 open · sp…" {
-		t.Errorf("status wrapped or overflowed: %q", got)
+	if got := d.line(0); got != "cockpit · 3 o…" {
+		t.Errorf("header wrapped or overflowed: %q", got)
+	}
+	if got := d.last(); got != "enter open" {
+		t.Errorf("footer kept %q, want only the focused key", got)
 	}
 }
 
@@ -1171,14 +1170,14 @@ func TestTallHelpScrolls(t *testing.T) {
 	d := newDrv(t, 92, 30)
 	d.manySessions(40)
 	d.keys("?")
-	if strings.Contains(d.view(), "One row per asking session") {
+	if strings.Contains(d.view(), "most urgent first") {
 		t.Fatalf("help should be below the fold:\n%s", d.view())
 	}
 	for range 4 {
 		d.keys("ctrl+d")
 	}
 	d.fits()
-	if !strings.Contains(d.view(), "One row per asking session") {
+	if !strings.Contains(d.view(), "most urgent first") {
 		t.Fatalf("help not reached by scrolling:\n%s", d.view())
 	}
 	golden(t, "scroll-help-end", d.view())

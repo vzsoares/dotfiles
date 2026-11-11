@@ -1,12 +1,12 @@
+cockpit · all clear
 » sent 7.1 to spec-s1
 
-inbox empty
-↑↓ · enter open · c chief · q quit · ? help
+
+
+                  Nothing waiting for you
+                  last item closed 0s ago
 
 
 
 
-
-
-
-○ inbox empty
+c chief · ? help · q quit

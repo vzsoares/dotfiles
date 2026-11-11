@@ -515,6 +515,18 @@ func (ib *Inbox) Select(where string, args ...any) ([]Decision, error) {
 	return ds, dbErr(err)
 }
 
+// LastClosed is the stamp of the latest decision close or note read, "" when
+// neither has happened.
+func (ib *Inbox) LastClosed() (string, error) {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	var at string
+	err := ib.conn.QueryRowContext(ctx, "SELECT COALESCE(MAX(at), '') FROM ("+
+		"SELECT MAX(answered_at) AS at FROM decisions WHERE answered_at != ''"+
+		" UNION ALL SELECT MAX(read_at) FROM notes WHERE read_at != '')").Scan(&at)
+	return at, dbErr(err)
+}
+
 func (ib *Inbox) get(id string) (Decision, error) {
 	found, err := ib.sel("id = ?", id)
 	if err != nil {

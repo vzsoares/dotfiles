@@ -54,8 +54,6 @@ const (
 	scNote
 	scReply
 	scChief
-	// scListNotes names the list's footer and help while notes are shown.
-	scListNotes
 )
 
 // snapshot is one read of everything the panel shows.
@@ -68,6 +66,8 @@ type snapshot struct {
 	drafts      map[string]inbox.Draft
 	notes       []inbox.Note
 	failedNotes []inbox.Note
+	// lastClosed stamps the latest close or note read, for the empty list.
+	lastClosed string
 	// gen is the panel's draftGen when the read started.
 	gen       int
 	refreshed bool
@@ -269,6 +269,12 @@ func load(ib *inbox.Inbox, client am.Client, ids []string, sessions am.Sessions,
 	if s.failedNotes, s.err = ib.FailedNotes(); s.err != nil {
 		return s
 	}
+	// Only the empty list shows it.
+	if len(s.open)+len(s.undelivered)+len(s.notes)+len(s.failedNotes) == 0 {
+		if s.lastClosed, s.err = ib.LastClosed(); s.err != nil {
+			return s
+		}
+	}
 	for _, id := range ids {
 		if d, err := ib.Get(id); err == nil {
 			s.byID[id] = d
@@ -330,8 +336,10 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		m.flash = s.err.Error()
 		return nil
 	}
+	focused := m.focusedRow()
 	m.snap, m.loaded = s, true
 	m.refreshNote()
+	m.refocus(focused)
 	if s.gen == m.draftGen && !m.saving && len(m.draftOps) == 0 {
 		m.drafts = map[string]view.Staged{}
 		for id, d := range s.drafts {
@@ -362,6 +370,30 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		m.cursor = min(m.cursor, n-1)
 	}
 	return cmds
+}
+
+// focusedRow is the list row under the cursor, "" off the list.
+func (m *Model) focusedRow() string {
+	if m.scr != scList {
+		return ""
+	}
+	if items := m.listItems(); m.cursor < len(items) {
+		return items[m.cursor].value
+	}
+	return ""
+}
+
+// refocus keeps the cursor on row after rows above it come or go.
+func (m *Model) refocus(row string) {
+	if row == "" {
+		return
+	}
+	for i, it := range m.listItems() {
+		if it.value == row {
+			m.cursor = i
+			return
+		}
+	}
 }
 
 // ring is one banner per decision or unread note not seen before; the first
@@ -1096,21 +1128,93 @@ func (m *Model) scrollBy(k string) int {
 	return 0
 }
 
+// listItems are the cockpit's rows, most urgent first: retries, asks (prod
+// sessions first), then notes.
 func (m *Model) listItems() []item {
 	room := max(m.w, view.MinWidth) - 2
 	var out []item
-	at := m.now()
-	for _, r := range view.Rows(m.snap.open, m.snap.sessions) {
-		out = append(out, item{pyfmt.Clip(view.RowLabel(r, at), room), "s:" + r.SessionID})
-	}
 	for _, b := range m.snap.undelivered {
-		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s)"
+		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s) · " +
+			view.FailReason(b)
 		out = append(out, item{pyfmt.Clip(label, room), "r:" + b.SessionID})
 	}
 	for _, n := range m.snap.failedNotes {
-		out = append(out, item{pyfmt.Clip("retry reply "+n.Label(), room), "nr:" + noteValue(n)})
+		label := "retry reply " + n.Label() + " to " + n.SessionName
+		if n.DeliveryError != "" {
+			label += " · " + n.DeliveryError
+		}
+		out = append(out, item{pyfmt.Clip(label, room), "nr:" + noteValue(n)})
+	}
+	at := m.now()
+	rows, prod := m.askRows()
+	for _, r := range rows {
+		label := view.RowLabel(r, at)
+		if prod[r.SessionID] {
+			label = "PROD · " + label
+		}
+		out = append(out, item{pyfmt.Clip(label, room), "s:" + r.SessionID})
 	}
 	return append(out, m.noteItems(room)...)
+}
+
+// askRows are the asking sessions, those with a prod ask first; prod marks them.
+func (m *Model) askRows() ([]view.Row, map[string]bool) {
+	prod := map[string]bool{}
+	for _, d := range m.snap.open {
+		if d.Prod != nil {
+			prod[d.SessionID] = true
+		}
+	}
+	rows := view.Rows(m.snap.open, m.snap.sessions)
+	slices.SortStableFunc(rows, func(a, b view.Row) int {
+		switch {
+		case prod[a.SessionID] == prod[b.SessionID]:
+			return 0
+		case prod[a.SessionID]:
+			return -1
+		}
+		return 1
+	})
+	return rows, prod
+}
+
+// listKeys are the cockpit footer's keys for the row under the cursor.
+func (m *Model) listKeys() []ranked {
+	items := m.listItems()
+	var keys []ranked
+	if len(items) > 1 {
+		keys = append(keys, ranked{key{"↑↓", ""}, 7})
+	}
+	kind := ""
+	if m.cursor < len(items) {
+		kind, _, _ = strings.Cut(items[m.cursor].value, ":")
+	}
+	switch kind {
+	case "s":
+		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
+	case "r", "nr":
+		keys = append(keys, ranked{key{"enter", "retry"}, 0})
+	case "n":
+		keys = append(keys, ranked{key{"enter", "open"}, 0})
+		if n, ok := m.cursorNote(); ok {
+			mark := "read"
+			if !n.Unread() {
+				mark = "unread"
+			}
+			keys = append(keys, ranked{key{"m", mark}, 3})
+			if n.Reply == "" && n.Delivery == "none" {
+				keys = append(keys, ranked{key{"f", "reply"}, 4})
+			}
+		}
+	}
+	if kind != "r" && kind != "nr" && len(m.snap.undelivered)+len(m.snap.failedNotes) > 0 {
+		keys = append(keys, ranked{key{"r", "retry"}, 1})
+	}
+	keys = append(keys, ranked{key{"c", "chief"}, 2})
+	if inbox.Unread(m.snap.notes) > 0 {
+		keys = append(keys, ranked{key{"M", "all read"}, 6})
+	}
+	return append(keys, ranked{key{"?", "help"}, 5}, ranked{key{"q", "quit"}, 3})
 }
 
 func (m *Model) undeliveredName(sid string) string {
@@ -1137,6 +1241,20 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 	case "M":
 		if inbox.Unread(m.snap.notes) > 0 {
 			return m, m.markCmd(0, true, true)
+		}
+	case "a":
+		if items := m.listItems(); m.cursor < len(items) {
+			if sid, ok := strings.CutPrefix(items[m.cursor].value, "s:"); ok {
+				m.enterSession(sid)
+				if m.scr == scSession {
+					m.startPass()
+				}
+			}
+		}
+	case "f":
+		if n, ok := m.cursorNote(); ok {
+			m.openNote(noteValue(n))
+			return m.keyNoteScreen("f")
 		}
 	case "enter":
 		items := m.listItems()

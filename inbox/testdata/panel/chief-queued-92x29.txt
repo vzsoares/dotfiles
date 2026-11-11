@@ -1,7 +1,18 @@
+cockpit · ✉ chief · message 42 queued
 » message 42 queued for chief
 
-inbox empty
-↑↓ · enter open · c chief · q quit · ? help
+
+
+
+
+
+
+
+
+
+
+
+                                  Nothing waiting for you
 
 
 
@@ -15,15 +26,4 @@ inbox empty
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-✉ chief · message 42 queued
+c chief · ? help · q quit

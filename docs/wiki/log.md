@@ -76,3 +76,7 @@ Pages updated: manjaroi3/fresh-install.md, architecture/release-tooling.md
 ## [2026-11-11] update | notes claim clock (#779)
 Schema v7 adds `notes.claimed_at`. A delivery retry used to rewrite `replied_at`, losing the reply's real time and skewing retry order; now `replied_at` is written once and claims/retries move `claimed_at`.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-11] update | cockpit layout (#785)
+`zen-inbox watch` puts a `cockpit · counts` header on the top row and the key footer on the last rows of every screen; the old bottom status line folded into the header. The list groups failed deliveries, asks (prod first, marked), notes and held answers under labels, its footer follows the cursor and drops whole keys by rank when narrow, and an empty inbox shows a centred `Nothing waiting for you` with when the last item closed. `a` answers and `f` replies straight from the list.
+Pages updated: architecture/decision-inbox.md

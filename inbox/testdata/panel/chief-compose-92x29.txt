@@ -1,3 +1,4 @@
+cockpit · all clear
 message chief
 ┃ first line                                                                                
 ┃ second line                                                                               
@@ -23,7 +24,6 @@ message chief
 ┃                                                                                           
 ┃                                                                                           
 ┃                                                                                           
+
+
 enter send · ctrl+j newline · esc cancel
-
-
-○ inbox empty

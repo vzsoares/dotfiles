@@ -1,0 +1,29 @@
+cockpit · 2 open · 1 prod
+Asks · 2 open
+› PROD · spec-s2 · #680 · 1 open · 0s · [idle]
+  spec-s1 · #7 · 1 open · 0s · [idle]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter open · a answer · c chief · ? help · q quit

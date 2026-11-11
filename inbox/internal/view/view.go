@@ -392,6 +392,24 @@ func RowLabel(r Row, at time.Time) string {
 // StatusLines reports held answers still waiting and undelivered batches.
 func StatusLines(held, open []inbox.Decision, undelivered []inbox.Batch) []string {
 	var lines []string
+	for _, h := range HeldLines(held, open) {
+		lines = append(lines, "held · "+h)
+	}
+	for _, b := range undelivered {
+		var bids []string
+		for _, d := range b.Decisions {
+			bids = append(bids, d.ID)
+		}
+		lines = append(lines, fmt.Sprintf("failed · %s: %s (%s); zen-inbox retry %s",
+			b.Decisions[0].SessionName, strings.Join(bids, ", "), FailReason(b), b.SessionID))
+	}
+	return lines
+}
+
+// HeldLines is one "name: ids held until ids" per session whose answers wait
+// for its open decisions.
+func HeldLines(held, open []inbox.Decision) []string {
+	var lines []string
 	var order []string
 	heldIDs := map[string][]string{}
 	names := map[string]string{}
@@ -410,24 +428,19 @@ func StatusLines(held, open []inbox.Decision, undelivered []inbox.Batch) []strin
 			}
 		}
 		if len(waiting) > 0 {
-			lines = append(lines, fmt.Sprintf("held · %s: %s held until %s", names[sid],
+			lines = append(lines, fmt.Sprintf("%s: %s held until %s", names[sid],
 				strings.Join(heldIDs[sid], ", "), strings.Join(waiting, ", ")))
 		}
 	}
-	for _, b := range undelivered {
-		first := b.Decisions[0]
-		var bids []string
-		for _, d := range b.Decisions {
-			bids = append(bids, d.ID)
-		}
-		reason := first.DeliveryError
-		if reason == "" {
-			reason = first.Delivery
-		}
-		lines = append(lines, fmt.Sprintf("failed · %s: %s (%s); zen-inbox retry %s",
-			first.SessionName, strings.Join(bids, ", "), reason, b.SessionID))
-	}
 	return lines
+}
+
+// FailReason is why b's delivery failed, else its delivery state.
+func FailReason(b inbox.Batch) string {
+	if r := b.Decisions[0].DeliveryError; r != "" {
+		return r
+	}
+	return b.Decisions[0].Delivery
 }
 
 // Render is `zen-inbox list`'s summary: one row per session, then status.

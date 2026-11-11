@@ -1,10 +1,10 @@
+cockpit · 1 open · ✉ 1 unread
+Asks · 1 open
 › spec-s1 · #7 · 1 open · 0s · [idle]
 
 Notes · 1 unread
   ○ Session spec-s2 died after a revive · chief · 0s
   ● Task 707 merged · chief · #707 · 0s
-↑↓ · enter open · m mark · M all read · c chief · q quit · ?
-help
 
 
 
@@ -17,4 +17,4 @@ help
 
 
 
-◆ 1 open · spec-s1 · ✉ 1 unread
+enter open · a answer · c chief · ? help · q quit

@@ -57,6 +57,9 @@ func (d *drv) last() string {
 	return lines[len(lines)-1]
 }
 
+// line is the view's row i.
+func (d *drv) line(i int) string { return strings.Split(d.view(), "\n")[i] }
+
 func TestNotesListGoldens(t *testing.T) {
 	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	for _, sz := range [][2]int{{92, 30}, {60, 20}, {40, 15}} {
@@ -69,8 +72,11 @@ func TestNotesListGoldens(t *testing.T) {
 		}
 		d.fits()
 		golden(t, "notes-list-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]), v)
-		if d.last() != pyfmtClip("◆ 1 open · spec-s1 · ✉ 1 unread", sz[0]) {
-			t.Errorf("status %q", d.last())
+		if d.line(0) != pyfmtClip("cockpit · 1 open · ✉ 1 unread", sz[0]) {
+			t.Errorf("header %q", d.line(0))
+		}
+		if !strings.HasPrefix(d.last(), "enter open · a answer") && !strings.HasPrefix(d.last(), "↑↓ · enter open · a answer") {
+			t.Errorf("footer %q", d.last())
 		}
 	}
 }
@@ -85,13 +91,16 @@ func pyfmtClip(s string, w int) string {
 
 func TestNotesOnlyStatusAndCursorAcrossRows(t *testing.T) {
 	d := newDrv(t, 60, 12)
-	if d.last() != "○ inbox empty" {
-		t.Fatal(d.last())
+	if d.line(0) != "cockpit · all clear" {
+		t.Fatal(d.line(0))
 	}
 	d.addNote("", "one", "")
 	d.poll()
-	if d.last() != "✉ 1 unread" {
-		t.Fatalf("%q", d.last())
+	if d.line(0) != "cockpit · ✉ 1 unread" {
+		t.Fatalf("%q", d.line(0))
+	}
+	if d.last() != "enter open · m read · f reply · c chief · ? help · q quit" {
+		t.Fatalf("footer %q", d.last())
 	}
 	d.ask("7", "s1", "Q?", "a", "b")
 	d.poll()
@@ -126,7 +135,7 @@ func TestNoteScreenScrollsLongMarkdown(t *testing.T) {
 	}
 	d.fits()
 	golden(t, "note-top", d.view())
-	if !strings.HasPrefix(d.view(), "n1 · #707 · chief · 0s") {
+	if !strings.HasPrefix(d.line(1), "n1 · #707 · chief · 0s") {
 		t.Fatalf("%s", d.view())
 	}
 	d.keys("j")
@@ -210,7 +219,7 @@ func TestReplySendsOnceAndMarksRead(t *testing.T) {
 	if len(d.am.sends) != 1 || d.am.sends[0] != [2]string{"c1", want} {
 		t.Fatalf("%q", d.am.sends)
 	}
-	if d.m.scr != scList || !d.m.flashOK || !strings.HasPrefix(d.view(), "» reply sent to chief") {
+	if d.m.scr != scList || !d.m.flashOK || !strings.HasPrefix(d.line(1), "» reply sent to chief") {
 		t.Fatalf("%s", d.view())
 	}
 	golden(t, "note-sent-flash", d.view())
@@ -239,7 +248,7 @@ func TestFailedReplyRetryRowAndStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.poll()
-	if !strings.Contains(d.view(), "retry reply n1") || d.last() != "✕ delivery failed · chief · r retry" {
+	if !strings.Contains(d.view(), "retry reply n1") || d.line(0) != "cockpit · ✕ delivery failed · chief · r retry" {
 		t.Fatalf("%s", d.view())
 	}
 	d.fits()

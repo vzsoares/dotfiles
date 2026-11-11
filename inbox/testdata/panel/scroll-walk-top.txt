@@ -1,3 +1,4 @@
+cockpit · 1 open
 #669
 669.1  Which way?
 a) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor
@@ -25,6 +26,5 @@ b) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem i
   Talk
   View full
   Back
-↑↓ · enter · a-d pick · f free · s skip · t talk · v full · ←→ move · l list · esc back · ?
-help · ^u/^d scroll
-◆ 1 open · spec-s1
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · ←→ move · l list · esc back
+? help · ^u/^d scroll
