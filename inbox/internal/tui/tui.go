@@ -644,6 +644,9 @@ func (m *Model) onDraftsSaved(msg draftsSavedMsg) tea.Cmd {
 			m.flash, m.flashOK = note, false
 		}
 	}
+	if msg.err != nil {
+		m.quitting = false
+	}
 	if cmd := m.writeDrafts(); cmd != nil || !m.quitting {
 		return cmd
 	}

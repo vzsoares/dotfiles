@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"flag"
 	"io"
 	"os"
@@ -1228,5 +1229,18 @@ func TestQuitWaitsForQueuedDraftWrites(t *testing.T) {
 		if ds, err := d.ib.Drafts(); err != nil || len(ds) != 1 {
 			t.Fatalf("%s: drafts %+v, err %v", k, ds, err)
 		}
+	}
+}
+
+func TestFailedDraftWriteCancelsQuit(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.openWalk()
+	d.m.saving = true
+	d.keys("esc", "q")
+	d.m.saving = false
+	d.send(draftsSavedMsg{err: errors.New("disk full")})
+	if d.quit {
+		t.Fatal("quit hid the failed draft write")
 	}
 }
