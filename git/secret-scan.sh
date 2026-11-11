@@ -55,12 +55,17 @@ EOF
 	return 0
 }
 
+# The first pushed sha supplies .gitleaks.toml and .gitleaksignore, so work-tree
+# edits cannot hide a finding (gitleaks scans $common: it reads ignores from
+# its source dir). With several refs pushed, all use that sha's config.
 # A repo .gitleaks.toml without [extend] only adds to the global config.
-# shortcut: reads the work tree's .gitleaks.toml and .gitleaksignore, not the
-# pushed tip's; upgrade if pushing a branch other than HEAD trips on it.
+tip_file() {
+	git cat-file -e "$tip:$1" 2>/dev/null && git show "$tip:$1" >"$2"
+}
+
 scan_config() {
-	local own=$top/.gitleaks.toml
-	if [ ! -f "$own" ]; then
+	local own=$scan_tmp/own.toml
+	if ! tip_file .gitleaks.toml "$own"; then
 		echo "$zen_git/gitleaks.toml"
 	elif grep -q '^[[:space:]]*\[extend\]' "$own"; then
 		echo "$own"
@@ -78,8 +83,10 @@ scan_gitleaks() {
 	command -v gitleaks >/dev/null 2>&1 ||
 		refuse "gitleaks not found; install it (macOS: brew install gitleaks, Manjaro: sudo pacman -S gitleaks)"
 	cfg=$(scan_config)
+	mkdir "$scan_tmp/ignore"
+	tip_file .gitleaksignore "$scan_tmp/ignore/.gitleaksignore" || true
 	gitleaks git --log-opts "$range" --config "$cfg" --redact --verbose --no-banner \
-		--log-level warn --exit-code 10 -i "$top" "$top" >&2 || rc=$?
+		--log-level warn --exit-code 10 -i "$scan_tmp/ignore" "$common" >&2 || rc=$?
 	case $rc in
 	0) ;;
 	10) return 1 ;;
@@ -140,6 +147,7 @@ secret_scan() {
 	[ -n "$range" ] || return 0
 	scan_tmp=$(mktemp -d "${TMPDIR:-/tmp}/zen-prepush.XXXXXX")
 	trap 'rm -rf "$scan_tmp"' EXIT
+	tip=${range%% *}
 	top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 	if ! scan_gitleaks || ! scan_ggshield "$1" "$2"; then
 		scan_guidance

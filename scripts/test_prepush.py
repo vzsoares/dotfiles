@@ -14,6 +14,7 @@ Run with:  uv run scripts/test_prepush.py
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -571,7 +572,7 @@ def test_scan_new_branch_and_update(env: Env) -> None:
     (call,) = scans(env)
     assert_log_opts(call, f"{head} --not --remotes")
     assert f"--config {GLOBAL_CFG} " in call
-    assert call.endswith(f"--exit-code 10 -i {env.repo} {env.repo}")
+    assert re.search(rf"--exit-code 10 -i \S+/ignore {env.repo}/\.git$", call)
     nxt = env.commit("next")
     r = env.run("push", "origin", "HEAD:refs/heads/feat")
     assert r.returncode == 0, r.stderr
@@ -744,7 +745,7 @@ def test_multi_ref_one_finding_refuses_all(env: Env) -> None:
 
 def test_repo_allowlist_is_layered_on_global(env: Env) -> None:
     allow = "[[allowlists]]\npaths = ['fixtures/']\n"
-    (env.repo / ".gitleaks.toml").write_text(allow)
+    commit_file(env, ".gitleaks.toml", allow)
     assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
     (call,) = scans(env)
     assert f"--config {GLOBAL_CFG} " not in call
@@ -753,10 +754,17 @@ def test_repo_allowlist_is_layered_on_global(env: Env) -> None:
 
 
 def test_repo_config_with_extend_used_as_is(env: Env) -> None:
-    own = env.repo / ".gitleaks.toml"
-    own.write_text("[extend]\nuseDefault = true\n")
+    own = "[extend]\nuseDefault = true\n"
+    commit_file(env, ".gitleaks.toml", own)
     assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
-    assert f"--config {own} " in scans(env)[0]
+    assert f"--config {GLOBAL_CFG} " not in scans(env)[0]
+    assert (env.tmp / "gitleaks.log.cfg").read_text() == own
+
+
+def test_uncommitted_repo_config_not_read(env: Env) -> None:
+    (env.repo / ".gitleaks.toml").write_text("[extend]\nuseDefault = true\n")
+    assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    assert f"--config {GLOBAL_CFG} " in scans(env)[0]
 
 
 def test_ggshield_cache_excluded_once(env: Env) -> None:
@@ -824,6 +832,20 @@ def test_real_token_refused_then_ignored(leaks: Env) -> None:
     assert_refused(r, "RuleID:", "Fingerprint:")
     assert token not in r.stderr
     commit_file(leaks, ".gitleaksignore", f"# synthetic\n{fingerprint(r.stderr)}\n")
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+
+
+@real
+def test_real_uncommitted_ignore_not_honoured(leaks: Env) -> None:
+    token = synthetic("ghp_", "Zq8wLp3vN7rTx2Kc", "9Hd4Mf6Ys1Bg5Jn0Qe7W")
+    commit_file(leaks, "config.py", f'GH = "{token}"\n')
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    ignore = leaks.repo / ".gitleaksignore"
+    ignore.write_text(f"# synthetic\n{fingerprint(r.stderr)}\n")
+    assert_refused(leaks.run("push", "origin", "HEAD:refs/heads/feat"), "Fingerprint:")
+    leaks.git("add", ".gitleaksignore")
+    leaks.git("commit", "-q", "-m", "ignore")
     r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
     assert r.returncode == 0, r.stderr
 
