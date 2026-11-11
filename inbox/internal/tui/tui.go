@@ -176,7 +176,8 @@ type Model struct {
 
 	ta textarea.Model
 	ti textinput.Model
-	// freeRev is the rev of the question the free-text box was typed against.
+	// freeID and freeRev name the question revision the free-text box was typed against.
+	freeID  string
 	freeRev int64
 
 	// md takes its colour profile from a lipgloss renderer; tests inject one.
@@ -1170,7 +1171,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.ta.Reset()
-		m.freeRev = d.Rev
+		m.freeID, m.freeRev = d.ID, d.Rev
 		if s, ok := m.p.staged[d.ID]; ok && s.Kind == "text" {
 			m.ta.SetValue(s.Text)
 			m.freeRev = s.Rev
@@ -1229,8 +1230,8 @@ func (m *Model) keyFree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // saveFree leaves the free-text box: send stages the text and advances, else it
-// is kept as a draft. A blank box saves nothing. A question amended since the
-// text was typed keeps the box open until the next press.
+// is kept as a draft. A blank box saves nothing. A different or amended question
+// than the one the text was typed against keeps the box open until the next press.
 func (m *Model) saveFree(send bool) tea.Cmd {
 	d, ok := m.decision(m.p.cur)
 	text := m.ta.Value()
@@ -1238,8 +1239,8 @@ func (m *Model) saveFree(send bool) tea.Cmd {
 		m.scr, m.flash = scWalk, ""
 		return nil
 	}
-	if d.Rev != m.freeRev {
-		m.freeRev = d.Rev
+	if d.ID != m.freeID || d.Rev != m.freeRev {
+		m.freeID, m.freeRev = d.ID, d.Rev
 		m.flash, m.flashOK = "question changed; review before saving", false
 		return nil
 	}

@@ -274,3 +274,21 @@ func TestFreeTextOnAmendedQuestionStaysOpen(t *testing.T) {
 		})
 	}
 }
+
+func TestFreeTextNeverSavesOntoAnotherQuestion(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(2)
+	d.openWalk()
+	d.keys("f", "for the first")
+	d.m.p.cur = "7.2"
+	d.keys("ctrl+d")
+	if d.m.scr != scFree || d.m.ta.Value() != "for the first" {
+		t.Fatalf("box closed or lost its text: screen %d %q", d.m.scr, d.m.ta.Value())
+	}
+	if !strings.Contains(d.view(), "question changed; review before saving") {
+		t.Fatalf("no warning:\n%s", d.view())
+	}
+	if len(d.m.p.staged) != 0 {
+		t.Fatalf("staged onto the wrong question: %v", d.m.p.staged)
+	}
+}
