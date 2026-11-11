@@ -43,15 +43,18 @@ func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 	}
 }
 
-func TestChiefStatusUnavailableStopsPolling(t *testing.T) {
+func TestChiefStatusUnavailableStopsPollingAfterThreeMisses(t *testing.T) {
 	d := newDrv(t, 92, 30)
 	d.am.chiefStatus = ""
 	d.keys("c", "hi", "enter")
-	if !strings.Contains(d.view(), "✉ chief · message 42 sent") {
-		t.Fatalf("%s", d.view())
+	for range 2 {
+		if d.m.chief.final() || !strings.Contains(d.view(), "message 42 queued") {
+			t.Fatalf("gave up after a miss:\n%s", d.view())
+		}
+		d.poll()
 	}
-	if !d.m.chief.final() {
-		t.Fatal("kept polling a status agent-manager cannot give")
+	if !strings.Contains(d.view(), "✉ chief · message 42 sent") || !d.m.chief.final() {
+		t.Fatalf("%s", d.view())
 	}
 }
 

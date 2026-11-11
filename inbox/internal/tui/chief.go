@@ -20,6 +20,8 @@ var finalStatuses = []string{"delivered", "dropped", "answered"}
 type chiefMsg struct {
 	id, status string
 	checking   bool
+	// failed counts consecutive status polls that gave nothing.
+	failed int
 	// doneAt is when the status turned final.
 	doneAt time.Time
 }
@@ -30,6 +32,9 @@ func (c chiefMsg) final() bool {
 
 // statusUnknown is shown when agent-manager cannot report the message.
 const statusUnknown = "sent"
+
+// maxPollFailures is how many empty polls in a row end tracking.
+const maxPollFailures = 3
 
 type chiefSentMsg struct{ id, err string }
 type chiefStatusMsg struct{ id, status, err string }
@@ -87,11 +92,12 @@ func (m *Model) onChiefStatus(msg chiefStatusMsg) {
 		return
 	}
 	m.chief.checking = false
-	switch {
-	case msg.err != "" || msg.status == "":
-		m.chief.status = statusUnknown
-	default:
-		m.chief.status = msg.status
+	if msg.err != "" || msg.status == "" {
+		if m.chief.failed++; m.chief.failed >= maxPollFailures {
+			m.chief.status = statusUnknown
+		}
+	} else {
+		m.chief.failed, m.chief.status = 0, msg.status
 	}
 	if m.chief.final() {
 		m.chief.doneAt = m.now()

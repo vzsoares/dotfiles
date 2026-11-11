@@ -13,7 +13,7 @@ import (
 func withZenChief(t *testing.T, sessions string) string {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
-		t.Skip("python3 not found")
+		t.Fatal("python3 is required: zen-chief is a python script")
 	}
 	data := fakes(t, sessions)
 	script, err := filepath.Abs("../../../scripts/chief.py")
