@@ -137,11 +137,11 @@ closed on it. Right after branch resolution, before hooks or any mutating phase:
   an id, else prints that a real run needs one.
 - **Exit codes.** 3 = approval missing, rejected or used; every other failure stays
   1. `--dev` is unchanged and needs no approval, so `zen-merge` is unaffected.
-- **Push phase.** Before `git push origin <target> --follow-tags`, `phase_push`
-  writes `<git-common-dir>/zen-release-token` = `<approval_id> <target> <tip sha>`
-  and deletes it after the push either way (a resumed run uses the stored id; a
-  `--dev` push or an unapproved TTY release writes none). A failed push says to
-  rerun `--resume`, or to push by hand through the normal gate.
+- **Push phase.** `phase_push` runs `git push origin <target> --follow-tags` and
+  writes nothing to the repo; the pre-push hook finds the used approval in the
+  inbox (#796). A failed push says to rerun `--resume`, or to push by hand through
+  the normal gate. Once the hook recorded a push on the approval, a retry needs a
+  `--prod push` ask for the exact tip.
 - **Not covered.** Deploys, the `rebase_source` push of the source branch, and an
   agent that edits `zen-flow.db` or the state file by hand.
 
@@ -170,14 +170,23 @@ pass without calling zen-inbox. It is a guard rail for agents: `--no-verify` ski
   default-No `gum confirm` on `/dev/tty`; no gum refuses. `ZEN_PREPUSH_TTY`
   overrides the tty path (tests only). Any terminal inside the agentmgr tmux
   server, the cockpit included, takes the ask path.
-- **Fail closed.** zen-inbox missing, or exiting other than 0/1, refuses the push.
-- **zen-release.** The hook reads and deletes `<git-common-dir>/zen-release-token`
-  on every gated push. A create or update whose branch and sha equal the token's
-  passes when `zen-inbox approval used <id> --action release --repo R --branch B`
-  prints a sha that is an ancestor of the pushed sha and
-  `<git-common-dir>/zen-release-ledger` binds that id to no other sha; the first
-  pass records `<id> <sha>` there, so a resume re-pushing the same tip still
-  passes. Anything else falls through to the rules above. No env var is read.
+- **Fail closed.** zen-inbox missing, or exiting other than 0/1 (db locked or
+  unreadable included), refuses an agent push; a failed release lookup falls
+  through to the ask path, which refuses.
+- **zen-release (#796).** The inbox is the only authority; no file in the repo
+  is read. For each create or update the hook runs `zen-inbox approval pending
+  --repo R --branch B` (release asks answered Approve, used by zen-release, not yet
+  pushed) and takes the first approved sha S where: the remote tip is zero or an
+  ancestor of S (no rollback to older approved content), S is an ancestor of the
+  pushed sha, and `git diff S <pushed>` only changes `CHANGELOG.md` (added or
+  modified) and, in `package.json`, `package-lock.json`, `pyproject.toml`,
+  `pubspec.yaml`, `config.py` or `settings.py`, lines matching the version
+  patterns zen-release writes (blank lines too; no new, deleted, renamed or
+  mode-changed files). After the repo's hook passes, `approval push <id> --sha
+  <pushed>` stamps `pushed_sha/at/by` in one `BEGIN IMMEDIATE`; a second push on
+  the same approval is refused. Anything else falls through to the rules above.
+  Content-bound, not commit-bound: zen-release's merge, bump and changelog
+  commits sit between S and the tip, so "exactly one child" would not fit.
 - **Known limits.** `git push --dry-run` runs the hook and consumes (preview with
   `approval check --match`). A push that fails after the hook consumed has burned
   its approval.

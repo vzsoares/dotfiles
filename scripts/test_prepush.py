@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -39,7 +40,12 @@ fi
 case $2 in
 check) [ "${FAKE_CHECK:-0}" = 0 ] || echo "no approved unused ask (check)" >&2; exit "${FAKE_CHECK:-0}" ;;
 use) echo "used 703.1 by test"; exit "${FAKE_USE:-0}" ;;
-used) [ -n "${FAKE_USED_SHA:-}" ] && echo "$FAKE_USED_SHA"; exit "${FAKE_USED:-1}" ;;
+pending)
+	[ -n "${FAKE_PENDING:-}" ] && printf '%s\n' "$FAKE_PENDING"
+	[ -n "${FAKE_PENDING:-}" ] || echo "no used release approval awaiting its push" >&2
+	exit "${FAKE_PENDING_RC:-$([ -n "${FAKE_PENDING:-}" ] && echo 0 || echo 1)}"
+	;;
+push) echo "pushed $3 by test"; exit "${FAKE_PUSH:-0}" ;;
 esac
 exit 9
 """
@@ -140,9 +146,12 @@ class Env:
         self.git("commit", "-q", "-m", msg, cwd=where)
         return self.git("rev-parse", "HEAD", cwd=where)
 
-    def calls(self, log: Path | None = None) -> list[str]:
+    def calls(self, log: Path | None = None, pending: bool = False) -> list[str]:
+        """Logged calls; the release lookup every create or update makes is
+        left out unless pending is set."""
         log = log or self.log
-        return log.read_text().splitlines() if log.exists() else []
+        lines = log.read_text().splitlines() if log.exists() else []
+        return [c for c in lines if pending or not c.startswith("approval pending")]
 
     def remote_sha(self, branch: str) -> str:
         r = self.run(
@@ -501,150 +510,371 @@ def test_interactive_without_gum_refuses(human: Env) -> None:
 # --------------------------------------------------------------------------- #
 # Fail closed                                                                  #
 # --------------------------------------------------------------------------- #
+# zen-release push (fake inbox)                                                #
+# --------------------------------------------------------------------------- #
+
+VERSION_FILES = {
+    "package.json": '{\n  "name": "app",\n  "version": "1.0.0",\n'
+    '  "scripts": {\n    "build": "tsc"\n  }\n}\n',
+    "package-lock.json": '{\n  "name": "app",\n  "version": "1.0.0",\n'
+    '  "packages": {\n    "": {\n      "version": "1.0.0"\n    }\n  }\n}\n',
+    "pyproject.toml": '[project]\nname = "app"\nversion = "1.0.0"\n'
+    'dependencies = ["typer"]\n',
+    "app/pubspec.yaml": "name: app\nversion: 1.0.0+3\n",
+    "app/config.py": 'VERSION: str = "1.0.0"\nDEBUG = False\n',
+}
 
 
-def test_inbox_missing_refuses(env: Env) -> None:
-    env.no_fake("zen-inbox")
+def write_commit(env: Env, files: dict[str, str | None], msg: str = "bump") -> str:
+    """Writes (or, for None, deletes) each file and commits; returns HEAD."""
+    for name, text in files.items():
+        path = env.repo / name
+        if text is None:
+            path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    env.git("add", "-A")
+    env.git("commit", "-q", "-m", msg)
+    return env.git("rev-parse", "HEAD")
+
+
+def release_calls(head: str, branch: str = "master") -> list[str]:
+    return [
+        f"approval pending --repo myrepo --branch {branch}",
+        f"approval push 680.1 --repo myrepo --branch {branch} --sha {head}",
+    ]
+
+
+def test_release_push_passes_and_is_recorded(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    head = write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    env.vars["FAKE_PENDING"] = f"680.1 {approved}"
     r = env.run("push", "origin", "master")
-    assert_refused(r, "zen-inbox not found", "git push --no-verify")
+    assert r.returncode == 0, r.stderr
+    assert env.remote_sha("master") == head
+    assert env.calls(pending=True) == release_calls(head)
+    assert "pushed 680.1 by test" in r.stderr
+
+
+def test_release_exact_approved_sha_passes(env: Env) -> None:
+    head = env.git("rev-parse", "HEAD")
+    env.vars["FAKE_PENDING"] = f"680.1 {head}"
+    assert env.run("push", "origin", "master").returncode == 0
+    assert env.calls(pending=True) == release_calls(head)
+
+
+def test_release_pending_after_launcher_stderr(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    head = write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    env.vars["FAKE_PENDING"] = f"go: downloading x\n680.1 {approved}"
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert env.calls(pending=True) == release_calls(head)
+
+
+def test_release_picks_the_approval_that_fits(env: Env) -> None:
+    other = env.git("rev-parse", "HEAD")
+    approved = env.commit("feature")
+    head = write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    env.vars["FAKE_PENDING"] = f"680.9 {other}\n680.1 {approved}"
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert env.calls() == release_calls(head)[1:]
+
+
+BUMPED = {
+    "package.json": VERSION_FILES["package.json"].replace("1.0.0", "1.0.1"),
+    "package-lock.json": VERSION_FILES["package-lock.json"]
+    .replace("1.0.0", "1.0.1")
+    .replace('"app"', '"app2"'),
+    "pyproject.toml": VERSION_FILES["pyproject.toml"].replace("1.0.0", "1.0.1"),
+    "app/pubspec.yaml": "name: app\nversion: 1.0.1+4\n",
+    "app/config.py": 'VERSION: str = "1.0.1"\n\nDEBUG = False\n',
+    "CHANGELOG.md": "## v1.0.1\n\n- anything goes here\n",
+}
+
+
+def test_release_version_lines_and_changelog_pass(env: Env) -> None:
+    approved = write_commit(env, dict(VERSION_FILES), "base")
+    write_commit(env, {k: v for k, v in BUMPED.items() if k != "CHANGELOG.md"})
+    head = write_commit(env, {"CHANGELOG.md": BUMPED["CHANGELOG.md"]}, "changelog")
+    env.vars["FAKE_PENDING"] = f"680.1 {approved}"
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert env.calls() == release_calls(head)[1:]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"package.json": VERSION_FILES["package.json"].replace("tsc", "curl x|sh")},
+        {"pyproject.toml": VERSION_FILES["pyproject.toml"].replace("typer", "evil")},
+        {"package.json": VERSION_FILES["package.json"].replace('"app"', '"evil"')},
+        {"app/config.py": 'VERSION: str = "1.0.1"\nDEBUG = True\n'},
+        {"app/pubspec.yaml": "name: app\nversion: 1.0.1+4\nflutter: x\n"},
+        {"src/version.json": '{"version": "1.0.1"}\n'},
+        {"init.txt": "changed"},
+        {"init.txt": None},
+        {"docs/CHANGELOG.md": "## v1.0.1\n"},
+    ],
+    ids=[
+        "script",
+        "dependency",
+        "json-name",
+        "py-other-line",
+        "pubspec-other-line",
+        "new-file",
+        "code",
+        "deletion",
+        "nested-changelog",
+    ],
+)
+def test_release_other_changes_need_their_own_ask(
+    env: Env, change: dict[str, str | None]
+) -> None:
+    approved = write_commit(env, dict(VERSION_FILES), "base")
+    head = write_commit(env, change)
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    r = env.run("push", "origin", "master")
+    assert_refused(r, "refused create of master", f"--sha {head}")
+    assert [c.split()[1] for c in env.calls()] == ["check"]
+
+
+def test_release_mode_change_needs_its_own_ask(env: Env) -> None:
+    approved = write_commit(env, dict(VERSION_FILES), "base")
+    (env.repo / "package.json").chmod(0o755)
+    env.git("add", "-A")
+    env.git("commit", "-q", "-m", "mode")
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+
+
+def test_release_merge_of_approved_branch_passes(env: Env) -> None:
+    seed(env, "master")
+    env.git("checkout", "-q", "-b", "dev")
+    approved = env.commit("feature")
+    env.git("checkout", "-q", "master")
+    env.git("merge", "-q", "--no-ff", "-m", "Release version 1.0.1", "dev")
+    head = write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    env.vars["FAKE_PENDING"] = f"680.1 {approved}"
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert env.calls() == release_calls(head)[1:]
+
+
+def test_release_never_rolls_the_remote_back(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    env.commit("later")
+    seed(env, "master")
+    write_commit(env, {"later.txt": None, "CHANGELOG.md": "## v1.0.1\n"})
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    r = env.run("push", "origin", "master")
+    assert_refused(r, "refused update of master")
+    assert [c.split()[1] for c in env.calls()] == ["check"]
+
+
+def test_release_never_covers_force(env: Env) -> None:
+    seed(env, "master")
+    head = orphan(env)
+    env.vars.update({"FAKE_PENDING": f"680.1 {head}", "FAKE_CHECK": "1"})
+    r = env.run("push", "--force", "origin", "HEAD:refs/heads/master")
+    assert_refused(r, "refused force of master")
+    assert env.calls(pending=True) == [
+        f"approval check --match --action push --repo myrepo --branch master --sha {head}"
+    ]
+
+
+def test_release_push_record_failure_refuses(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_PUSH": "1"})
+    assert_refused(
+        env.run("push", "origin", "master"), "refused release push of master"
+    )
     assert env.remote_sha("master") == ""
 
 
+def test_release_not_recorded_when_repo_hook_fails(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    repo_hook(env, "pre-push", "exit 1\n")
+    env.vars["FAKE_PENDING"] = f"680.1 {approved}"
+    assert env.run("push", "origin", "master").returncode != 0
+    assert env.calls() == []
+
+
 @pytest.mark.parametrize("rc", ["3", "4"])
-def test_inbox_error_refuses(env: Env, rc: str) -> None:
-    env.vars["FAKE_CHECK"] = rc
+def test_release_lookup_error_fails_closed(env: Env, rc: str) -> None:
+    write_commit(env, {"CHANGELOG.md": "## v1.0.1\n"})
+    env.vars.update({"FAKE_PENDING_RC": rc, "FAKE_CHECK": rc})
     r = env.run("push", "origin", "master")
     assert_refused(r, f"zen-inbox exited {rc}", "git push --no-verify")
     assert env.remote_sha("master") == ""
 
 
-def test_use_failure_refuses(env: Env) -> None:
-    env.vars["FAKE_USE"] = "1"
+def test_repo_token_and_ledger_grant_nothing(env: Env) -> None:
+    head = env.git("rev-parse", "HEAD")
+    git_dir = env.repo / ".git"
+    (git_dir / "zen-release-token").write_text(f"680.1 master {head}\n")
+    (git_dir / "zen-release-ledger").write_text(f"680.1 {head}\n")
+    env.vars["FAKE_CHECK"] = "1"
     assert_refused(env.run("push", "origin", "master"), "refused create of master")
-    assert env.remote_sha("master") == ""
+    assert [c.split()[1] for c in env.calls(pending=True)] == ["pending", "check"]
 
 
 # --------------------------------------------------------------------------- #
-# zen-release token                                                            #
+# Real zen-inbox                                                               #
 # --------------------------------------------------------------------------- #
 
-
-def release_token(env: Env, line: str) -> Path:
-    token = env.repo / ".git" / "zen-release-token"
-    token.write_text(line + "\n")
-    return token
+INBOX_DIR = Path(__file__).resolve().parent.parent / "inbox"
 
 
-def ledger(env: Env) -> Path:
-    return env.repo / ".git" / "zen-release-ledger"
+@pytest.fixture(scope="session")
+def inbox_binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    out = tmp_path_factory.mktemp("inbox-bin") / "zen-inbox"
+    go = shutil.which("go")
+    assert go, "go builds zen-inbox for these tests"
+    subprocess.run([go, "build", "-o", str(out), "."], cwd=INBOX_DIR, check=True)
+    return out
 
 
-def test_env_flag_without_approval_is_refused(env: Env) -> None:
-    env.vars.update({"ZEN_PROD_RELEASE": "680.1", "FAKE_USED": "0", "FAKE_CHECK": "1"})
-    env.vars["FAKE_USED_SHA"] = env.git("rev-parse", "HEAD")
-    assert_refused(env.run("push", "origin", "master"), "refused create of master")
-    assert [c.split()[1] for c in env.calls()] == ["check"]
-    assert env.remote_sha("master") == ""
+@pytest.fixture
+def live(env: Env, inbox_binary: Path) -> Env:
+    """env with the real zen-inbox on a scratch db and a fake agent-manager."""
+    env.no_fake("zen-inbox")
+    shutil.copy(inbox_binary, env.bin / "zen-inbox")
+    env.fake("agent-manager", '#!/bin/sh\n[ "$1" = sessions ] && echo "[]"\nexit 0\n')
+    env.vars["ZEN_FLOW_DB"] = str(env.tmp / "zen-flow.db")
+    return env
 
 
-def test_release_token_passes_and_is_consumed(env: Env) -> None:
-    approved = env.git("rev-parse", "HEAD")
-    head = env.commit("bump")
-    token = release_token(env, f"680.1 master {head}")
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": approved})
-    r = env.run("push", "origin", "master")
-    assert r.returncode == 0, r.stderr
-    assert env.remote_sha("master") == head
-    assert env.calls() == [
-        "approval used 680.1 --action release --repo myrepo --branch master"
-    ]
-    assert not token.exists()
-    assert ledger(env).read_text() == f"680.1 {head}\n"
-
-
-def test_release_sha_after_launcher_stderr(env: Env) -> None:
-    approved = env.git("rev-parse", "HEAD")
-    head = env.commit("bump")
-    release_token(env, f"680.1 master {head}")
-    env.vars.update(
-        {"FAKE_USED": "0", "FAKE_USED_SHA": f"go: downloading x\n{approved}"}
+def zen(env: Env, *args: str, session: str = "s1") -> str:
+    r = subprocess.run(
+        [str(env.bin / "zen-inbox"), *args],
+        env={
+            "PATH": f"{env.bin}:/usr/bin:/bin",
+            "HOME": str(env.tmp),
+            "ZEN_FLOW_DB": env.vars["ZEN_FLOW_DB"],
+            "AGENT_MANAGER_SESSION_ID": session,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    r = env.run("push", "origin", "master")
     assert r.returncode == 0, r.stderr
-    assert [c.split()[1] for c in env.calls()] == ["used"]
+    return r.stdout.strip()
 
 
-def test_release_token_not_bound_when_repo_hook_fails(env: Env) -> None:
-    approved = env.git("rev-parse", "HEAD")
-    head = env.commit("bump")
-    release_token(env, f"680.1 master {head}")
-    repo_hook(env, "pre-push", "exit 1\n")
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": approved})
-    assert env.run("push", "origin", "master").returncode != 0
-    assert not ledger(env).exists()
+def approved_ask(env: Env, action: str, sha: str) -> str:
+    """A prod ask answered Approve the way the panel writes it."""
+    fields = ["--repo", "myrepo", "--branch", "master", "--sha", sha]
+    approval = zen(env, "ask", "796", "--prod", action, *fields)
+    with sqlite3.connect(env.vars["ZEN_FLOW_DB"]) as db:
+        db.execute(
+            "UPDATE decisions SET status = 'answered', answer_kind = 'pick',"
+            " answer_option = 'a', delivery = 'sent',"
+            " answered_at = '2026-01-01T00:00:00', rev = rev + 1 WHERE id = ?",
+            (approval,),
+        )
+    return approval
 
 
-def test_release_token_replayed_for_new_sha_falls_back(env: Env) -> None:
-    approved = env.git("rev-parse", "HEAD")
-    ledger(env).write_text(f"680.1 {approved}\n")
-    head = env.commit("later")
-    release_token(env, f"680.1 master {head}")
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": approved, "FAKE_CHECK": "1"})
-    r = env.run("push", "origin", "master")
-    assert_refused(r, "release token 680.1 already pushed", "refused create of master")
-    assert [c.split()[1] for c in env.calls()] == ["check"]
+def released(env: Env, sha: str) -> str:
+    """An approved release ask zen-release has consumed for sha."""
+    approval = approved_ask(env, "release", sha)
+    fields = ["--repo", "myrepo", "--branch", "master", "--sha", sha]
+    zen(env, "approval", "use", approval, "--action", "release", *fields, session="rel")
+    return approval
 
 
-def test_release_token_repush_of_same_sha_passes(env: Env) -> None:
-    head = env.git("rev-parse", "HEAD")
-    ledger(env).write_text(f"680.1 {head}\n")
-    release_token(env, f"680.1 master {head}")
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": head})
-    r = env.run("push", "origin", "master")
+def pushed(env: Env, approval: str) -> tuple[str, str]:
+    with sqlite3.connect(env.vars["ZEN_FLOW_DB"]) as db:
+        row = db.execute(
+            "SELECT pushed_sha, pushed_by FROM prod_actions WHERE decision_id = ?",
+            (approval,),
+        ).fetchone()
+    assert row is not None
+    return row[0], row[1]
+
+
+def unpush(env: Env) -> None:
+    env.git("update-ref", "-d", "refs/heads/master", cwd=env.remote)
+    env.git("update-ref", "-d", "refs/remotes/origin/master")
+
+
+def test_real_exact_sha_works_once(live: Env) -> None:
+    head = live.git("rev-parse", "HEAD")
+    approved_ask(live, "push", head)
+    r = live.run("push", "origin", "master")
     assert r.returncode == 0, r.stderr
-    assert ledger(env).read_text() == f"680.1 {head}\n"
+    assert live.remote_sha("master") == head
+    unpush(live)
+    assert_refused(live.run("push", "origin", "master"), "no approved unused ask")
 
 
-@pytest.mark.parametrize("field", ["branch", "sha"])
-def test_release_token_for_other_ref_falls_back(env: Env, field: str) -> None:
-    head = env.git("rev-parse", "HEAD")
-    line = f"680.1 main {head}" if field == "branch" else f"680.1 master {ZERO}"
-    token = release_token(env, line)
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": head, "FAKE_CHECK": "1"})
-    assert_refused(env.run("push", "origin", "master"), "refused create of master")
-    assert [c.split()[1] for c in env.calls()] == ["check"]
-    assert not token.exists()
+def test_real_descendant_needs_its_own_approval(live: Env) -> None:
+    approved_ask(live, "push", live.git("rev-parse", "HEAD"))
+    head = live.commit("next")
+    r = live.run("push", "origin", "master")
+    assert_refused(r, "no approved unused ask", f"--sha {head}")
+    assert live.remote_sha("master") == ""
 
 
-def test_release_token_never_covers_force(env: Env) -> None:
-    seed(env, "master")
-    head = orphan(env)
-    release_token(env, f"680.1 master {head}")
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": head, "FAKE_CHECK": "1"})
-    r = env.run("push", "--force", "origin", "HEAD:refs/heads/master")
-    assert_refused(r, "refused force of master")
-    assert [c.split()[1] for c in env.calls()] == ["check"]
-
-
-def test_release_non_ancestor_falls_back(env: Env) -> None:
-    env.git("checkout", "-q", "-b", "side")
-    side = env.commit("side")
-    env.git("checkout", "-q", "master")
-    head = env.commit("main-line")
-    release_token(env, f"680.1 master {head}")
-    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": side})
-    r = env.run("push", "origin", "master")
+def test_real_release_consumes_its_approval_once(live: Env) -> None:
+    approval = released(live, live.git("rev-parse", "HEAD"))
+    head = write_commit(live, {"CHANGELOG.md": "## v1.0.1\n"})
+    r = live.run("push", "origin", "master")
     assert r.returncode == 0, r.stderr
-    assert [c.split()[1] for c in env.calls()] == ["used", "check", "use"]
-    assert not ledger(env).exists()
+    assert live.remote_sha("master") == head
+    assert pushed(live, approval) == (head, "w1")
+    unpush(live)
+    assert_refused(live.run("push", "origin", "master"), "no approved unused ask")
+    assert pushed(live, approval) == (head, "w1")
 
 
-def test_release_unused_falls_back_and_refuses(env: Env) -> None:
-    head = env.git("rev-parse", "HEAD")
-    release_token(env, f"680.1 master {head}")
-    env.vars.update({"FAKE_USED": "1", "FAKE_CHECK": "1"})
-    assert_refused(env.run("push", "origin", "master"), "refused create of master")
-    assert [c.split()[1] for c in env.calls()] == ["used", "check"]
+def test_real_replayed_older_approval_is_refused(live: Env) -> None:
+    old = released(live, live.git("rev-parse", "HEAD"))
+    write_commit(live, {"CHANGELOG.md": "## v1.0.1\n"})
+    assert live.run("push", "origin", "master").returncode == 0
+    head = write_commit(live, {"CHANGELOG.md": "## v1.0.2\n"})
+    git_dir = live.repo / ".git"
+    (git_dir / "zen-release-token").write_text(f"{old} master {head}\n")
+    (git_dir / "zen-release-ledger").unlink(missing_ok=True)
+    r = live.run("push", "origin", "master")
+    assert_refused(r, "refused update of master", f"--sha {head}")
+    assert live.remote_sha("master") != head
+
+
+def test_real_code_on_top_of_a_release_needs_its_own_approval(live: Env) -> None:
+    approval = released(live, live.git("rev-parse", "HEAD"))
+    head = live.commit("sneaky")
+    assert_refused(live.run("push", "origin", "master"), f"--sha {head}")
+    approved_ask(live, "push", head)
+    r = live.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert pushed(live, approval) == ("", "")
+
+
+def test_real_locked_db_fails_closed(live: Env) -> None:
+    released(live, live.git("rev-parse", "HEAD"))
+    write_commit(live, {"CHANGELOG.md": "## v1.0.1\n"})
+    db = sqlite3.connect(live.vars["ZEN_FLOW_DB"], isolation_level=None)
+    try:
+        db.execute("BEGIN EXCLUSIVE")
+        r = live.run("push", "origin", "master")
+    finally:
+        db.close()
+    assert_refused(r, "refused release push of master", "database is locked")
+    assert live.remote_sha("master") == ""
+
+
+def test_real_unreachable_db_fails_closed(live: Env) -> None:
+    (live.tmp / "not-a-dir").write_text("")
+    live.vars["ZEN_FLOW_DB"] = str(live.tmp / "not-a-dir" / "zen-flow.db")
+    r = live.run("push", "origin", "master")
+    assert_refused(r, "zen-inbox exited 4", "git push --no-verify")
+    assert live.remote_sha("master") == ""
 
 
 # --------------------------------------------------------------------------- #

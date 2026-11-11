@@ -69,9 +69,9 @@ first mutating phase, and must match the repo (main checkout name), target branc
 and full tip sha of the chain's first branch; otherwise it exits 3 and prints the ask
 to file. A TTY run in your own terminal may go without one after a default-No
 confirm. `--resume` reuses the consumed id unless the branch moved before the
-merge; `--dry-run` never consumes. `--dev` needs no approval. Before the target
-push it writes a single-use `<git-common-dir>/zen-release-token` (id, branch, sha)
-that the global pre-push hook consumes.
+merge; `--dry-run` never consumes. `--dev` needs no approval. The global pre-push
+hook then lets one push through on the used approval, recorded in the inbox, when
+the tip adds only version lines and `CHANGELOG.md` to the approved sha.
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them.
 
@@ -143,7 +143,8 @@ zen-inbox approval use|check <id> --action A --repo R --branch B --sha S [--by w
 zen-inbox approval use|check --match --action A --repo R --branch B --sha S  # oldest approved unused
 zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"  # prod script/migration
 zen-inbox approval use|check <id> --action run --repo R --cmd "<exact command>"  # byte for byte
-zen-inbox approval used <id> --action A --repo R --branch B  # read-only: prints the used ask's sha
+zen-inbox approval pending --repo R --branch B  # read-only: used release asks not yet pushed
+zen-inbox approval push <id> --repo R --branch B --sha S  # a release's one push
 zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
 zen-inbox list [--all] | show <id>                      # --json on both
@@ -169,7 +170,7 @@ in `.gitconfig`) runs `check --match` then `use --match --action push` before an
 agent push, a force push or a delete of `prod`/`main`/`master` lands (an agent is
 an agent env var or a claude/codex/agentmgr-tmux ancestor), asks a default-No
 `gum confirm` for a human create or update in your own terminal, and accepts
-zen-release's push via its token and `approval used`. Before all of that it scans
+zen-release's push once via `approval pending` and `approval push`. Before all of that it scans
 the pushed commits (`git/secret-scan.sh`): gitleaks with `git/gitleaks.toml` and
 each pushed tip's own committed `.gitleaks.toml`/`.gitleaksignore` on every
 push, ggshield on `github.com/vzsoares/*` remotes (a skip line when it cannot

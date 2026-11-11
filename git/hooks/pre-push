@@ -2,9 +2,10 @@
 # Scans the pushed commits for secrets first (git/secret-scan.sh), then gates
 # every push to prod/main/master: an agent push, a force push or a delete needs
 # an approved, unused `zen-inbox ask --prod push` for that repo, branch and
-# sha; a human at a tty confirms a plain create or update with gum. The repo's
-# own pre-push runs before the consume, so its failure leaves the approval
-# unused. A guard rail, not a boundary: --no-verify skips it.
+# sha, or a zen-release approval's one push; a human at a tty confirms a plain
+# create or update with gum. The repo's own pre-push runs before the consume,
+# so its failure leaves the approval unused. A guard rail, not a boundary:
+# --no-verify skips it.
 # Known limit: git push --dry-run runs this hook too, so it consumes.
 set -e
 
@@ -168,36 +169,81 @@ EOF
 	exit 0
 }
 
-# zen-release writes "<approval id> <branch> <sha>" here just before its push.
-# The token is single use, and the ledger binds each approval to the first sha
-# it let through, so a token replayed for another sha fails.
-token=$common/zen-release-token
-ledger=$common/zen-release-ledger
-bind=""
-if [ -f "$token" ]; then
-	read -r t_id t_branch t_sha <"$token" || true
-	rm -f "$token"
-	pending=""
-	while read -r class branch lsha rsha; do
-		[ -n "$branch" ] || continue
-		if [ -n "$t_id" ] && [ "$branch" = "$t_branch" ] && [ "$lsha" = "$t_sha" ] &&
-			{ [ "$class" = create ] || [ "$class" = update ]; }; then
-			prior=$(awk -v id="$t_id" '$1 == id { print $2; exit }' "$ledger" 2>/dev/null || true)
-			if [ -n "$prior" ] && [ "$prior" != "$lsha" ]; then
-				zen_say "release token $t_id already pushed ${prior:0:12}; checking $branch as a plain push"
-			elif inbox approval used "$t_id" --action release --repo "$repo" --branch "$branch" &&
-				git merge-base --is-ancestor "${out##*$'\n'}" "$lsha" 2>/dev/null; then
-				[ -n "$prior" ] || bind="$t_id $lsha"
-				continue
-			fi
+# $1 approved sha, $2 pushed sha, $3 remote sha: true when the remote tip is
+# behind the approved sha (no rollback to old approved content), the pushed sha
+# descends from it, and between them only CHANGELOG.md and the version lines
+# zen-release writes change.
+release_fits() {
+	local meta path old new status
+	zero "$3" || git merge-base --is-ancestor "$3" "$1" 2>/dev/null || return 1
+	git merge-base --is-ancestor "$1" "$2" 2>/dev/null || return 1
+	while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
+		read -r old new _ _ status <<<"${meta#:}"
+		[ "$new" = 100644 ] || return 1
+		if [ "$path" = CHANGELOG.md ]; then
+			case $status in M | A) continue ;; esac
+			return 1
 		fi
+		[ "$old" = 100644 ] && [ "$status" = M ] || return 1
+		version_lines "$1" "$2" "$path" || return 1
+	done < <(git diff --raw -z --no-renames --no-abbrev "$1" "$2")
+}
+
+# Every changed line of $3 between $1 and $2 is blank or a version line of
+# that file's kind; other files fail.
+version_lines() {
+	local kind
+	case ${3##*/} in
+	package.json) kind=json ;;
+	package-lock.json) kind=lock ;;
+	pyproject.toml) kind=toml ;;
+	pubspec.yaml) kind=pubspec ;;
+	config.py | settings.py) kind=py ;;
+	*) return 1 ;;
+	esac
+	git diff -U0 --no-color --no-ext-diff --no-textconv "$1" "$2" -- ":(literal)$3" | awk -v kind="$kind" '
+		/^@@/ { body = 1; next }
+		!body || /^\\/ { next }
+		{ line = substr($0, 2) }
+		line ~ /^[ \t]*$/ { next }
+		(kind == "json" || kind == "lock") && line ~ /^[ \t]*"version"[ \t]*:[ \t]*"[^"]*",?[ \t]*$/ { next }
+		kind == "lock" && line ~ /^[ \t]*"name"[ \t]*:[ \t]*"[^"]*",?[ \t]*$/ { next }
+		kind == "toml" && line ~ /^[ \t]*version[ \t]*=[ \t]*"[^"]*"[ \t]*$/ { next }
+		kind == "pubspec" && line ~ /^version:[ \t]*[^ \t+#]+(\+[0-9]+)?[ \t]*$/ { next }
+		kind == "py" && line ~ /^[ \t]*(VERSION|VERSAO|__version__)([ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_]*)?[ \t]*=[ \t]*"[^"]*"[ \t]*$/ { next }
+		{ bad = 1 }
+		END { exit bad }'
+}
+
+# zen-release consumes its approval before it merges and bumps; the inbox
+# then lets exactly one push through on it (approval push, after the repo's
+# hook). Nothing in the repo is trusted.
+releases=""
+pending=""
+while read -r class branch lsha rsha; do
+	[ -n "$branch" ] || continue
+	id=""
+	if { [ "$class" = create ] || [ "$class" = update ]; } &&
+		inbox approval pending --repo "$repo" --branch "$branch"; then
+		while read -r p_id p_sha; do
+			[ ${#p_sha} = 40 ] && [ -z "${p_sha//[0-9a-f]/}" ] || continue
+			if release_fits "$p_sha" "$lsha" "$rsha"; then
+				id=$p_id
+				break
+			fi
+		done <<<"$out"
+	fi
+	if [ -n "$id" ]; then
+		releases="$releases$id $branch $lsha
+"
+	else
 		pending="$pending$class $branch $lsha $rsha
 "
-	done <<EOF
+	fi
+done <<EOF
 $gated
 EOF
-	gated=$pending
-fi
+gated=$pending
 
 tty=${ZEN_PREPUSH_TTY:-/dev/tty}
 human=""
@@ -253,8 +299,14 @@ EOF
 fi
 
 repo_hook "$@"
-# Bound only once the repo's hook passed, so a fix-up commit can still use it.
-[ -z "$bind" ] || echo "$bind" >>"$ledger"
+while read -r id branch lsha; do
+	[ -n "$branch" ] || continue
+	inbox approval push "$id" --repo "$repo" --branch "$branch" --sha "$lsha" ||
+		refuse "refused release push of $branch: $out"
+	zen_say "${out##*$'\n'}"
+done <<EOF
+$releases
+EOF
 while read -r class branch lsha _; do
 	[ -n "$branch" ] || continue
 	inbox approval use --match --action push --repo "$repo" --branch "$branch" --sha "$lsha" ||

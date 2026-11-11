@@ -88,3 +88,13 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-11] update | Prod push hook hardening (#788)
 `ZEN_PROD_RELEASE` is gone: zen-release writes a single-use `<git-common-dir>/zen-release-token` (`<id> <branch> <sha>`) before its target push; the hook deletes it on read and passes only that branch and sha as a create or update when `approval used` gives an ancestor sha and `zen-release-ledger` binds the id to no other sha (recorded after the repo's own pre-push passes). Agents are also found by process tree (claude/codex binaries or install dirs, the `tmux -L agentmgr` server; unreadable = agent). Each gated ref is create, update, force or delete; force and delete always need an approved ask. The secret scan runs gitleaks once per pushed tip with that tip's own config.
 Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
+
+## [2026-11-11] update | Release push consumed in the inbox (#796)
+The pre-push hook no longer trusts `zen-release-token` or `zen-release-ledger`: a
+token for an older approval, or a deleted ledger, let a descendant sha through. Schema
+v8 adds `prod_actions.pushed_sha/at/by`; `zen-inbox approval pending|push` replace
+`approval used`. A release push passes once, when the remote tip is behind the
+approved sha and the pushed tip adds only version lines and `CHANGELOG.md` to it.
+Content-bound rather than "one child commit", since zen-release's merge, bump and
+changelog commits all sit on top of the approved sha.
+Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md

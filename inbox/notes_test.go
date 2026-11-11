@@ -176,7 +176,7 @@ func TestV4FixtureMigratesToV5(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "7" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "8" {
 		t.Fatal(v)
 	}
 	if after := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols); after != before {

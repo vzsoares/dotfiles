@@ -456,7 +456,7 @@ func TestV6DBMigratesToV7(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if v, _ := ib.userVersion(); v != 7 {
+		if v, _ := ib.userVersion(); v != SchemaVersion {
 			t.Fatalf("user_version %d", v)
 		}
 		ns, err := ib.Notes(true)

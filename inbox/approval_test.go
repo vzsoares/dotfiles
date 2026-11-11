@@ -55,7 +55,7 @@ func TestAskProdWritesQuestionAndBinding(t *testing.T) {
 		!strings.Contains(r.stdout, `"options": [{"letter": "a", "text": "Approve"}, {"letter": "b", "text": "Hold"}]`) {
 		t.Fatalf("%+v", r)
 	}
-	if got := f.sqlite("SELECT * FROM prod_actions"); got != "680.1|release|dotfiles|prod|"+sha40+"|||\n" {
+	if got := f.sqlite("SELECT * FROM prod_actions"); got != "680.1|release|dotfiles|prod|"+sha40+"||||||\n" {
 		t.Fatalf("%q", got)
 	}
 	if r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=s1"}, "amend", "680.1", "-q", "x?"); r.code != 1 {
@@ -129,7 +129,7 @@ func TestV2FixtureMigratesToV3(t *testing.T) {
 	if r := f.zen(nil, "list", "--json"); r.code != 0 {
 		t.Fatalf("%+v", r)
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "7" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "8" {
 		t.Fatal(v)
 	}
 	if after := f.sqlite("SELECT * FROM decisions ORDER BY id"); after != before {
@@ -248,36 +248,47 @@ func TestApprovalMatchUsageErrors(t *testing.T) {
 	}
 }
 
-func TestApprovalUsedCLI(t *testing.T) {
+const pushed40 = "89abcdef0123456789abcdef0123456789abcdef"
+
+func TestApprovalPendingPushCLI(t *testing.T) {
 	f := newFake(t)
 	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
-	used := []string{"approval", "used", "680.1", "--action", "release", "--repo", "dotfiles", "--branch", "prod"}
-	if r := f.zen(nil, used...); r.code != 1 || r.stderr != "zen-inbox: approval 680.1: not answered\n" {
+	pending := []string{"approval", "pending", "--repo", "dotfiles", "--branch", "prod"}
+	push := []string{"approval", "push", "680.1", "--repo", "dotfiles", "--branch", "prod", "--sha", pushed40}
+	none := "zen-inbox: no used release approval awaiting its push for dotfiles prod\n"
+	if r := f.zen(nil, pending...); r.code != 1 || r.stderr != none {
 		t.Fatalf("%+v", r)
 	}
 	f.approve("680.1")
-	if r := f.zen(nil, used...); r.code != 1 || r.stderr != "zen-inbox: approval 680.1: not used\n" {
+	if r := f.zen(nil, push...); r.code != 1 || r.stderr != "zen-inbox: approval 680.1: not used by zen-release\n" {
 		t.Fatalf("%+v", r)
 	}
 	f.zen(nil, approvalArgs("use", "680.1")...)
-	before := f.sqlite("SELECT * FROM prod_actions")
-	if r := f.zen(nil, used...); r.code != 0 || r.stdout != sha40+"\n" {
+	if r := f.zen(nil, pending...); r.code != 0 || r.stdout != "680.1 "+sha40+"\n" {
 		t.Fatalf("%+v", r)
 	}
-	if after := f.sqlite("SELECT * FROM prod_actions"); after != before {
-		t.Fatalf("used wrote: %q -> %q", before, after)
+	if r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=w1"}, push...); r.code != 0 || r.stdout != "pushed 680.1 at 89abcdef0123 by w1\n" {
+		t.Fatalf("%+v", r)
+	}
+	if got := f.sqlite("SELECT pushed_sha, pushed_by FROM prod_actions"); got != pushed40+"|w1\n" {
+		t.Fatalf("%q", got)
+	}
+	if r := f.zen(nil, push...); r.code != 1 || !strings.Contains(r.stderr, "already pushed by w1") {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(nil, pending...); r.code != 1 || r.stderr != none {
+		t.Fatalf("%+v", r)
 	}
 	for _, args := range [][]string{
-		{"approval", "used", "680.1", "--action", "release", "--repo", "dotfiles"},
-		{"approval", "used", "680.1", "--action", "release", "--branch", "prod"},
-		{"approval", "used", "--action", "release", "--repo", "dotfiles", "--branch", "prod"},
+		{"approval", "pending", "--repo", "dotfiles"},
+		{"approval", "pending", "680.1", "--repo", "dotfiles", "--branch", "prod"},
+		{"approval", "push", "--repo", "dotfiles", "--branch", "prod", "--sha", pushed40},
+		{"approval", "push", "680.1", "--repo", "dotfiles", "--branch", "prod"},
+		{"approval", "push", "680.1", "--repo", "dotfiles", "--branch", "prod", "--sha", "abc"},
 	} {
 		if r := f.zen(nil, args...); r.code != 2 {
 			t.Fatalf("%v: %+v", args, r)
 		}
-	}
-	if r := f.zen(nil, "approval", "used", "680.1", "--action", "push", "--repo", "dotfiles", "--branch", "prod"); r.code != 1 {
-		t.Fatalf("%+v", r)
 	}
 }
 

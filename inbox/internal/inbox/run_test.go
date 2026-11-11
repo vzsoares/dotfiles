@@ -11,10 +11,11 @@ const runCmd = "uv run scripts/publish.py --apply  --so prod"
 
 func runWant() ProdAction { return ProdAction{Action: RunAction, Repo: "task-flow", Cmd: runCmd} }
 
-// withCmd is a pre-v6 prod_actions CREATE after v6's ALTER.
+// withCmd is a pre-v6 prod_actions CREATE after the v6 and v8 ALTERs.
 func withCmd(create string) string {
 	i := strings.LastIndex(create, ")")
-	return create[:i] + ", cmd TEXT NOT NULL DEFAULT '')" + create[i+1:]
+	return create[:i] + ", cmd TEXT NOT NULL DEFAULT '', pushed_sha TEXT NOT NULL DEFAULT ''," +
+		" pushed_at TEXT NOT NULL DEFAULT '', pushed_by TEXT NOT NULL DEFAULT '')" + create[i+1:]
 }
 
 func askRun(t *testing.T, ib *Inbox) string {
@@ -185,7 +186,7 @@ func TestV5DBMigratesToV6(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ib.Close()
-	if v, _ := ib.userVersion(); v != 7 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	ib.User = true

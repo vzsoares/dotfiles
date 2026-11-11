@@ -18,12 +18,26 @@ const schemaV6 = `
 ALTER TABLE prod_actions ADD COLUMN cmd TEXT NOT NULL DEFAULT '';
 `
 
+// schemaV8 records the one push a used release approval lets through. Rows
+// used before it count as pushed, so no old approval becomes pending. A v7
+// reader still works on it but never sets or reads the pushed fields.
+const schemaV8 = `
+ALTER TABLE prod_actions ADD COLUMN pushed_sha TEXT NOT NULL DEFAULT '';
+ALTER TABLE prod_actions ADD COLUMN pushed_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE prod_actions ADD COLUMN pushed_by TEXT NOT NULL DEFAULT '';
+UPDATE prod_actions SET pushed_at = used_at, pushed_by = 'schema v8' WHERE used_at != '';
+`
+
 // ProdAction is what a prod-action ask approves. Release tools match on
 // these fields, never on the question text. A run binds Repo and Cmd only.
 type ProdAction struct {
 	Action, Repo, Branch, Sha, Cmd string
 	UsedAt, UsedBy                 string
+	PushedSha, PushedAt, PushedBy  string
 }
+
+// ReleaseAction is the prod action zen-release consumes before its push.
+const ReleaseAction = "release"
 
 // RunAction is the prod action for a script or migration run.
 const RunAction = "run"
@@ -111,9 +125,9 @@ func (ib *Inbox) insertProd(id string, p ProdAction) error {
 
 func (ib *Inbox) prodAction(id string) (ProdAction, bool, error) {
 	var p ProdAction
-	err := ib.conn.QueryRowContext(ctx, "SELECT action, repo, branch, sha, cmd, used_at, used_by"+
-		" FROM prod_actions WHERE decision_id = ?", id).
-		Scan(&p.Action, &p.Repo, &p.Branch, &p.Sha, &p.Cmd, &p.UsedAt, &p.UsedBy)
+	err := ib.conn.QueryRowContext(ctx, "SELECT action, repo, branch, sha, cmd, used_at, used_by,"+
+		" pushed_sha, pushed_at, pushed_by FROM prod_actions WHERE decision_id = ?", id).
+		Scan(&p.Action, &p.Repo, &p.Branch, &p.Sha, &p.Cmd, &p.UsedAt, &p.UsedBy, &p.PushedSha, &p.PushedAt, &p.PushedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, false, nil
 	}
@@ -242,34 +256,88 @@ func (ib *Inbox) ApprovalMatch(want ProdAction, by string) (string, ProdAction, 
 	return id, p, err
 }
 
-// ApprovalUsed returns the sha of a used, Approve-answered ask whose action,
-// repo and branch match want. It never writes.
-func (ib *Inbox) ApprovalUsed(id string, want ProdAction) (string, error) {
-	if err := CheckTarget(want); err != nil {
-		return "", err
+// Pending is a used release approval whose push has not landed yet.
+type Pending struct{ ID, Sha string }
+
+// ReleasesPending lists the used, unpushed release approvals for repo and
+// branch, oldest first. It never writes.
+func (ib *Inbox) ReleasesPending(repo, branch string) ([]Pending, error) {
+	if err := CheckTarget(ProdAction{Action: ReleaseAction, Repo: repo, Branch: branch}); err != nil {
+		return nil, err
+	}
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	rows, err := ib.conn.QueryContext(ctx, "SELECT d.id, a.sha FROM decisions d"+
+		" JOIN prod_actions a ON a.decision_id = d.id"+
+		" JOIN decision_options o ON o.decision_id = d.id AND o.letter = d.answer_option"+
+		" WHERE a.action = ? AND a.repo = ? AND a.branch = ? AND a.used_at != '' AND a.pushed_at = ''"+
+		" AND d.status = 'answered' AND d.answer_kind = 'pick' AND o.text = 'Approve'"+
+		" ORDER BY d.created_at, d.rowid", ReleaseAction, repo, branch)
+	if err != nil {
+		return nil, dbErr(err)
+	}
+	defer rows.Close()
+	var out []Pending
+	for rows.Next() {
+		var p Pending
+		if err := rows.Scan(&p.ID, &p.Sha); err != nil {
+			return nil, dbErr(err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, dbErr(err)
+	}
+	return out, nil
+}
+
+// ReleasePush records sha as the one push the used release approval id lets
+// through, in one BEGIN IMMEDIATE, so a second push on it is refused. The
+// caller verifies sha's content against the approved sha.
+func (ib *Inbox) ReleasePush(id, repo, branch, sha, by string) (ProdAction, error) {
+	want := ProdAction{Action: ReleaseAction, Repo: repo, Branch: branch, Sha: sha}
+	if err := CheckProd(want); err != nil {
+		return ProdAction{}, err
 	}
 	want.Sha = ""
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
-	d, err := ib.get(id)
-	var ie *Error
-	if errors.As(err, &ie) {
-		return "", errf(1, "approval %s: unknown id", id)
-	} else if err != nil {
-		return "", dbErr(err)
-	}
-	if d.Prod == nil {
-		return "", errf(1, "approval %s: not a prod-action ask", id)
-	}
-	reason := approveError(d)
-	if reason == "" && d.Prod.UsedAt == "" {
-		reason = "not used"
-	}
-	if reason == "" {
-		reason = mismatch(*d.Prod, want)
-	}
-	if reason != "" {
-		return "", errf(1, "approval %s: %s", id, reason)
-	}
-	return d.Prod.Sha, nil
+	var p ProdAction
+	err := ib.immediate(func() error {
+		d, err := ib.get(id)
+		var ie *Error
+		if errors.As(err, &ie) {
+			return errf(1, "approval %s: unknown id", id)
+		} else if err != nil {
+			return err
+		}
+		if d.Prod == nil {
+			return errf(1, "approval %s: not a prod-action ask", id)
+		}
+		p = *d.Prod
+		reason := approveError(d)
+		switch {
+		case reason != "":
+		case p.UsedAt == "":
+			reason = "not used by zen-release"
+		case p.PushedAt != "":
+			reason = fmt.Sprintf("already pushed by %s at %s", p.PushedBy, p.PushedAt)
+		default:
+			reason = mismatch(p, want)
+		}
+		if reason != "" {
+			return errf(1, "approval %s: %s", id, reason)
+		}
+		p.PushedSha, p.PushedAt, p.PushedBy = sha, stamp(), by
+		res, err := ib.conn.ExecContext(ctx, "UPDATE prod_actions SET pushed_sha = ?, pushed_at = ?, pushed_by = ?"+
+			" WHERE decision_id = ? AND used_at != '' AND pushed_at = ''", p.PushedSha, p.PushedAt, p.PushedBy, id)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil || n != 1 {
+			return errf(1, "approval %s: already pushed", id)
+		}
+		return nil
+	})
+	return p, err
 }

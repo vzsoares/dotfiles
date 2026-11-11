@@ -390,65 +390,223 @@ func TestConcurrentApprovalMatchOneWins(t *testing.T) {
 	}
 }
 
-func TestApprovalUsed(t *testing.T) {
-	release := ProdAction{Action: "release", Repo: "dotfiles", Branch: "prod"}
-	other := func(f func(*ProdAction)) ProdAction { w := release; f(&w); return w }
-	consume := func(ib *Inbox, id string) {
-		approve(ib, id)
-		if _, err := ib.Approval(id, prodWant(), "rel"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cases := []struct {
-		name   string
-		setup  func(ib *Inbox, id string)
-		want   ProdAction
-		reason string
-	}{
-		{"unused", approve, release, "not used"},
-		{"open", func(*Inbox, string) {}, release, "not answered"},
-		{"hold", func(ib *Inbox, id string) { _, _ = ib.Answer(id, p("b"), nil, "", nil) }, release, "answered Hold"},
-		{"text", func(ib *Inbox, id string) { _, _ = ib.Answer(id, nil, p("Approve"), "", nil) }, release, "free text"},
-		{"talk", func(ib *Inbox, id string) { _, _ = ib.Resolve(id, "") }, release, "resolved in talk"},
-		{"action", consume, other(func(w *ProdAction) { w.Action = "push" }), "action mismatch"},
-		{"repo", consume, other(func(w *ProdAction) { w.Repo = "core" }), "repo mismatch"},
-		{"branch", consume, other(func(w *ProdAction) { w.Branch = "main" }), "branch mismatch"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			ib, _, _ := open(t)
-			ib.User = true
-			id := askProd(t, ib, "s1")
-			c.setup(ib, id)
-			before, _ := usedAt(t, ib, id)
-			if _, err := ib.ApprovalUsed(id, c.want); code(err) != 1 || !strings.Contains(err.Error(), c.reason) {
-				t.Fatalf("%v", err)
-			}
-			if after, _ := usedAt(t, ib, id); after != before {
-				t.Fatalf("used changed: %q -> %q", before, after)
-			}
-		})
-	}
+const pushSha = "89abcdef0123456789abcdef0123456789abcdef"
+
+func TestReleasePushOnce(t *testing.T) {
 	ib, _, _ := open(t)
 	ib.User = true
 	id := askProd(t, ib, "s1")
-	consume(ib, id)
-	at, _ := usedAt(t, ib, id)
-	if sha, err := ib.ApprovalUsed(id, release); err != nil || sha != testSha {
-		t.Fatalf("%s %v", sha, err)
+	approve(ib, id)
+	if _, err := ib.ReleasePush(id, "dotfiles", "prod", pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), "not used by zen-release") {
+		t.Fatalf("%v", err)
 	}
-	if again, _ := usedAt(t, ib, id); again != at {
-		t.Fatal("used rewrote the row")
+	if got, err := ib.ReleasesPending("dotfiles", "prod"); err != nil || len(got) != 0 {
+		t.Fatalf("%v %v", got, err)
 	}
-	if _, err := ib.ApprovalUsed("703.9", release); code(err) != 1 || !strings.Contains(err.Error(), "unknown id") {
+	if _, err := ib.Approval(id, prodWant(), "rel"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ib.ReleasesPending("dotfiles", "prod"); err != nil || !slices.Equal(got, []Pending{{id, testSha}}) {
+		t.Fatalf("%v %v", got, err)
+	}
+	for _, c := range []struct{ repo, branch, reason string }{
+		{"core", "prod", "repo mismatch"},
+		{"dotfiles", "main", "branch mismatch"},
+	} {
+		if _, err := ib.ReleasePush(id, c.repo, c.branch, pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), c.reason) {
+			t.Fatalf("%v", err)
+		}
+	}
+	p, err := ib.ReleasePush(id, "dotfiles", "prod", pushSha, "w1")
+	if err != nil || p.PushedSha != pushSha || p.PushedBy != "w1" || p.PushedAt == "" {
+		t.Fatalf("%+v %v", p, err)
+	}
+	if _, err := ib.ReleasePush(id, "dotfiles", "prod", pushSha, "w2"); code(err) != 1 || !strings.Contains(err.Error(), "already pushed by w1") {
+		t.Fatalf("%v", err)
+	}
+	if got, err := ib.ReleasesPending("dotfiles", "prod"); err != nil || len(got) != 0 {
+		t.Fatalf("%v %v", got, err)
+	}
+	if _, err := ib.ReleasePush(id, "dotfiles", "prod", "abc", "w1"); code(err) != 2 {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestReleasePushRefusesNonApprove(t *testing.T) {
+	ib, _, _ := open(t)
+	ib.User = true
+	hold := askProd(t, ib, "s1")
+	if _, err := ib.Answer(hold, p("b"), nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ib.ReleasePush(hold, "dotfiles", "prod", pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), "answered Hold") {
 		t.Fatalf("%v", err)
 	}
 	plain := ask(t, ib, "7", "s1", false, "Ship?", "Approve", "Hold")
 	approve(ib, plain)
-	if _, err := ib.ApprovalUsed(plain, release); code(err) != 1 || !strings.Contains(err.Error(), "not a prod-action ask") {
+	if _, err := ib.ReleasePush(plain, "dotfiles", "prod", pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), "not a prod-action ask") {
 		t.Fatalf("%v", err)
 	}
-	if _, err := ib.ApprovalUsed(id, ProdAction{Action: "release", Repo: "dotfiles"}); code(err) != 2 {
+	if _, err := ib.ReleasePush("703.9", "dotfiles", "prod", pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), "unknown id") {
 		t.Fatalf("%v", err)
+	}
+	push := ProdAction{Action: "push", Repo: "dotfiles", Branch: "prod", Sha: testSha}
+	d, err := ib.AskProd(AskInput{Task: "680", SessionID: "s1", Name: "spec-s1"}, push)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approve(ib, d.ID)
+	if _, err := ib.Approval(d.ID, push, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ib.ReleasePush(d.ID, "dotfiles", "prod", pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), "action mismatch") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestReleasePushConcurrentOneWins(t *testing.T) {
+	ib, _, path := open(t)
+	ib.User = true
+	id := askProd(t, ib, "s1")
+	approve(ib, id)
+	if _, err := ib.Approval(id, prodWant(), "rel"); err != nil {
+		t.Fatal(err)
+	}
+	errs := make([]error, 6)
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Go(func() {
+			other, err := Open(path, &fakeAM{})
+			if err == nil {
+				_, err = other.ReleasePush(id, "dotfiles", "prod", pushSha, fmt.Sprintf("w%d", i))
+				_ = other.Close()
+			}
+			errs[i] = err
+		})
+	}
+	wg.Wait()
+	won := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			won++
+		case code(err) != 1 || !strings.Contains(err.Error(), "already pushed"):
+			t.Fatalf("%v", err)
+		}
+	}
+	if won != 1 {
+		t.Fatalf("%d pushes on one approval", won)
+	}
+}
+
+func TestReleasePushLockedDBFails(t *testing.T) {
+	ib, _, path := open(t)
+	ib.User = true
+	id := askProd(t, ib, "s1")
+	approve(ib, id)
+	if _, err := ib.Approval(id, prodWant(), "rel"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	conn, err := raw.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(context.Background(), "BEGIN EXCLUSIVE"); err != nil {
+		t.Fatal(err)
+	}
+	other, err := Open(path, &fakeAM{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if _, err := other.conn.ExecContext(ctx, "PRAGMA busy_timeout = 50"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.ReleasePush(id, "dotfiles", "prod", pushSha, "w1"); code(err) != 4 {
+		t.Fatalf("%v", err)
+	}
+	if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.ReleasePush(id, "dotfiles", "prod", pushSha, "w1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrateV7MarksUsedAsPushed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "zen-flow.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v := 1; v <= 7; v++ {
+		for _, stmt := range strings.Split(Migrations[v], ";") {
+			if strings.TrimSpace(stmt) != "" {
+				if _, err := raw.Exec(stmt); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	for _, stmt := range []string{
+		"PRAGMA user_version = 7",
+		"INSERT INTO decisions (id, task, seq, session_id, session_name, question, status, answer_kind, answer_option, created_at, updated_at)" +
+			" VALUES ('680.1', '680', 1, 's1', 'spec-s1', 'release dotfiles prod@0123456789ab?', 'answered', 'pick', 'a'," +
+			" '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')," +
+			" ('680.2', '680', 2, 's1', 'spec-s1', 'release dotfiles prod@0123456789ab?', 'answered', 'pick', 'a'," +
+			" '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
+		"INSERT INTO decision_options VALUES ('680.1', 'a', 'Approve'), ('680.1', 'b', 'Hold'), ('680.2', 'a', 'Approve'), ('680.2', 'b', 'Hold')",
+		"INSERT INTO prod_actions (decision_id, action, repo, branch, sha, used_at, used_by) VALUES" +
+			" ('680.1', 'release', 'dotfiles', 'prod', '" + testSha + "', '2026-01-01T01:00:00+00:00', 'rel')," +
+			" ('680.2', 'release', 'dotfiles', 'prod', '" + testSha + "', '', '')",
+	} {
+		if _, err := raw.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = raw.Close()
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	for i := range errs {
+		wg.Go(func() {
+			ib, err := Open(path, &fakeAM{})
+			if err == nil {
+				_, err = ib.ReleasesPending("dotfiles", "prod")
+				_ = ib.Close()
+			}
+			errs[i] = err
+		})
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	ib, err := Open(path, &fakeAM{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ib.Close()
+	if v, _ := ib.userVersion(); v != SchemaVersion {
+		t.Fatalf("user_version %d", v)
+	}
+	if got, err := ib.ReleasesPending("dotfiles", "prod"); err != nil || len(got) != 0 {
+		t.Fatalf("%v %v", got, err)
+	}
+	if _, err := ib.ReleasePush("680.1", "dotfiles", "prod", pushSha, "w1"); code(err) != 1 || !strings.Contains(err.Error(), "already pushed by schema v8 at 2026-01-01T01:00:00+00:00") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := ib.Approval("680.2", prodWant(), "rel"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ib.ReleasesPending("dotfiles", "prod"); err != nil || !slices.Equal(got, []Pending{{"680.2", testSha}}) {
+		t.Fatalf("%v %v", got, err)
 	}
 }

@@ -1910,18 +1910,15 @@ def test_dry_run_checks_but_never_consumes(dev_prod: Path) -> None:
 
 
 class _PushRecorder:
-    """Records each push and the release token the hook would read then."""
+    """Records each push's spinner title."""
 
     def __init__(self, code: int = 0) -> None:
         self.code = code
-        self.tokens: list[str | None] = []
         self.titles: list[str] = []
 
     def __call__(
         self, cmd: list[str], *, title: str = ""
     ) -> subprocess.CompletedProcess[str]:
-        token = release.release_token_path()
-        self.tokens.append(token.read_text() if token.exists() else None)
         self.titles.append(title)
         return subprocess.CompletedProcess(cmd, self.code, "", "")
 
@@ -1936,25 +1933,20 @@ def push_recorder(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> _PushRecor
     return rec
 
 
-def test_phase_push_writes_single_use_token(push_recorder: _PushRecorder) -> None:
-    tip = _git("rev-parse", "HEAD").strip()
-    release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
-    assert push_recorder.tokens == [f"680.1 prod {tip}\n"]
-    assert not release.release_token_path().exists()
-
-
-def test_phase_push_without_approval_or_dev_writes_no_token(
-    push_recorder: _PushRecorder,
-) -> None:
+def test_phase_push_writes_nothing_to_the_repo(push_recorder: _PushRecorder) -> None:
     _git("branch", "dev")
-    release.phase_push(release.State(target_branch="prod"))
+    common = Path(
+        _git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    )
+    before = sorted(p.name for p in common.iterdir())
+    release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
     release.phase_push(release.State(target_branch="dev", dev=True, approval_id="x"))
-    assert push_recorder.tokens == [None, None]
+    assert sorted(p.name for p in common.iterdir()) == before
     # The hook may prompt on the tty, so no prod push runs under a spinner.
     assert push_recorder.titles == ["", "Pushing dev..."]
 
 
-def test_phase_push_failure_removes_token_and_hints_resume(
+def test_phase_push_failure_hints_resume(
     push_recorder: _PushRecorder, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     push_recorder.code = 1
@@ -1964,27 +1956,42 @@ def test_phase_push_failure_removes_token_and_hints_resume(
     with pytest.raises(typer.Exit):
         release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
     assert hints == ["  or push it yourself: git push origin prod --follow-tags"]
-    assert not release.release_token_path().exists()
 
 
-def test_resumed_push_uses_stored_approval(
-    dev_prod: Path, monkeypatch: pytest.MonkeyPatch
+def test_release_through_the_real_hook_consumes_once(
+    dev_prod: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    hooks = Path(__file__).resolve().parent.parent / "git" / "hooks"
+    cfg = tmp_path / "hook-gitconfig"
+    cfg.write_text(f"[core]\n\thooksPath = {hooks}\n")
+    fakes = tmp_path / "fakes"
+    fakes.mkdir()
+    (fakes / "gitleaks").write_text("#!/bin/sh\nexit 0\n")
+    (fakes / "gitleaks").chmod(0o755)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg))
+    monkeypatch.setenv("PATH", f"{fakes}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("ZEN_PREPUSH_TTY", str(tmp_path / "no-tty"))
+    monkeypatch.setenv("AGENT_MANAGER_SESSION_ID", "w1")
     approval = file_approval("prod", dev_tip())
-    _push_fails_once(monkeypatch)
-    with pytest.raises(typer.Exit):
-        full_release(approval=approval)
-    tokens: list[str] = []
-    real_run = release.run
-
-    def spy(cmd: list[str], *, title: str = "") -> subprocess.CompletedProcess[str]:
-        if cmd == ["git", "push", "origin", "prod", "--follow-tags"]:
-            tokens.append(release.release_token_path().read_text())
-        return real_run(cmd, title=title)
-
-    monkeypatch.setattr(release, "run", spy)
-    full_release(resume=True)
-    assert tokens and tokens[0].startswith(f"{approval} prod ")
+    full_release(approval=approval)
+    tip = _git("rev-parse", "prod").strip()
+    assert f"{tip}\trefs/heads/prod" in remote_refs()
+    with sqlite3.connect(os.environ["ZEN_FLOW_DB"]) as db:
+        row = db.execute(
+            "SELECT used_by, pushed_sha, pushed_by FROM prod_actions"
+            " WHERE decision_id = ?",
+            (approval,),
+        ).fetchone()
+    assert row == ("w1", tip, "w1")
+    _git("checkout", "-q", "prod")
+    Path("CHANGELOG.md").write_text("## v9.9.9\n")
+    _git("commit", "-q", "-am", "docs: changelog again")
+    again = subprocess.run(
+        ["git", "push", "origin", "prod"], capture_output=True, text=True, check=False
+    )
+    assert again.returncode != 0
+    assert "no approved unused ask" in again.stderr, again.stderr
+    assert f"{tip}\trefs/heads/prod" in remote_refs()
 
 
 def _push_fails_once(monkeypatch: pytest.MonkeyPatch) -> None:

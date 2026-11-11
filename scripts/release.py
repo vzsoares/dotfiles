@@ -55,7 +55,10 @@
 #      Only a TTY run in your own terminal may go without one, after a
 #      default-No confirm. --dry-run checks an approval but never consumes it.
 #      --resume reuses the id saved in the state unless the branch moved
-#      before the merge; --restart needs a new one.
+#      before the merge; --restart needs a new one. The pre-push hook then
+#      lets exactly one push through on the used approval, and only when the
+#      pushed tip adds nothing but version lines and CHANGELOG.md to the
+#      approved sha; a retry after a failed push needs a --prod push ask.
 #
 #  EXIT CODES
 #      0 ok · 1 failure or refusal · 3 approval missing, rejected or used
@@ -703,12 +706,6 @@ def apply_branches_from_repo(
         info(f"Releasing {state.target_branch} (no merge)")
     else:
         info(" -> ".join(chain))
-
-
-def release_token_path() -> Path:
-    """Single-use token the global pre-push hook reads for zen-release's push."""
-    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
-    return Path(common.stdout.strip()) / "zen-release-token"
 
 
 def repo_name() -> str:
@@ -1470,23 +1467,12 @@ def phase_push(state: State) -> None:
     if not gum_confirm(f"Push {target} and tags to origin?"):
         info("Skipped push. Don't forget to push later.")
         return
-    # The global pre-push hook lets the target push through on this used
-    # approval once: it consumes the token and records the sha it saw.
-    token = release_token_path() if state.approval_id and not state.dev else None
-    if token and not DRY_RUN:
-        sha = git("rev-parse", f"refs/heads/{target}").stdout.strip()
-        token.write_text(f"{state.approval_id} {target} {sha}\n")
-    # The hook may ask on the tty (also when the approval check falls through);
-    # a spinner would draw over it.
-    spin = state.dev
-    try:
-        result = run(
-            ["git", "push", "origin", target, "--follow-tags"],
-            title=f"Pushing {target}..." if spin else "",
-        )
-    finally:
-        if token:
-            token.unlink(missing_ok=True)
+    # The global pre-push hook lets one push through on the used approval and
+    # records it in the inbox; it may also ask on the tty, so no spinner.
+    result = run(
+        ["git", "push", "origin", target, "--follow-tags"],
+        title=f"Pushing {target}..." if state.dev else "",
+    )
     if result.returncode != 0:
         if result.stderr:
             info(result.stderr.strip())

@@ -158,10 +158,13 @@ that is answered `pick` = `Approve` and unused; `use` consumes it, `check` never
 does. None → exit 1, `no approved unused ask for <action> <repo> <branch>@<sha12>`.
 Concurrent `use --match` calls on one approval: exactly one wins.
 
-`approval used <id> --action A --repo R --branch B` is read-only: exit 0 and the
-approved sha on stdout when the ask was answered `Approve`, has been used, and its
-action, repo and branch match; else 1 with the reason (`not used`, `answered Hold`,
-`branch mismatch …`, unknown id, not a prod ask), 2 usage, 4 db.
+`approval pending --repo R --branch B` is read-only: one `<id> <approved sha>` line
+per release ask answered `Approve`, used and not yet pushed, oldest first; exit 1
+when none. `approval push <id> --repo R --branch B --sha S [--by who]` records S as
+that release's one push (`pushed_sha`, `pushed_at`, `pushed_by`, default
+`$AGENT_MANAGER_SESSION_ID` else `user`) in one `BEGIN IMMEDIATE`; not answered
+Approve, not used, already pushed, or a repo/branch mismatch is exit 1. The pre-push
+hook checks the pushed content against the approved sha before calling it.
 
 `zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"` (#736) files an
 approval for a script or migration run against prod. It binds the repo (the main
@@ -174,10 +177,9 @@ whole command, wrapped. `approval use|check <id> --action run --repo R --cmd C`
 
 Both serve the global `git/hooks/pre-push` gate (#703, #788): an agent, force or
 delete push to `prod`/`main`/`master` runs `check --match` for every gated ref, then
-`use --match` for each. zen-release's own push passes on a single-use
-`<git-common-dir>/zen-release-token` (`<id> <branch> <sha>`) that the hook consumes,
-plus `approval used`; `zen-release-ledger` binds each id to the first sha it let
-through. See [[release-tooling]].
+`use --match` for each. zen-release's own push passes once on its used approval via
+`approval pending` and `approval push`; no file in the repo grants anything. See
+[[release-tooling]].
 
 ### Only the user answers one (#691)
 
@@ -250,7 +252,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 6. Tables `decisions` and `decision_options` use generic names because the db is
+now 8. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -264,6 +266,10 @@ columns) and can never consume a run ask, since its checks need a branch and sha
 v7 adds `notes.claimed_at`: `replied_at` is the user's reply time, written once; a send
 claim and every retry set `claimed_at`, which the 60 s staleness check reads. The
 migration copies `replied_at` into `claimed_at` for rows with a reply.
+v8 adds `prod_actions.pushed_sha`, `pushed_at` and `pushed_by` (default `''`), the one
+push a used release approval let through; the migration stamps `pushed_at = used_at`,
+`pushed_by = 'schema v8'` on every used row, so no approval used before it becomes
+pushable. A v7 reader still works on a v8 db and never touches the new columns.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer
