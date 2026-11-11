@@ -32,28 +32,32 @@ pre-push: secret scan refused this push.
 EOF
 }
 
-# One git-log range per pushed ref that brings new commits.
-scan_ranges() {
-	local lsha rsha base range
+# One git-log range over every pushed ref, empty when nothing is new. Commits
+# reachable from a remote tip or remote-tracking ref are already on a remote.
+scan_range() {
+	local lsha rsha base range pos="" neg=""
 	while read -r _ lsha _ rsha; do
 		[ -n "$lsha" ] || continue
 		zero "$lsha" && continue
 		[ "$lsha" = "$rsha" ] && continue
 		lsha=$(git rev-parse -q --verify "$lsha^{commit}") || continue
+		case " $pos " in *" $lsha "*) ;; *) pos="$pos $lsha" ;; esac
 		if ! zero "$rsha" && base=$(git rev-parse -q --verify "$rsha^{commit}"); then
-			range="$base..$lsha"
-		else
-			range="$lsha --not --remotes"
+			neg="$neg $base"
 		fi
-		# shellcheck disable=SC2086 # the range is several rev-list arguments
-		[ -n "$(git rev-list -n 1 $range)" ] && echo "$range"
 	done <<EOF
 $input
 EOF
+	[ -n "$pos" ] || return 0
+	range="${pos# } --not$neg --remotes"
+	# shellcheck disable=SC2086 # the range is several rev-list arguments
+	[ -n "$(git rev-list -n 1 $range)" ] && echo "$range"
 	return 0
 }
 
 # A repo .gitleaks.toml without [extend] only adds to the global config.
+# shortcut: reads the work tree's .gitleaks.toml and .gitleaksignore, not the
+# pushed tip's; upgrade if pushing a branch other than HEAD trips on it.
 scan_config() {
 	local own=$top/.gitleaks.toml
 	if [ ! -f "$own" ]; then
@@ -70,24 +74,17 @@ scan_config() {
 }
 
 scan_gitleaks() {
-	local cfg range rc leak=""
+	local cfg rc=0
 	command -v gitleaks >/dev/null 2>&1 ||
 		refuse "gitleaks not found; install it (macOS: brew install gitleaks, Manjaro: sudo pacman -S gitleaks)"
 	cfg=$(scan_config)
-	while read -r range; do
-		[ -n "$range" ] || continue
-		rc=0
-		gitleaks git --log-opts "$range" --config "$cfg" --redact --verbose --no-banner \
-			--log-level warn --exit-code 10 -i "$top" "$top" >&2 || rc=$?
-		case $rc in
-		0) ;;
-		10) leak=1 ;;
-		*) refuse "gitleaks exited $rc; check it runs (gitleaks version) or reinstall it (macOS: brew install gitleaks, Manjaro: sudo pacman -S gitleaks)" ;;
-		esac
-	done <<EOF
-$ranges
-EOF
-	[ -z "$leak" ]
+	gitleaks git --log-opts "$range" --config "$cfg" --redact --verbose --no-banner \
+		--log-level warn --exit-code 10 -i "$top" "$top" >&2 || rc=$?
+	case $rc in
+	0) ;;
+	10) return 1 ;;
+	*) refuse "gitleaks exited $rc; check it runs (gitleaks version) or reinstall it (macOS: brew install gitleaks, Manjaro: sudo pacman -S gitleaks)" ;;
+	esac
 }
 
 exclude_ggshield_cache() {
@@ -112,7 +109,13 @@ scan_ggshield() {
 	printf '%s' "$input" >"$scan_tmp/stdin"
 	(cd "$top" && exec ggshield secret scan pre-push "$1" "$2") <"$scan_tmp/stdin" >"$scan_tmp/ggshield" 2>&1 &
 	pid=$!
-	(sleep "$ggshield_timeout" && kill "$pid") </dev/null >/dev/null 2>&1 &
+	# The trap stops the sleep too, so no orphan outlives the hook.
+	(
+		sleep "$ggshield_timeout" &
+		s=$!
+		trap 'kill "$s"; exit' TERM
+		wait "$s" && kill "$pid"
+	) </dev/null >/dev/null 2>&1 &
 	watchdog=$!
 	wait "$pid" 2>/dev/null || rc=$?
 	kill "$watchdog" 2>/dev/null || true
@@ -133,8 +136,8 @@ scan_ggshield() {
 
 # $1 remote name, $2 url, as git passes them to pre-push.
 secret_scan() {
-	ranges=$(scan_ranges)
-	[ -n "$ranges" ] || return 0
+	range=$(scan_range)
+	[ -n "$range" ] || return 0
 	scan_tmp=$(mktemp -d "${TMPDIR:-/tmp}/zen-prepush.XXXXXX")
 	trap 'rm -rf "$scan_tmp"' EXIT
 	top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)

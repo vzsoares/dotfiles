@@ -54,15 +54,12 @@ while [ $# -gt 0 ]; do
 	[ "$1" = --config ] && cat "$2" > "$FAKE_GITLEAKS_LOG.cfg"
 	shift
 done
-match=${FAKE_GITLEAKS_MATCH:-}
 case ${FAKE_GITLEAKS:-0} in
 leak)
-	if [ -z "$match" ] || grep -q -- "$match" <<< "$(tail -n 1 "$FAKE_GITLEAKS_LOG")"; then
-		printf 'Finding: token = REDACTED\\nRuleID: generic-api-key\\nFile: a.txt\\nLine: 1\\n'
-		printf 'Commit: abc\\nFingerprint: abc:a.txt:generic-api-key:1\\n'
-		echo "WRN leaks found: 1" >&2
-		exit 10
-	fi
+	printf 'Finding: token = REDACTED\\nRuleID: generic-api-key\\nFile: a.txt\\nLine: 1\\n'
+	printf 'Commit: abc\\nFingerprint: abc:a.txt:generic-api-key:1\\n'
+	echo "WRN leaks found: 1" >&2
+	exit 10
 	;;
 *) exit "${FAKE_GITLEAKS:-0}" ;;
 esac
@@ -578,8 +575,24 @@ def test_scan_new_branch_and_update(env: Env) -> None:
     nxt = env.commit("next")
     r = env.run("push", "origin", "HEAD:refs/heads/feat")
     assert r.returncode == 0, r.stderr
-    assert_log_opts(scans(env)[-1], f"{head}..{nxt}")
+    assert_log_opts(scans(env)[-1], f"{nxt} --not {head} --remotes")
     assert env.calls(env.ggshield_log) == []
+
+
+def test_scan_skips_commits_already_on_a_remote(env: Env) -> None:
+    seed(env, "feat")
+    old = env.git("rev-parse", "HEAD")
+    env.git("checkout", "-q", "-b", "side")
+    upstream = env.commit("upstream")
+    seed(env, "side")
+    env.git("fetch", "-q", "origin")
+    env.git("checkout", "-q", "-B", "feat", old)
+    env.git("merge", "-q", "--no-ff", "-m", "merge side", upstream)
+    merge = env.git("rev-parse", "HEAD")
+    assert env.git("rev-list", merge, "--not", old, "--remotes") == merge
+    assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    (call,) = scans(env)
+    assert_log_opts(call, f"{merge} --not {old} --remotes")
 
 
 def test_scan_owner_remote_runs_ggshield(env: Env) -> None:
@@ -721,13 +734,11 @@ def test_multi_ref_one_finding_refuses_all(env: Env) -> None:
     seed(env, "a")
     base = env.git("rev-parse", "HEAD")
     bad = env.commit("bad")
-    env.vars.update({"FAKE_GITLEAKS": "leak", "FAKE_GITLEAKS_MATCH": f"{base}..{bad}"})
+    env.vars["FAKE_GITLEAKS"] = "leak"
     r = env.run("push", "origin", "HEAD:refs/heads/a", "HEAD:refs/heads/b")
     assert_refused(r, "Fingerprint:")
-    calls = scans(env)
-    assert len(calls) == 2
-    assert any(f"--log-opts {base}..{bad} " in c for c in calls)
-    assert any(f"--log-opts {bad} --not --remotes " in c for c in calls)
+    (call,) = scans(env)
+    assert_log_opts(call, f"{bad} --not {base} --remotes")
     assert env.remote_sha("a") == base and env.remote_sha("b") == ""
 
 
@@ -822,6 +833,25 @@ def test_real_basic_auth_uri_refused(leaks: Env) -> None:
     pw = synthetic("Zq8w", "Lp3vN7rT")
     commit_file(leaks, "db.env", f"DB=postgres://app:{pw}@db.internal:5432/app\n")
     assert_refused(leaks.run("push", "origin", "HEAD:refs/heads/feat"), "zen-basic")
+
+
+@real
+@pytest.mark.parametrize(
+    ("name", "text", "rule"),
+    [
+        ("pw.py", f'password = "{synthetic("XkTqWp", "LmZrHvBn")}"\n', "zen-password"),
+        (
+            "db.env",
+            f"DB=postgres://app:{synthetic('Secret', '2024Qz')}@db.internal/x\n",
+            "zen-basic",
+        ),
+    ],
+)
+def test_real_word_like_secret_refused(
+    leaks: Env, name: str, text: str, rule: str
+) -> None:
+    commit_file(leaks, name, text)
+    assert_refused(leaks.run("push", "origin", "HEAD:refs/heads/feat"), rule)
 
 
 @real

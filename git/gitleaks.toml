@@ -1,6 +1,6 @@
 # Global gitleaks config for the pre-push hook: gitleaks' defaults plus generic
 # detectors modelled on GitGuardian's. A repo's own .gitleaks.toml without an
-# [extend] table is layered on top of this file by git/hooks/lib/secret-scan.sh.
+# [extend] table is layered on top of this file by git/secret-scan.sh.
 title = "zen pre-push"
 minVersion = "v8.25.0"
 
@@ -15,8 +15,8 @@ secretGroup = 1
 entropy = 2.5
 keywords = ["://"]
 [[rules.allowlists]]
-stopwords = ["changeme", "xxx", "example", "placeholder", "dummy", "redacted", "password", "passwd", "secret"]
-regexes = ['''^[*.xX%]+$''']
+stopwords = ["changeme", "xxx", "example", "placeholder", "dummy", "redacted"]
+regexes = ['''^[*.xX%]+$''', '''(?i)^(?:password|passwd|pass|secret|pwd)$''']
 [[rules.allowlists]]
 description = "Local dev databases"
 regexTarget = "match"
@@ -35,7 +35,7 @@ regexes = [
     '''^[A-Z][A-Z0-9_]+$''',
     '''^[a-z_.-]+$''',
     # A single word (UI copy in locale files) or a camelCase identifier.
-    '''^\p{L}+$''',
+    '''^\p{Lu}?\p{Ll}+$''',
     '''^[a-z]+(?:[A-Z][a-z]+)+$''',
     # Paths, URLs, timestamps and colon-joined scopes.
     '''^(?:/|[a-z][a-z0-9+.-]*://)''',
