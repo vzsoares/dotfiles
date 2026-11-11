@@ -67,12 +67,20 @@ func quotaLevel(pct float64) lipgloss.Style {
 	return quotaStyle
 }
 
-type quotaPart struct{ full, short string }
+type quotaPart struct {
+	full, short string
+	// reset marks a window whose resets_at has passed; its percentage is old.
+	reset bool
+}
 
-// part is "5h 42% · resets 15:20"; reset formats the reset time.
-func (w window) part(name string, loc *time.Location, reset func(time.Time) string) (quotaPart, float64) {
+// part is "5h 42% · resets 15:20", "5h reset" once resets_at has passed, or
+// "5h ?" when no value was ever seen; reset formats the reset time.
+func (w window) part(name string, now time.Time, loc *time.Location, reset func(time.Time) string) (quotaPart, float64) {
 	if w.Used == nil {
-		return quotaPart{name + " ?", name + " ?"}, 0
+		return quotaPart{name + " ?", name + " ?", false}, 0
+	}
+	if w.ResetsAt != nil && *w.ResetsAt > 0 && !now.Before(time.Unix(*w.ResetsAt, 0)) {
+		return quotaPart{name + " reset", name + " reset", true}, 0
 	}
 	pct := math.Floor(*w.Used)
 	short := name + " " + strconv.Itoa(int(pct)) + "%"
@@ -80,7 +88,7 @@ func (w window) part(name string, loc *time.Location, reset func(time.Time) stri
 	if w.ResetsAt != nil && *w.ResetsAt > 0 {
 		full += " · resets " + reset(time.Unix(*w.ResetsAt, 0).In(loc))
 	}
-	return quotaPart{full, short}, pct
+	return quotaPart{full, short, false}, pct
 }
 
 // text is the header's quota segment no wider than width, or "" when
@@ -92,16 +100,16 @@ func (q quota) text(now time.Time, loc *time.Location, width int) string {
 		}
 		return readStyle.Render("quota n/a")
 	}
-	five, p5 := q.FiveHour.part("5h", loc, func(t time.Time) string { return t.Format("15:04") })
-	week, p7 := q.SevenDay.part("week", loc, func(t time.Time) string { return t.Format("Mon") })
+	five, p5 := q.FiveHour.part("5h", now, loc, func(t time.Time) string { return t.Format("15:04") })
+	week, p7 := q.SevenDay.part("week", now, loc, func(t time.Time) string { return t.Format("Mon") })
 	updated := time.Unix(q.UpdatedAt, 0)
 	stale := now.Sub(updated) > QuotaStaleAfter
 	age := ""
 	if stale {
 		age = "  · " + view.Age(inbox.Stamp(updated), now) + " old"
 	}
-	paint := func(s string, pct float64) string {
-		if stale {
+	paint := func(s string, pct float64, passed bool) string {
+		if stale || passed {
 			return readStyle.Render(s)
 		}
 		return quotaLevel(pct).Render(s)
@@ -109,7 +117,7 @@ func (q quota) text(now time.Time, loc *time.Location, width int) string {
 	for _, form := range [][2]string{{five.full, week.full}, {five.short, week.short}} {
 		plain := form[0] + "  ·  " + form[1] + age
 		if lipgloss.Width(plain) <= width {
-			return paint(form[0], p5) + sepStyle.Render("  ·  ") + paint(form[1], p7) + readStyle.Render(age)
+			return paint(form[0], p5, five.reset) + sepStyle.Render("  ·  ") + paint(form[1], p7, week.reset) + readStyle.Render(age)
 		}
 	}
 	return ""

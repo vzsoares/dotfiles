@@ -49,8 +49,27 @@ check "rewrites a file older than 10s" $?
 
 touch -t 202001010000 "$QUOTA"
 line '{"cwd":"/tmp","rate_limits":{"five_hour":{"used_percentage":7,"resets_at":1}}}'
-[ "$(jq -c '[.five_hour.used_percentage, .seven_day.used_percentage]' "$QUOTA")" = '[7,null]' ]
-check "a missing window is written as nulls" $?
+[ "$(jq -c '[.five_hour.used_percentage, .seven_day.used_percentage]' "$QUOTA")" = '[7,63]' ]
+check "a missing window keeps the previous values" $?
+
+touch -t 202001010000 "$QUOTA"
+line '{"cwd":"/tmp","rate_limits":{"five_hour":{"used_percentage":null,"resets_at":null},"seven_day":{"used_percentage":null,"resets_at":null}}}'
+check "null input: exit 0" $?
+[ "$(jq -c '[.five_hour, .seven_day.used_percentage]' "$QUOTA")" = '[{"used_percentage":7,"resets_at":1},63]' ]
+check "null input keeps the old values" $?
+[ -z "$(find "$HOME/.cache/zen" -name 'claude-quota.json.*')" ]
+check "null input leaves no temp file" $?
+
+rm -f "$QUOTA"
+line '{"cwd":"/tmp","rate_limits":{"five_hour":{"used_percentage":null,"resets_at":null}}}'
+[ "$(jq -c '.five_hour' "$QUOTA")" = '{"used_percentage":null,"resets_at":null}' ]
+check "null input with no previous file writes nulls" $?
+
+echo 'not json' >"$QUOTA"
+touch -t 202001010000 "$QUOTA"
+line "$FULL"
+[ "$(jq -c 'del(.updated_at)' "$QUOTA")" = "$want" ]
+check "a corrupt previous file is replaced" $?
 
 if [ "$FAILS" != 0 ]; then
     echo "$FAILS failed"

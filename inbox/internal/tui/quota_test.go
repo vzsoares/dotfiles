@@ -68,6 +68,9 @@ func TestQuotaHeaderGoldens(t *testing.T) {
 		{"quota-fresh-92x29", quotaFresh, "5h 42% · resets 15:20  ·  week 63% · resets Fri"},
 		{"quota-stale-92x29", stale, "5h 42% · resets 15:20  ·  week 63% · resets Fri  · 40m old"},
 		{"quota-missing-92x29", "", "quota n/a"},
+		{"quota-reset-92x29", strings.Replace(quotaFresh, "1794324000", "1794311000", 1), "5h reset  ·  week 63% · resets Fri"},
+		{"quota-unseen-92x29", `{"five_hour":{"used_percentage":null,"resets_at":null},` +
+			`"seven_day":{"used_percentage":63,"resets_at":1794560400},"updated_at":1794311940}`, "5h ?  ·  week 63% · resets Fri"},
 	}
 	for _, c := range cases {
 		d := newDrv(t, 92, 29)
