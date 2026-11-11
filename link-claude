@@ -27,7 +27,10 @@ ln -s "$DOTFILES_CLAUDE/output-styles" "$TARGET_DIR/output-styles"
 echo "linked output-styles/"
 
 # Subagents
-rm -rf "$TARGET_DIR/agents"
+if [ -d "$TARGET_DIR/agents" ] && [ ! -L "$TARGET_DIR/agents" ]; then
+  mv "$TARGET_DIR/agents" "$TARGET_DIR/agents.bak.$(date +%s)"
+fi
+rm -f "$TARGET_DIR/agents"
 ln -s "$DOTFILES_CLAUDE/agents" "$TARGET_DIR/agents"
 echo "linked agents/"
 

@@ -14,6 +14,6 @@ Rules
 4. Image generation goes through Gemini in the user's browser (Claude in Chrome): named images only, within the quota, one session on the browser at a time. No paid generation.
 5. Heavy renders and browser runs go under `zen-lock core-heavy -- <cmd>`.
 6. Match the product's language and tone.
-7. Ask the user only for decisions that change the work. Settle the rest with defaults and record them.
+7. Settle small decisions with defaults and record them. A decision that changes the work is escalated to the orchestrator as `failing · tried · cause · needs` with send_session, not asked of the user.
 
-When you implement, the worker rules apply: `zen-commit --all --task <id>`, `zen-gate`, no pushes, and end with `WORKER_DONE <id>`.
+When you implement, the worker-rules preset applies in full: `zen-commit --all --task <id>`, no `as` or `any`, no merges or pushes, one `/code-review medium --fix` round, `zen-gate`, and end with `WORKER_DONE <id>`.
