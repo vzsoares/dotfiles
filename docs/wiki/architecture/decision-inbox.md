@@ -31,8 +31,8 @@ message.
 4. **answer** — Answer walks the open questions one screen each: `a`-`d` pick, `f`
    free text (a textarea, `ctrl+d` sends), `s` skip, `t` talk, `v` view full, `esc`
    back; `?` toggles help and the footer always lists the screen's keys. Answers are
-   staged in memory with the decision's `rev`; a review screen offers Send / Change
-   one / Cancel. The open session updates live (2 s poll): an amended question shows
+   staged with the decision's `rev` and kept as drafts (see Drafts under Panel); a
+   review screen offers Send / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
    its new text, a staged answer to it goes stale and is asked again before the
    review, one answered elsewhere shows `answered elsewhere: <answer>` and leaves the
    walk (the db records no answerer, so it names the answer), and new questions join
@@ -56,6 +56,23 @@ message.
 
 ## Panel
 
+- **Drafts (#711).** Every staged answer (pick, free text with its text, skip) is
+  written to `decision_drafts` as it is staged, so esc, the list, a talk, a restart
+  or a crash keep it. Writes run in a `tea.Cmd`, one batch at a time so they land in
+  order; `m.drafts` mirrors the table, and a poll that started before a local change
+  (`draftGen`) never overwrites it. Answer resumes at the first question with no
+  draft, or the review when all have one. The store drops a draft when its decision
+  closes or is amended (`closeOne`, `Amend`), `Drafts()` loads only those at the
+  current `rev`, and a send clears the session's drafts. An `Approve` on a `--prod`
+  ask is never written (store and panel both refuse), so after a restart it is asked
+  again with its y/N confirm. Cancel and esc keep drafts.
+- **Moving in the walk.** `←` or `shift+tab` shows the previous question of the pass
+  (from the review, the last one) with the cursor on its drafted option, and free
+  text reopens with its text; `→` goes forward without changing anything. `l` (and
+  Change one) opens a jump list of every open question with its draft or `—`; enter
+  shows it, esc returns. After answering, the walk goes on at the first question
+  with no draft. The walk footer drops `t talk · v full` (still menu items) when it
+  would take more than two rows.
 - **Busy loader.** A send, retry, resolve or talk runs in a `tea.Cmd`; while it runs
   the panel shows a spinner screen (`m.busy`, MiniDot spinner) instead of freezing,
   and polls keep running.
@@ -136,13 +153,14 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 3. Tables `decisions` and `decision_options` use generic names because the db is
+now 4. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
 working on a migrated db. v3 adds `prod_actions (decision_id, action, repo, branch,
 sha, used_at, used_by)` and changes no existing table, so a v2 reader keeps working
-on a v3 db.
+on a v3 db. v4 adds `decision_drafts (decision_id, kind, option, text, rev,
+updated_at)`, the panel's unsent answers, again without touching existing tables.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

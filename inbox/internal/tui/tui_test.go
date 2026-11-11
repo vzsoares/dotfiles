@@ -126,7 +126,8 @@ func (d *drv) send(msg tea.Msg) {
 var special = map[string]tea.KeyType{
 	"enter": tea.KeyEnter, "esc": tea.KeyEsc, "up": tea.KeyUp, "down": tea.KeyDown,
 	"ctrl+d": tea.KeyCtrlD, "ctrl+c": tea.KeyCtrlC, " ": tea.KeySpace, "pgdown": tea.KeyPgDown,
-	"pgup": tea.KeyPgUp, "ctrl+u": tea.KeyCtrlU,
+	"pgup": tea.KeyPgUp, "ctrl+u": tea.KeyCtrlU, "left": tea.KeyLeft, "right": tea.KeyRight,
+	"shift+tab": tea.KeyShiftTab,
 }
 
 func (d *drv) keys(ks ...string) {

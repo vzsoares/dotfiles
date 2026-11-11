@@ -16,8 +16,7 @@ b) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem i
    consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur
    adipiscing elit sed do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed
    do eiusmod lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem
-   ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem ipsum dolor sit
-↓ 16 more
+↓ 17 more
 › a
   b
   c
@@ -26,5 +25,6 @@ b) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem i
   Talk
   View full
   Back
-↑↓ · enter · a-d pick · f free · s skip · t talk · v full · esc back · ? help · ^u/^d scroll
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · ←→ move · l list · esc back · ?
+help · ^u/^d scroll
 ◆ 1 open · spec-s1
