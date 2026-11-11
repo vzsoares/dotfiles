@@ -275,6 +275,8 @@ uv run scripts/test_prepush.py
 uv run scripts/lib/test_sessions.py
 ```
 
+`scripts/conftest.py` gives every test a temp global git config with an empty `core.hooksPath`, so the user's global hooks never run in a temp repo.
+
 `zen-inbox` is Go: `cd inbox && go test -race ./...`.
 
 ### zen-config
