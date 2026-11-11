@@ -572,7 +572,9 @@ def test_scan_new_branch_and_update(env: Env) -> None:
     (call,) = scans(env)
     assert_log_opts(call, f"{head} --not --remotes")
     assert f"--config {GLOBAL_CFG} " in call
-    assert re.search(rf"--exit-code 10 -i \S+/ignore {env.repo}/\.git$", call)
+    assert re.search(
+        rf"--exit-code 10 -i \S+/ignore {re.escape(str(env.repo))}/\.git$", call
+    )
     nxt = env.commit("next")
     r = env.run("push", "origin", "HEAD:refs/heads/feat")
     assert r.returncode == 0, r.stderr
