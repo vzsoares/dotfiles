@@ -32,8 +32,13 @@ type fakeAM struct {
 	popups   []string
 	bells    []string
 	notices  [][2]string
-	noPopup  bool
-	fail     string
+	// chiefs are the messages sent to chief; chiefErr fails the next one and
+	// chiefStatus is what ChiefStatus reports.
+	chiefs      []string
+	chiefErr    string
+	chiefStatus string
+	noPopup     bool
+	fail        string
 }
 
 func (f *fakeAM) Sessions() am.Sessions {
@@ -69,6 +74,22 @@ func (f *fakeAM) Notify(title, body string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.notices = append(f.notices, [2]string{title, body})
+}
+
+func (f *fakeAM) Chief(msg string) (string, string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.chiefErr != "" {
+		return "", f.chiefErr
+	}
+	f.chiefs = append(f.chiefs, msg)
+	return "42", ""
+}
+
+func (f *fakeAM) ChiefStatus(string) (string, string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.chiefStatus, ""
 }
 
 func (f *fakeAM) Followup(string) string { return "" }

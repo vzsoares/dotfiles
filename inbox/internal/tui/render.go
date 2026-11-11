@@ -230,6 +230,8 @@ func (m *Model) frame() frame {
 		return m.viewNote()
 	case scReply:
 		return m.viewReply()
+	case scChief:
+		return m.viewChief()
 	case scTalkNote:
 		return frame{s: scTalkNote, top: []section{{lines: []string{"note (optional)"}}},
 			body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
@@ -261,6 +263,8 @@ func (m *Model) status() (string, lipgloss.Style) {
 			name += " +" + strconv.Itoa(n)
 		}
 		return pyfmt.Clip("✕ delivery failed · "+name+" · r retry", m.w), failStyle
+	case m.chief.id != "":
+		return m.chiefStatusLine(), footerStyle
 	case !m.loaded:
 		return "○ loading…", footerStyle
 	}
@@ -427,13 +431,47 @@ func (m *Model) viewConfirm() frame {
 	}
 	if run {
 		body = append(body, "command")
-		body = append(body, view.Wrap(p.Cmd, m.w, "")...)
+		body = append(body, wrapCmd(p.Cmd, max(m.w, view.MinWidth))...)
 	} else {
 		body = append(body, "sha", p.Sha)
 	}
 	body = append(body, "", "Approve? y/N")
 	return frame{s: scConfirm, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  prod approval", m.w)}, style: &bannerStyle}},
 		body: []section{{lines: body}}, cur: -1, help: true}
+}
+
+// cmdSeps are where a token wider than the pane may break: after the character.
+const cmdSeps = "/,=:;|&"
+
+// wrapCmd breaks cmd at spaces, keeping runs of them inside a line. A token
+// wider than width breaks after its last separator that fits, else at width.
+func wrapCmd(cmd string, width int) []string {
+	var out []string
+	for _, para := range strings.Split(cmd, "\n") {
+		line := []rune{}
+		for _, tok := range strings.Split(para, " ") {
+			t := []rune(tok)
+			if len(line) > 0 && len(line)+1+len(t) <= width {
+				line = append(append(line, ' '), t...)
+				continue
+			}
+			if len(line) > 0 {
+				out = append(out, string(line))
+				line = line[:0]
+			}
+			for len(t) > width {
+				cut := width
+				if i := strings.LastIndexAny(string(t[:width]), cmdSeps); i >= 0 {
+					cut = len([]rune(string(t[:width])[:i+1]))
+				}
+				out = append(out, string(t[:cut]))
+				t = t[cut:]
+			}
+			line = append(line, t...)
+		}
+		out = append(out, string(line))
+	}
+	return out
 }
 
 func (m *Model) viewJump() frame {

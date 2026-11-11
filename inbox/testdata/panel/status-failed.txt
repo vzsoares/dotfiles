@@ -1,6 +1,6 @@
 failed · spec-s1: 7.1 (failed); zen-inbox retry s1
 › retry spec-s1: 1 answer(s)
-↑↓ · enter open · q quit · ? help
+↑↓ · enter open · c chief · q quit · ? help
 
 
 

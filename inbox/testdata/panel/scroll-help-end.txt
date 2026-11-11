@@ -1,5 +1,4 @@
-↑ 14 more
-  spec-t24 · #714 · 1 open · 0s · [gone]
+↑ 15 more
   spec-t25 · #715 · 1 open · 0s · [gone]
   spec-t26 · #716 · 1 open · 0s · [gone]
   spec-t27 · #717 · 1 open · 0s · [gone]
@@ -25,6 +24,7 @@
   spec-t47 · #737 · 1 open · 0s · [gone]
   spec-t48 · #738 · 1 open · 0s · [gone]
   spec-t49 · #739 · 1 open · 0s · [gone]
-One row per asking session, oldest first. Open one to see its tasks and questions.
-↑↓ · enter open · q quit · ? help · ^u/^d scroll
+One row per asking session, oldest first. Open one to see its tasks and questions. c writes
+a message to chief.
+↑↓ · enter open · c chief · q quit · ? help · ^u/^d scroll
 ◆ 40 open · spec-t10, spec-t11, spec-t12, spec-t13, spec-t14, spec-t15, spec-t16, spec-t17,…

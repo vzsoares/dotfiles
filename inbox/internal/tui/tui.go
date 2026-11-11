@@ -53,6 +53,7 @@ const (
 	scFreeBlank
 	scNote
 	scReply
+	scChief
 	// scListNotes names the list's footer and help while notes are shown.
 	scListNotes
 )
@@ -202,6 +203,9 @@ type Model struct {
 	confirm string
 	// note is the one scNote and scReply show.
 	note inbox.Note
+	// chiefTA is the compose box for chief; its text stays across esc.
+	chiefTA textarea.Model
+	chief   chiefMsg
 	// replyFor is the note the textarea holds a reply for.
 	replyFor int64
 }
@@ -216,7 +220,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ta.Cursor.SetMode(cursor.CursorStatic)
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
-		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, md: md.New(lipgloss.DefaultRenderer()),
+		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()),
 		prodBlock: "guard not run", drafts: map[string]view.Staged{},
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
@@ -341,6 +345,10 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		m.flash, m.flashOK = "", false
 	}
 	cmds := m.ring()
+	m.expireChief()
+	if c := m.chiefPoll(); c != nil {
+		cmds = append(cmds, c)
+	}
 	// A send or talk in flight changes the db under the pass; its own reply
 	// message reconciles the screen instead.
 	switch {
@@ -916,6 +924,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 		m.ta.SetWidth(max(m.w, 1))
 		m.ta.SetHeight(max(m.rows()-4, 1))
+		m.chiefTA.SetWidth(max(m.w, 1))
+		m.chiefTA.SetHeight(max(m.rows()-4, 1))
 		m.ti.Width = max(m.w-3, 1)
 		return m, nil
 	case tea.MouseMsg:
@@ -950,6 +960,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resolvedMsg:
 		m.busy, m.snap = "", msg.snap
 		m.finishTalk(msg.resolved, msg.flash)
+		return m, nil
+	case chiefSentMsg:
+		return m, m.onChiefSent(msg)
+	case chiefStatusMsg:
+		m.onChiefStatus(msg)
 		return m, nil
 	case notesMsg:
 		m.onNotes(msg)
@@ -1018,6 +1033,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyNote(msg)
 	case scReply:
 		return m.keyReply(msg)
+	case scChief:
+		return m.keyChief(msg)
 	}
 	n := m.menuLen()
 	switch k {
@@ -1059,7 +1076,7 @@ func (m *Model) scrollBy(k string) int {
 	case "pgup":
 		return -half
 	}
-	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReply {
+	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReply || m.scr == scChief {
 		return 0
 	}
 	switch k {
@@ -1111,6 +1128,8 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 		return m, m.quit()
 	case "r":
 		return m, m.retryFirst()
+	case "c":
+		return m, m.openChief()
 	case "m":
 		if n, ok := m.cursorNote(); ok {
 			return m, m.markCmd(n.ID, false, n.Unread())

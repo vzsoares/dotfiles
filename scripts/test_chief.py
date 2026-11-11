@@ -110,6 +110,13 @@ def test_send_targets_the_chief_and_returns_the_message_id(am, capsys) -> None:
     assert send == [["send", "c1", "hello\nworld", "--json", "--from", "zenha"]]
 
 
+def test_message_starting_with_a_dash(am, capsys) -> None:
+    am(session("c1"))
+    assert chief.main(["--", "-x flag-like"]) == 0
+    send = [c for c in am.calls() if c[0] == "send"]
+    assert send[0][2] == "-x flag-like"
+
+
 def test_send_drops_from_when_agent_manager_refuses_it(am, capsys) -> None:
     am(session("c1"))
     (am.dir / "refuse_from").write_text("1")

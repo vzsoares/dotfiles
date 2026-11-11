@@ -49,9 +49,7 @@ def resolve(sessions: list[dict[str, object]] | None) -> str:
     """The id of the one live chief session."""
     if sessions is None:
         raise ChiefError("could not list sessions (agent-manager failed)")
-    live = [
-        s for s in sessions if s.get("name") == NAME and _sessions.is_live(s)
-    ]
+    live = [s for s in sessions if s.get("name") == NAME and _sessions.is_live(s)]
     if not live:
         raise ChiefError(f"no live session named {NAME!r}")
     if len(live) > 1:

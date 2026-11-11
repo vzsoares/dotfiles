@@ -1,6 +1,6 @@
 › spec-s1 · #7 · 1 open · 0s · [idle]
   spec-s2 · #8 · 2 open · 0s · [idle]
-↑↓ · enter open · q quit · ? help
+↑↓ · enter open · c chief · q quit · ? help
 
 
 

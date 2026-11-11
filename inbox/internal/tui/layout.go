@@ -154,7 +154,7 @@ var spare = map[string]bool{"t talk": true, "v full": true}
 // Footer labels stay short so the walk's keys fit in two rows at 40 columns;
 // ? adds the longer explanation.
 var footers = map[screen][]key{
-	scList:      {{"↑↓", ""}, {"enter", "open"}, {"q", "quit"}, {"?", "help"}},
+	scList:      {{"↑↓", ""}, {"enter", "open"}, {"c", "chief"}, {"q", "quit"}, {"?", "help"}},
 	scSession:   {{"↑↓", ""}, {"enter", ""}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
 	scWalk:      {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 	scReview:    {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
@@ -165,14 +165,15 @@ var footers = map[screen][]key{
 	scTalkPick:  {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote:  {{"enter", "done"}, {"esc", "no note"}},
 	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
-	scListNotes: {{"↑↓", ""}, {"enter", "open"}, {"m", "mark"}, {"M", "all read"}, {"q", "quit"}, {"?", "help"}},
+	scListNotes: {{"↑↓", ""}, {"enter", "open"}, {"m", "mark"}, {"M", "all read"}, {"c", "chief"}, {"q", "quit"}, {"?", "help"}},
 	scNote:      {{"↑↓", ""}, {"m", "mark"}, {"f", "reply"}, {"esc", "back"}, {"?", "help"}},
 	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
+	scChief:     {{"enter", "send"}, {"ctrl+j", "newline"}, {"esc", "cancel"}},
 	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
-	scList:    "One row per asking session, oldest first. Open one to see its tasks and questions.",
+	scList:    "One row per asking session, oldest first. Open one to see its tasks and questions. c writes a message to chief.",
 	scSession: "Answer walks the questions one by one; Talk opens the agent in a popup.",
 	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything. ← or shift+tab goes back a question, → forward, l lists them all. Answers are kept as drafts, even across esc and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
 	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
@@ -181,6 +182,7 @@ var helps = map[screen]string{
 	scListNotes: "One row per asking session, oldest first. Open one to see its tasks and questions." +
 		" Notes from chief follow: m marks the one under the cursor read or unread, M marks them all read.",
 	scNote:  "m marks this note read or unread; opening it does not. f writes one reply to the sender and marks it read.",
+	scChief: "enter sends the message to the live chief session, ctrl+j or alt+enter adds a line. esc cancels and keeps the draft for the next c.",
 	scReply: "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }
 
@@ -189,7 +191,7 @@ func footerLines(s screen, width int, scroll bool) []string {
 	if scroll {
 		// ctrl+u/d edit text on the input screens, so only pgup/dn scroll there.
 		hint := key{"^u/^d", "scroll"}
-		if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply {
+		if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply || s == scChief {
 			hint = key{"pgup/dn", "scroll"}
 		}
 		keys = append(append([]key(nil), keys...), hint)

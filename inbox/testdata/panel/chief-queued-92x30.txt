@@ -1,0 +1,30 @@
+» message 42 queued for chief
+
+inbox empty
+↑↓ · enter open · c chief · q quit · ? help
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✉ chief · message 42 queued

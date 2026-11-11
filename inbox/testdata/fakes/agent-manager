@@ -21,5 +21,6 @@ send)
         echo '{"message_id": 42}'
     fi
     ;;
+message-status) echo "{\"status\": \"$(cat "$FAKE_AM/msg_status" 2>/dev/null || echo queued)\"}" ;;
 *) exit 2 ;;
 esac

@@ -148,6 +148,8 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   repo, branch and sha, so file it before any such `git push`. Agents never answer a `--prod` ask. Workers
   never run one; chief or the orchestrator may after my approval. Never ff-merge a
   worker branch into `prod`.
+- Prod script or migration: `zen-inbox ask <task> --prod run --repo <repo> --cmd "<exact
+  command>"`; the approval covers that exact command once and only I answer it.
 - Secret scan: the same pre-push hook first scans the pushed commits (gitleaks with
   `git/gitleaks.toml`; ggshield on my GitHub remotes). A possibly real secret is
   never ignored: the push stays blocked and I rotate it. Agents ignore only a clear
@@ -247,6 +249,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
   `~/.cache/zen/<name>.lock`; releases on exit/INT/TERM, takes over a lock whose owner
   pid is gone, exits 75 on timeout. `status <name>`, `break <name>`.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
+- `zen-chief "<message>"` (me, from a shell; the panel's `c` runs the same script):
+  queues a message to the live `chief` session with `--from zenha`, prints the message id;
+  exit 1 when there is no live chief or more than one.
 - `zen-telemetry` (hook on every agent tool call; chief weekly): see Telemetry.
 
 ### Telemetry

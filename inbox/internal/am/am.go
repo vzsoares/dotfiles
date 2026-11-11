@@ -41,6 +41,11 @@ type Client interface {
 	Bell(message string)
 	// Notify posts one banner.
 	Notify(title, body string)
+	// Chief queues message for the live chief session (zen-chief) and returns
+	// the message id, or the error text.
+	Chief(message string) (messageID, errText string)
+	// ChiefStatus is agent-manager's status for a message Chief queued.
+	ChiefStatus(messageID string) (status, errText string)
 	// Followup runs after a successful Send and returns "", Submitted or StillStuck.
 	Followup(sessionID string) string
 }
@@ -194,6 +199,49 @@ func (e Exec) Send(sessionID, message string) (bool, string, string) {
 		}
 	}
 	return true, pyfmt.Str(mid), ""
+}
+
+// zenChief runs the zen-chief script, the one place that finds chief.
+func zenChief(args ...string) (map[string]any, string) {
+	r, err := run(append([]string{"zen-chief", "--json"}, args...))
+	switch {
+	case errors.Is(err, errTimeout):
+		return nil, "zen-chief timed out"
+	case err != nil:
+		return nil, "zen-chief not found (run ./link-bin)"
+	case r.code != 0:
+		text := pyfmt.Strip(strings.TrimPrefix(pyfmt.Strip(r.stderr), "zen-chief: "))
+		if text == "" {
+			text = fmt.Sprintf("zen-chief exited %d", r.code)
+		}
+		return nil, text
+	}
+	v, err := decode(r.stdout)
+	data, ok := v.(map[string]any)
+	if err != nil || !ok {
+		return nil, "zen-chief printed no JSON"
+	}
+	return data, ""
+}
+
+func (Exec) Chief(message string) (string, string) {
+	data, errText := zenChief("--", message)
+	if errText != "" {
+		return "", errText
+	}
+	id := pyfmt.Str(data["id"])
+	if id == "" {
+		return "", "zen-chief printed no message id"
+	}
+	return id, ""
+}
+
+func (Exec) ChiefStatus(messageID string) (string, string) {
+	data, errText := zenChief("--status", messageID)
+	if errText != "" {
+		return "", errText
+	}
+	return pyfmt.Str(data["status"]), ""
 }
 
 // AttachCommand attaches on agent-manager's own server, whatever $TMUX names.

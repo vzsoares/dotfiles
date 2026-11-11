@@ -29,6 +29,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `ytdl.py` | `zen-ytdl` | Interactive `yt-dlp` downloader with WhatsApp-safe re-encode. |
 | `doc.sh` | `zen-doc` | Adds PDFs/docs to the second-brain vault as Markdown (markitdown/docling) and refreshes the qmd index. |
 | `wrapup.sh` | `zen-wrapup` | SessionEnd hook: digests the transcript and runs the `wrapup` skill headless (memories, vault session log, consolidation). |
+| `chief.py` | `zen-chief` | `zen-chief "<message>"` queues a message to the one live, unarchived session named `chief` (`agent-manager send --from zenha`) and prints the message id; `--status <id>` prints queued/held/delivered/dropped/answered; `--json`. Exit 1: no live chief, several, or agent-manager refused. The `zen-inbox watch` panel (`c`) runs it. Tests: `uv run scripts/test_chief.py`. |
 | `bell.sh` | `zen-bell` | Plays a feedback sound / desktop notification, unless the terminal is focused. |
 | `config.sh` | `zen-config` | Reads personal settings from `zen.json` (+ untracked `~/.config/zen/config.json`). |
 | `run.sh` | — | Fuzzy picker that lists & runs the scripts in this dir (and aliases). |
@@ -264,6 +265,7 @@ zen-pgp decrypt [FILE]     # auto-detects symmetric vs. key-based
 uv run scripts/test_commit.py
 uv run scripts/test_release.py
 uv run scripts/test_await.py
+uv run scripts/test_chief.py
 uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_board.py

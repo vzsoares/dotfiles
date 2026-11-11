@@ -1,0 +1,30 @@
+message chief
+┃ first line                                                                                
+┃ second line                                                                               
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+enter send · ctrl+j newline · esc cancel
+
+
+○ inbox empty

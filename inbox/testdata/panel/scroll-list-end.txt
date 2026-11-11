@@ -26,5 +26,5 @@
   spec-t47 · #737 · 1 open · 0s · [gone]
   spec-t48 · #738 · 1 open · 0s · [gone]
 › spec-t49 · #739 · 1 open · 0s · [gone]
-↑↓ · enter open · q quit · ? help · ^u/^d scroll
+↑↓ · enter open · c chief · q quit · ? help · ^u/^d scroll
 ◆ 40 open · spec-t10, spec-t11, spec-t12, spec-t13, spec-t14, spec-t15, spec-t16, spec-t17,…

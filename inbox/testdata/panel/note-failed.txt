@@ -2,8 +2,8 @@
 
 Notes · 1 unread
   ● Task 707 merged · chief · #707 · 0s ↩
-↑↓ · enter open · m mark · M all read · q quit · ? help
-
+↑↓ · enter open · m mark · M all read · c chief · q quit · ?
+help
 
 
 

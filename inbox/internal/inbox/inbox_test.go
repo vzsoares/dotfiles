@@ -22,10 +22,12 @@ type fakeAM struct {
 	followed int
 }
 
-func (f *fakeAM) Sessions() am.Sessions { return nil }
-func (f *fakeAM) Popup(string) bool     { return true }
-func (f *fakeAM) Bell(string)           {}
-func (f *fakeAM) Notify(_, _ string)    {}
+func (f *fakeAM) Sessions() am.Sessions               { return nil }
+func (f *fakeAM) Popup(string) bool                   { return true }
+func (f *fakeAM) Bell(string)                         {}
+func (f *fakeAM) Notify(_, _ string)                  {}
+func (f *fakeAM) Chief(string) (string, string)       { return "", "" }
+func (f *fakeAM) ChiefStatus(string) (string, string) { return "", "" }
 
 func (f *fakeAM) Followup(string) string {
 	f.mu.Lock()
