@@ -5,7 +5,8 @@
 #     "pytest>=8.0",
 # ]
 # ///
-"""Tests for git/hooks (the global pre-push gate and hook dispatchers).
+"""Tests for git/hooks (the global pre-push gate, its secret scan, and the hook
+dispatchers).
 
 Run with:  uv run scripts/test_prepush.py
 """
@@ -13,6 +14,7 @@ Run with:  uv run scripts/test_prepush.py
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -20,8 +22,11 @@ from pathlib import Path
 
 import pytest
 
-HOOKS = Path(__file__).resolve().parent.parent / "git" / "hooks"
+GIT_DIR = Path(__file__).resolve().parent.parent / "git"
+HOOKS = GIT_DIR / "hooks"
+GLOBAL_CFG = GIT_DIR / "gitleaks.toml"
 ZERO = "0" * 40
+REAL_GITLEAKS = shutil.which("gitleaks")
 
 FAKE_INBOX = """#!/bin/bash
 echo "$*" >> "$FAKE_LOG"
@@ -43,6 +48,38 @@ echo "$*" >> "$FAKE_GUM_LOG"
 exit "${FAKE_GUM:-1}"
 """
 
+FAKE_GITLEAKS = """#!/bin/bash
+echo "$*" >> "$FAKE_GITLEAKS_LOG"
+while [ $# -gt 0 ]; do
+	[ "$1" = --config ] && cat "$2" > "$FAKE_GITLEAKS_LOG.cfg"
+	shift
+done
+match=${FAKE_GITLEAKS_MATCH:-}
+case ${FAKE_GITLEAKS:-0} in
+leak)
+	if [ -z "$match" ] || grep -q -- "$match" <<< "$(tail -n 1 "$FAKE_GITLEAKS_LOG")"; then
+		printf 'Finding: token = REDACTED\\nRuleID: generic-api-key\\nFile: a.txt\\nLine: 1\\n'
+		printf 'Commit: abc\\nFingerprint: abc:a.txt:generic-api-key:1\\n'
+		echo "WRN leaks found: 1" >&2
+		exit 10
+	fi
+	;;
+*) exit "${FAKE_GITLEAKS:-0}" ;;
+esac
+"""
+
+FAKE_GGSHIELD = """#!/bin/bash
+echo "$*" >> "$FAKE_GGSHIELD_LOG"
+cat > "$FAKE_GGSHIELD_LOG.stdin"
+pwd > "$FAKE_GGSHIELD_LOG.pwd"
+case ${FAKE_GGSHIELD:-0} in
+hang) exec sleep 30 ;;
+1) echo "ggshield: 1 incident found"; exit 1 ;;
+3) echo "Error: A GitGuardian API key is needed to use ggshield." >&2; exit 3 ;;
+esac
+exit "${FAKE_GGSHIELD:-0}"
+"""
+
 
 @dataclass
 class Env:
@@ -52,6 +89,8 @@ class Env:
     bin: Path
     log: Path
     gum_log: Path
+    gitleaks_log: Path
+    ggshield_log: Path
     vars: dict[str, str] = field(default_factory=dict)
 
     def run(
@@ -64,6 +103,8 @@ class Env:
             "GIT_CONFIG_NOSYSTEM": "1",
             "FAKE_LOG": str(self.log),
             "FAKE_GUM_LOG": str(self.gum_log),
+            "FAKE_GITLEAKS_LOG": str(self.gitleaks_log),
+            "FAKE_GGSHIELD_LOG": str(self.ggshield_log),
             "ZEN_PREPUSH_TTY": str(self.tmp / "no-tty"),
             "AGENT_MANAGER_SESSION_ID": "w1",
             **self.vars,
@@ -88,8 +129,9 @@ class Env:
         self.git("commit", "-q", "-m", msg, cwd=where)
         return self.git("rev-parse", "HEAD", cwd=where)
 
-    def calls(self) -> list[str]:
-        return self.log.read_text().splitlines() if self.log.exists() else []
+    def calls(self, log: Path | None = None) -> list[str]:
+        log = log or self.log
+        return log.read_text().splitlines() if log.exists() else []
 
     def remote_sha(self, branch: str) -> str:
         r = self.run(
@@ -115,6 +157,8 @@ def env(tmp_path: Path) -> Env:
         bin=tmp_path / "bin",
         log=tmp_path / "inbox.log",
         gum_log=tmp_path / "gum.log",
+        gitleaks_log=tmp_path / "gitleaks.log",
+        ggshield_log=tmp_path / "ggshield.log",
     )
     (tmp_path / "gitconfig").write_text(
         f"[core]\n\thooksPath = {HOOKS}\n"
@@ -124,6 +168,8 @@ def env(tmp_path: Path) -> Env:
     e.bin.mkdir()
     e.fake("zen-inbox", FAKE_INBOX)
     e.fake("gum", FAKE_GUM)
+    e.fake("gitleaks", FAKE_GITLEAKS)
+    e.fake("ggshield", FAKE_GGSHIELD)
     e.repo.mkdir()
     e.git("init", "-q")
     e.git("init", "-q", "--bare", str(e.remote))
@@ -486,8 +532,316 @@ def test_hooks_use_bin_bash(env: Env) -> None:
     for hook in HOOKS.iterdir():
         assert hook.read_text().splitlines()[0] == "#!/bin/bash", hook
         assert os.access(hook, os.X_OK), hook
-    r = subprocess.run(["/bin/bash", "-n", str(HOOKS / "pre-push")], check=False)
-    assert r.returncode == 0
+    for script in (HOOKS / "pre-push", GIT_DIR / "secret-scan.sh"):
+        r = subprocess.run(["/bin/bash", "-n", str(script)], check=False)
+        assert r.returncode == 0, script
+
+
+# --------------------------------------------------------------------------- #
+# Secret scan                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def owner_remote(env: Env) -> str:
+    """Moves origin to a path the owner pattern matches; git rewrites the $2
+    a hook sees for insteadOf URLs, so a real github URL can't be faked."""
+    url = env.tmp / "github.com" / "vzsoares" / "x.git"
+    url.parent.mkdir(parents=True)
+    env.remote.rename(url)
+    env.remote = url
+    env.git("remote", "set-url", "origin", str(url))
+    return str(url)
+
+
+def owner_match(url: str) -> bool:
+    script = f'. "{GIT_DIR}/secret-scan.sh"; owner_remote_url "$1"'
+    r = subprocess.run(["/bin/bash", "-c", script, "_", url], check=False)
+    return r.returncode == 0
+
+
+def scans(env: Env) -> list[str]:
+    return env.calls(env.gitleaks_log)
+
+
+def assert_log_opts(call: str, log_opts: str) -> None:
+    assert f"--log-opts {log_opts} --config " in call, call
+
+
+def test_scan_new_branch_and_update(env: Env) -> None:
+    head = env.git("rev-parse", "HEAD")
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+    (call,) = scans(env)
+    assert_log_opts(call, f"{head} --not --remotes")
+    assert f"--config {GLOBAL_CFG} " in call
+    assert call.endswith(f"--exit-code 10 -i {env.repo} {env.repo}")
+    nxt = env.commit("next")
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+    assert_log_opts(scans(env)[-1], f"{head}..{nxt}")
+    assert env.calls(env.ggshield_log) == []
+
+
+def test_scan_owner_remote_runs_ggshield(env: Env) -> None:
+    url = owner_remote(env)
+    head = env.git("rev-parse", "HEAD")
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+    assert env.remote_sha("feat") == head
+    assert env.calls(env.ggshield_log) == [f"secret scan pre-push origin {url}"]
+    assert "Terminated" not in r.stderr, r.stderr
+    stdin = (env.tmp / "ggshield.log.stdin").read_text()
+    assert stdin == f"HEAD {head} refs/heads/feat {ZERO}\n"
+    pwd = (env.tmp / "ggshield.log.pwd").read_text().strip()
+    assert Path(pwd).resolve() == env.repo.resolve()
+
+
+@pytest.mark.parametrize(
+    ("url", "owned"),
+    [
+        ("git@github.com:vzsoares/x.git", True),
+        ("https://github.com/vzsoares/x.git", True),
+        ("ssh://git@github.com/vzsoares/x", True),
+        ("https://token@github.com/vzsoares/x", True),
+        ("git@github.com:someone/x.git", False),
+        ("git@gitlab.com:vzsoares/x.git", False),
+        ("https://github.com/vzsoares-fork/x", False),
+    ],
+)
+def test_owner_remote_match(url: str, owned: bool) -> None:
+    assert owner_match(url) is owned
+
+
+def test_scan_other_remote_skips_ggshield(env: Env) -> None:
+    assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    assert len(scans(env)) == 1
+    assert env.calls(env.ggshield_log) == []
+
+
+def test_gitleaks_finding_refuses(env: Env) -> None:
+    owner_remote(env)
+    env.vars["FAKE_GITLEAKS"] = "leak"
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert_refused(
+        r,
+        "Fingerprint: abc:a.txt:generic-api-key:1",
+        "secret scan refused this push",
+        "Rotate it",
+        ".gitleaksignore",
+        "ggshield secret ignore --last-found",
+    )
+    assert env.remote_sha("feat") == ""
+    assert env.calls(env.ggshield_log) == []
+
+
+def test_ggshield_finding_refuses(env: Env) -> None:
+    owner_remote(env)
+    env.vars["FAKE_GGSHIELD"] = "1"
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert_refused(r, "1 incident found", "secret scan refused this push")
+    assert env.remote_sha("feat") == ""
+
+
+@pytest.mark.parametrize(
+    ("mode", "cause"),
+    [
+        ("missing", "ggshield skipped: not installed"),
+        ("3", "ggshield skipped: exit 3: A GitGuardian API key is needed"),
+        ("128", "ggshield skipped: exit 128"),
+        ("hang", "ggshield skipped: no answer within 1s"),
+    ],
+)
+def test_ggshield_unavailable_skips(env: Env, mode: str, cause: str) -> None:
+    owner_remote(env)
+    if mode == "missing":
+        env.no_fake("ggshield")
+    env.vars.update({"FAKE_GGSHIELD": mode, "ZEN_GGSHIELD_TIMEOUT": "1"})
+    head = env.git("rev-parse", "HEAD")
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+    assert env.remote_sha("feat") == head
+    lines = [ln for ln in r.stderr.splitlines() if "ggshield skipped" in ln]
+    assert len(lines) == 1, r.stderr
+    assert lines[0].startswith("pre-push: " + cause), r.stderr
+    assert "Terminated" not in r.stderr, r.stderr
+
+
+def test_gitleaks_missing_refuses(env: Env) -> None:
+    env.no_fake("gitleaks")
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert_refused(r, "gitleaks not found", "brew install gitleaks")
+    assert env.remote_sha("feat") == ""
+
+
+@pytest.mark.parametrize("rc", ["1", "2"])
+def test_gitleaks_error_refuses(env: Env, rc: str) -> None:
+    env.vars["FAKE_GITLEAKS"] = rc
+    r = env.run("push", "origin", "HEAD:refs/heads/feat")
+    assert_refused(r, f"gitleaks exited {rc}", "brew install gitleaks")
+    assert env.remote_sha("feat") == ""
+
+
+def test_gated_finding_never_calls_inbox(env: Env) -> None:
+    env.vars["FAKE_GITLEAKS"] = "leak"
+    assert_refused(env.run("push", "origin", "master"), "Fingerprint:")
+    assert env.calls() == []
+    assert env.remote_sha("master") == ""
+
+
+def test_gated_clean_scan_keeps_gate(env: Env) -> None:
+    head = env.git("rev-parse", "HEAD")
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert len(scans(env)) == 1
+    fields = f"--match --action push --repo myrepo --branch master --sha {head}"
+    assert env.calls() == [f"approval check {fields}", f"approval use {fields}"]
+
+
+def test_no_new_commits_skips_scanners(env: Env) -> None:
+    owner_remote(env)
+    seed(env, "feat")
+    env.git("tag", "v1")
+    env.git("tag", "-a", "-m", "annotated", "v2")
+    for refs in (["HEAD:refs/heads/feat"], ["v1", "v2"], [":feat"]):
+        r = env.run("push", "origin", *refs)
+        assert r.returncode == 0, r.stderr
+    assert scans(env) == []
+    assert env.calls(env.ggshield_log) == []
+
+
+def test_annotated_tag_with_new_commit_is_peeled(env: Env) -> None:
+    head = env.commit("tagged")
+    env.git("tag", "-a", "-m", "annotated", "v3")
+    assert env.run("push", "origin", "v3").returncode == 0
+    (call,) = scans(env)
+    assert_log_opts(call, f"{head} --not --remotes")
+
+
+def test_multi_ref_one_finding_refuses_all(env: Env) -> None:
+    seed(env, "a")
+    base = env.git("rev-parse", "HEAD")
+    bad = env.commit("bad")
+    env.vars.update({"FAKE_GITLEAKS": "leak", "FAKE_GITLEAKS_MATCH": f"{base}..{bad}"})
+    r = env.run("push", "origin", "HEAD:refs/heads/a", "HEAD:refs/heads/b")
+    assert_refused(r, "Fingerprint:")
+    calls = scans(env)
+    assert len(calls) == 2
+    assert any(f"--log-opts {base}..{bad} " in c for c in calls)
+    assert any(f"--log-opts {bad} --not --remotes " in c for c in calls)
+    assert env.remote_sha("a") == base and env.remote_sha("b") == ""
+
+
+def test_repo_allowlist_is_layered_on_global(env: Env) -> None:
+    allow = "[[allowlists]]\npaths = ['fixtures/']\n"
+    (env.repo / ".gitleaks.toml").write_text(allow)
+    assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    (call,) = scans(env)
+    assert f"--config {GLOBAL_CFG} " not in call
+    merged = (env.tmp / "gitleaks.log.cfg").read_text()
+    assert merged == f"{allow}\n[extend]\npath = '{GLOBAL_CFG}'\n"
+
+
+def test_repo_config_with_extend_used_as_is(env: Env) -> None:
+    own = env.repo / ".gitleaks.toml"
+    own.write_text("[extend]\nuseDefault = true\n")
+    assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    assert f"--config {own} " in scans(env)[0]
+
+
+def test_ggshield_cache_excluded_once(env: Env) -> None:
+    owner_remote(env)
+    exclude = env.repo / ".git" / "info" / "exclude"
+    exclude.write_text("# no trailing newline")
+    (env.repo / ".cache_ggshield").write_text("{}")
+    for msg in ("one", "two"):
+        (env.repo / f"{msg}.txt").write_text(msg)
+        env.git("add", f"{msg}.txt")
+        env.git("commit", "-q", "-m", msg)
+        assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    lines = exclude.read_text().splitlines()
+    assert lines == ["# no trailing newline", ".cache_ggshield"]
+    assert env.git("status", "--porcelain") == ""
+
+
+def test_hook_found_through_symlinked_hooks_dir(env: Env) -> None:
+    link = env.tmp / "linked-hooks"
+    link.symlink_to(HOOKS)
+    env.git("config", "--global", "core.hooksPath", str(link))
+    assert env.run("push", "origin", "HEAD:refs/heads/feat").returncode == 0
+    assert f"--config {GLOBAL_CFG} " in scans(env)[0]
+
+
+# --------------------------------------------------------------------------- #
+# Real gitleaks smoke tests                                                    #
+# --------------------------------------------------------------------------- #
+
+real = pytest.mark.skipif(REAL_GITLEAKS is None, reason="gitleaks not installed")
+
+
+@pytest.fixture
+def leaks(env: Env) -> Env:
+    assert REAL_GITLEAKS is not None
+    env.no_fake("gitleaks")
+    (env.bin / "gitleaks").symlink_to(REAL_GITLEAKS)
+    return env
+
+
+def synthetic(*parts: str) -> str:
+    return "".join(parts)
+
+
+def commit_file(env: Env, name: str, text: str) -> None:
+    path = env.repo / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    env.git("add", name)
+    env.git("commit", "-q", "-m", f"add {name}")
+
+
+def fingerprint(stderr: str) -> str:
+    for line in stderr.splitlines():
+        if line.startswith("Fingerprint:"):
+            return line.split(":", 1)[1].strip()
+    raise AssertionError(stderr)
+
+
+@real
+def test_real_token_refused_then_ignored(leaks: Env) -> None:
+    token = synthetic("ghp_", "Zq8wLp3vN7rTx2Kc", "9Hd4Mf6Ys1Bg5Jn0Qe7W")
+    commit_file(leaks, "config.py", f'GH = "{token}"\n')
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    assert_refused(r, "RuleID:", "Fingerprint:")
+    assert token not in r.stderr
+    commit_file(leaks, ".gitleaksignore", f"# synthetic\n{fingerprint(r.stderr)}\n")
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+
+
+@real
+def test_real_basic_auth_uri_refused(leaks: Env) -> None:
+    pw = synthetic("Zq8w", "Lp3vN7rT")
+    commit_file(leaks, "db.env", f"DB=postgres://app:{pw}@db.internal:5432/app\n")
+    assert_refused(leaks.run("push", "origin", "HEAD:refs/heads/feat"), "zen-basic")
+
+
+@real
+def test_real_placeholder_passes(leaks: Env) -> None:
+    text = 'password = "changeme"\nurl = "https://u:${PASS}@h"\n'
+    commit_file(leaks, "settings.py", text)
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+
+
+@real
+def test_real_repo_path_allowlist_keeps_global_rules(leaks: Env) -> None:
+    pw = synthetic("Zq8w", "Lp3vN7rT")
+    commit_file(leaks, ".gitleaks.toml", "[[allowlists]]\npaths = ['^fixtures/']\n")
+    commit_file(leaks, "fixtures/db.txt", f"postgres://app:{pw}@db.internal/x\n")
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    assert r.returncode == 0, r.stderr
+    commit_file(leaks, "src/db.txt", f"postgres://app:{pw}@db.internal/x\n")
+    r = leaks.run("push", "origin", "HEAD:refs/heads/feat")
+    assert_refused(r, "zen-basic-auth-uri", "src/db.txt")
 
 
 if __name__ == "__main__":

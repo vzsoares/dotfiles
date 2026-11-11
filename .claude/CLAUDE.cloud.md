@@ -52,6 +52,11 @@ release or deploy that targets `prod`, `main` or `master` needs my approval for 
 one action; the cloud has no `zen-inbox` and no pre-push hook, so ask me in chat
 and wait for it before any such `git push`.
 
+A secret found in the diff that could be real is never ignored: stop and tell
+me to rotate it. Only a clear false positive (test fixture, placeholder, doc
+example, hash) may be ignored, by its fingerprint in `.gitleaksignore` under a
+`# reason` line, with the reason in the commit body; tell me about each entry.
+
 # Task workflow — `/zen-flow`
 
 All my tasks live on the Notion **Main Board** (`/zen-flow` skill). In the cloud

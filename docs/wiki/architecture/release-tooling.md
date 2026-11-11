@@ -108,7 +108,8 @@ Repos follow one of two models (zen-flow skill, Branch model section):
 Every push, tag, release or deploy on `prod`/`main`/`master` needs the user's
 approval for that one action, filed as a `zen-inbox ask`. `zen-sweep` reports
 `branch-model` drift in personal repos and `hooks-path` repos that skip the
-global pre-push hook.
+global pre-push hook. That hook also re-scans zen-release's push with gitleaks
+(`git/secret-scan.sh`), on top of the `secret_scan` phase.
 
 ## Prod approval gate (#680)
 

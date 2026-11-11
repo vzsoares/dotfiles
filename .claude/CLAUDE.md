@@ -68,6 +68,16 @@ approval. Never ff-merge a worker branch into `prod`. Handing me prod commands
 to run myself is fine. Dev releases (`zen-release --dev --yes --bump patch`)
 and dev deploys are fine when I ask.
 
+**Secret scan on push.** The global pre-push runs gitleaks
+(`git/gitleaks.toml`) on the pushed commits, plus ggshield on my GitHub
+remotes. A finding that could be real is never ignored: stop, tell me to rotate
+it, and rewrite it out of the unpushed commits. Agents may ignore only a clear
+false positive (test fixture, placeholder, doc example, hash): its fingerprint
+goes in `.gitleaksignore` (and `ggshield secret ignore --last-found` into
+`.gitguardian.yaml`) under a `# reason` line, with the reason in the commit
+body; workers list each entry in their WORKER_DONE message. Anything unclear is
+a `zen-inbox ask`.
+
 # Task workflow — `/zen-flow` (always use)
 
 All my tasks (Approva work and personal) live on the Notion **Main Board**. The

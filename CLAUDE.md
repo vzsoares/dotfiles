@@ -25,6 +25,8 @@ i3/           # i3 window manager config (linux)
 git/hooks/    # global core.hooksPath (.gitconfig): pre-push refuses an agent
               #   push to prod/main/master without an approved zen-inbox
               #   --prod push ask; every other hook name runs the repo's own
+git/gitleaks.toml # tuned global gitleaks config; git/secret-scan.sh runs it
+              #   (and ggshield) over the pushed commits from pre-push
 flameshot/    # screenshot tool (Catppuccin Mocha); i3 binds Print / mod+Shift+Print
 gnupg/        # gpg-agent.conf; macos.conf / linux.conf are full per-OS files
               #   (gpg-agent.conf has no import directive, unlike alacritty's

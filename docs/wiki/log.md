@@ -68,3 +68,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-11] update | zen-inbox --prod run (#736)
 Schema v6 adds `prod_actions.cmd`: `zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"` files a user-only approval for a prod script or migration; `approval use|check --action run --repo R --cmd C` consumes it once, only on a byte-for-byte command match. The panel's y/N confirm prints the whole command. zen-flow Tags: copying/archiving data and API-writable CMS edits are Human Approval; drops/deletes of data or stacks and backoffice-UI CMS edits are Human Only.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-11] update | Pre-push secret scan (#714)
+The global pre-push first scans the pushed commits (`git/secret-scan.sh`): gitleaks with the tuned `git/gitleaks.toml` (defaults plus basic-auth URI, password assignment and high-entropy rules) on every push, ggshield on `github.com/vzsoares/*` remotes with a 15 s watchdog and a skip line when it can't run. A repo `.gitleaks.toml` without `[extend]` is layered on the global config. A finding refuses the push before any zen-inbox call. Dotfiles' own fixture hits went to `.gitleaksignore`.
+Pages updated: manjaroi3/fresh-install.md, architecture/release-tooling.md

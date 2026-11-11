@@ -1,6 +1,7 @@
 {
     "permissions": {
-        "additionalDirectories": ["/home/zizmackrok/code"]
+        "additionalDirectories": ["/home/zizmackrok/code"],
+        "deny": ["Bash(git push --no-verify:*)", "Bash(git push * --no-verify*)"]
     },
     "model": "opus",
     "skillOverrides": {

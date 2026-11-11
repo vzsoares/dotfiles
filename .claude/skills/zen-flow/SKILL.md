@@ -148,6 +148,13 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   repo, branch and sha, so file it before any such `git push`. Agents never answer a `--prod` ask. Workers
   never run one; chief or the orchestrator may after my approval. Never ff-merge a
   worker branch into `prod`.
+- Secret scan: the same pre-push hook first scans the pushed commits (gitleaks with
+  `git/gitleaks.toml`; ggshield on my GitHub remotes). A possibly real secret is
+  never ignored: the push stays blocked and I rotate it. Agents ignore only a clear
+  false positive (fixture, placeholder, doc example, hash) via `.gitleaksignore` /
+  `.gitguardian.yaml`, with a `# reason` line and the reason in the commit body.
+  Workers list each entry in WORKER_DONE, the orchestrator passes them to chief,
+  chief reports each to me. Anything unclear is a `zen-inbox ask`.
 
 ## Linking tasks to code
 

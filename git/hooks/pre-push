@@ -1,5 +1,6 @@
 #!/bin/bash
-# Refuses an agent push to prod/main/master unless it consumes an approved,
+# Scans the pushed commits for secrets first (git/secret-scan.sh), then
+# refuses an agent push to prod/main/master unless it consumes an approved,
 # unused `zen-inbox ask --prod push` for that repo, branch and sha. The repo's
 # own pre-push runs before the consume, so its failure leaves the approval
 # unused. A guard rail, not a boundary: --no-verify skips it.
@@ -37,6 +38,19 @@ ask_line() {
 }
 
 zero() { [ -z "${1//0/}" ]; }
+
+src=$0
+while [ -L "$src" ]; do
+	link=$(readlink "$src")
+	case $link in
+	/*) src=$link ;;
+	*) src=$(dirname "$src")/$link ;;
+	esac
+done
+zen_git=$(cd -P "$(dirname "$src")/.." && pwd)
+# shellcheck source=git/secret-scan.sh
+. "$zen_git/secret-scan.sh"
+secret_scan "$@"
 
 # Runs zen-inbox into $out; returns 0, 1, or 5 when it is missing or failed
 # for any other reason (go, vault or db unavailable).

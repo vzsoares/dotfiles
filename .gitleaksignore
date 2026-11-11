@@ -1,0 +1,7 @@
+# Synthetic token fixtures in the zen-telemetry redaction tests.
+6c19e32ae9b05bad5ed53c0e9b6c8773064f603a:scripts/telemetry/parse_test.go:zen-password-assignment:89
+6455bcad6005fc02a356b297dae77955d7d015a6:scripts/telemetry/parse_test.go:zen-basic-auth-uri:63
+# Fake NOTION_TOKEN values in the board.py env parser tests.
+9911aaa307b83b6ec6c27dc34d5b76a81ed7f1f3:scripts/test_board.py:zen-password-assignment:415
+dc0449cfa80e9a86c5396ff43ece7e38108c32b8:scripts/test_board.py:zen-password-assignment:411
+dc0449cfa80e9a86c5396ff43ece7e38108c32b8:scripts/test_board.py:zen-password-assignment:412

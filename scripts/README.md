@@ -163,8 +163,11 @@ unused ask bound to all four fields. `git/hooks/pre-push` (global `core.hooksPat
 in `.gitconfig`) runs `check --match` then `use --match --action push` before an
 agent push to `prod`/`main`/`master` lands, refuses deletion and force push, asks a
 default-No `gum confirm` in your own terminal, and accepts zen-release's push via
-`ZEN_PROD_RELEASE=<id>` and `approval used`. `--no-verify` skips it; see
-`docs/wiki/architecture/release-tooling.md`. `watch` is a Bubble Tea panel: one row per
+`ZEN_PROD_RELEASE=<id>` and `approval used`. Before all of that it scans the
+pushed commits (`git/secret-scan.sh`): gitleaks with `git/gitleaks.toml` on every
+push, ggshield on `github.com/vzsoares/*` remotes (a skip line when it cannot
+run), and a finding refuses the push with ignore/rotate steps. `--no-verify` skips
+it; see `docs/wiki/architecture/release-tooling.md`. `watch` is a Bubble Tea panel: one row per
 asking session; opening one shows each task's title, brief and asker, then its
 questions. Answer walks them (`a`-`d` pick, `f` free text, `s` skip, `t` talk, `v`
 view full, `esc` back), a review screen sends them; nothing is recorded before Send.

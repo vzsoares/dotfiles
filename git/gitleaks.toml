@@ -1,0 +1,61 @@
+# Global gitleaks config for the pre-push hook: gitleaks' defaults plus generic
+# detectors modelled on GitGuardian's. A repo's own .gitleaks.toml without an
+# [extend] table is layered on top of this file by git/hooks/lib/secret-scan.sh.
+title = "zen pre-push"
+minVersion = "v8.25.0"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "zen-basic-auth-uri"
+description = "Credentials embedded in a URI (scheme://user:pass@host)"
+regex = '''(?i)\b[a-z][a-z0-9+.-]{1,15}://[^\s:/@'"\x60<>{}$]{1,64}:([^\s:/@'"\x60<>{}$]{3,128})@[a-z0-9][a-z0-9.-]*'''
+secretGroup = 1
+entropy = 2.5
+keywords = ["://"]
+[[rules.allowlists]]
+stopwords = ["changeme", "xxx", "example", "placeholder", "dummy", "redacted", "password", "passwd", "secret"]
+regexes = ['''^[*.xX%]+$''']
+[[rules.allowlists]]
+description = "Local dev databases"
+regexTarget = "match"
+regexes = ['''@(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|host\.docker\.internal|postgres|mysql|mariadb|redis|mongo)(?:[:/]|$)''']
+
+[[rules]]
+id = "zen-password-assignment"
+description = "Password, secret or token assigned a quoted literal"
+regex = '''(?i)[\w.-]{0,40}?(?:password|passwd|pwd|secret|token)[\w.-]{0,20}['"]?[ \t]{0,5}(?::=|=>|==|=|:)[ \t]{0,5}["']([^"'\s$<>{}]{6,128})["']'''
+secretGroup = 1
+entropy = 2.5
+keywords = ["password", "passwd", "pwd", "secret", "token"]
+[[rules.allowlists]]
+stopwords = ["changeme", "xxx", "example", "placeholder", "dummy", "redacted", "your", "replace", "insert", "e2e", "fake", "sample", "mock"]
+regexes = [
+    '''^[A-Z][A-Z0-9_]+$''',
+    '''^[a-z_.-]+$''',
+    # A single word (UI copy in locale files) or a camelCase identifier.
+    '''^\p{L}+$''',
+    '''^[a-z]+(?:[A-Z][a-z]+)+$''',
+    # Paths, URLs, timestamps and colon-joined scopes.
+    '''^(?:/|[a-z][a-z0-9+.-]*://)''',
+    '''^\d{4}-\d{2}-\d{2}T''',
+    '''^[a-z]+(?::[a-z-]+)+$''',
+    '''^[*.xX]+$''',
+    '''(?i)^(?:string|number|boolean|null|none|undefined|required|optional|hidden)$''',
+    '''^(?:workspace|npm|file|link):''',
+]
+[[rules.allowlists]]
+regexTarget = "match"
+regexes = ['''(?i)tokeni[sz](?:er|ation)''']
+
+[[rules]]
+id = "zen-high-entropy-assignment"
+description = "High-entropy literal assigned to a key-like name the defaults miss"
+regex = '''(?i)[\w.-]{0,40}?(?:salt|seed|signing|private|bearer|session|cookie|jwt|hmac|cipher|encrypt|dsn|conn(?:ection)?[_.-]?str)[\w.-]{0,20}['"]?[ \t]{0,5}(?::=|=>|=|:)[ \t]{0,5}["']([A-Za-z0-9+/=_.-]{20,200})["']'''
+secretGroup = 1
+entropy = 4.0
+keywords = ["salt", "seed", "signing", "private", "bearer", "session", "cookie", "jwt", "hmac", "cipher", "encrypt", "dsn", "conn"]
+[[rules.allowlists]]
+stopwords = ["example", "placeholder", "redacted"]
+regexes = ['''^[A-Z][A-Z0-9_]+$''', '''^[a-z_.-]+$''']

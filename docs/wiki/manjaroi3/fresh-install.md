@@ -87,8 +87,8 @@ i3 ships no audio applet. After installing the pipewire stack above, enable the 
 
 ## Secret scanning (gitleaks)
 
-`gitleaks` is a **hard dependency for committing**, required in two independent
-places:
+`gitleaks` is a **hard dependency for committing and pushing**, required in three
+independent places:
 
 1. **`zen-commit`'s guardrail** — `scan_secrets()` shells out to
    `gitleaks protect --staged` (`scripts/commit.py`). Filename/`.npmrc` checks are
@@ -97,7 +97,14 @@ places:
    `gitleaks git --staged --redact --verbose`, which aborts the commit if the
    binary is missing.
 
-Note the two use **different subcommands** (`protect` vs `git --staged`); both
+3. **The global pre-push hook** — `git/hooks/pre-push` sources `git/secret-scan.sh`,
+   which runs `gitleaks git --log-opts <range>` over only the pushed commits with the
+   tuned global config `git/gitleaks.toml` (gitleaks' defaults plus basic-auth URI,
+   password/secret assignment and high-entropy rules, modelled on GitGuardian). A
+   repo `.gitleaks.toml` with only `[[allowlists]]` is layered on top; one with its
+   own `[extend]` is used as-is. A missing or failing gitleaks refuses the push.
+
+Note the first two use **different subcommands** (`protect` vs `git --staged`); both
 exist in current gitleaks, but a version that drops `protect` would break
 `zen-commit` while leaving the hook working.
 
@@ -115,6 +122,35 @@ Install: `sudo pacman -S gitleaks` (Arch `extra`), `brew install gitleaks`
 > *interactive* shell file, so anything under a non-interactive shell won't see
 > it. `zen-commit` preflights both and exits with an install hint; a bare hook
 > just fails with `gitleaks not found on PATH`.
+
+### ggshield (GitGuardian), second layer on push
+
+On remotes under `github.com/vzsoares/`, the pre-push hook also runs
+`ggshield secret scan pre-push`, which uploads the pushed diffs to GitGuardian.
+When ggshield is missing, unauthenticated, offline or slower than 15 s, the hook
+prints `pre-push: ggshield skipped: <cause>` and goes on with gitleaks alone. It
+writes `.cache_ggshield` in the repo; the hook adds it to `.git/info/exclude`.
+
+Same on both machines (needs `uv`):
+
+```bash
+uv tool install ggshield
+command -v ggshield      # ~/.local/bin/ggshield
+ggshield auth login      # browser flow; token lands in ggshield's config
+ggshield api-status      # expect: status: healthy
+```
+
+Fallback without the browser flow: create a personal access token in the
+GitGuardian dashboard and add `export GITGUARDIAN_API_KEY=…` to
+`~/.zshrc.local`, then check it in a new shell with
+`echo "${#GITGUARDIAN_API_KEY} chars"`.
+
+A finding refuses the push. A secret that could be real is rotated and rewritten
+out of the unpushed commits, never ignored. A clear false alarm gets its
+`Fingerprint:` in `.gitleaksignore` (or `ggshield secret ignore --last-found`
+into `.gitguardian.yaml`) under a `# reason` line; the fingerprint holds the
+commit sha, so rebasing that commit means redoing it. `--no-verify` is the only
+bypass.
 
 ## Not handled by link scripts
 
