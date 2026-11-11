@@ -60,6 +60,11 @@ check "null input keeps the old values" $?
 [ -z "$(find "$HOME/.cache/zen" -name 'claude-quota.json.*')" ]
 check "null input leaves no temp file" $?
 
+touch -t 202001010000 "$QUOTA"
+line '{"cwd":"/tmp","rate_limits":{"five_hour":{"used_percentage":5,"resets_at":null}}}'
+[ "$(jq -c '.five_hour' "$QUOTA")" = '{"used_percentage":5,"resets_at":null}' ]
+check "a window with a real percentage is taken whole" $?
+
 rm -f "$QUOTA"
 line '{"cwd":"/tmp","rate_limits":{"five_hour":{"used_percentage":null,"resets_at":null}}}'
 [ "$(jq -c '.five_hour' "$QUOTA")" = '{"used_percentage":null,"resets_at":null}' ]

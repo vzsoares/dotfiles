@@ -46,18 +46,15 @@ if [[ -n ${quota_json:-} ]]; then
   quota_file="$HOME/.cache/zen/claude-quota.json"
   if (( $(date +%s) - $(mtime "$quota_file") >= 10 )); then
     mkdir -p "${quota_file%/*}" 2>/dev/null
-    # Null fields in the new input keep the previous file's values.
+    # A window with a null percentage keeps the previous file's whole window.
     old=$(cat "$quota_file" 2>/dev/null)
     # shellcheck disable=SC2016 # jq variables
     merged=$("$JQ" -nc --argjson new "$quota_json" --arg old "$old" '
-      (try ($old | fromjson) catch {}) as $o
+      ($old | fromjson? // {}) as $o
       | (if ($o | type) == "object" then $o else {} end) as $o
       | $new | with_entries(
-          if .key == "updated_at" then . else
-            .value = {
-              used_percentage: (.value.used_percentage // $o[.key].used_percentage?),
-              resets_at: (.value.resets_at // $o[.key].resets_at?)
-            }
+          if .key == "updated_at" or .value.used_percentage != null then .
+          else .value = (($o[.key] | select(type == "object")) // .value)
           end)' 2>/dev/null)
     [[ -n $merged ]] &&
       { { printf '%s\n' "$merged" >"$quota_file.$$" && mv -f "$quota_file.$$" "$quota_file"; } 2>/dev/null ||
