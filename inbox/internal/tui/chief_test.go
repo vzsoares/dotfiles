@@ -10,7 +10,7 @@ import (
 func (d *drv) newline() { d.send(tea.KeyMsg{Type: tea.KeyCtrlJ}) }
 
 func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
-	d := newDrv(t, 92, 30)
+	d := newDrv(t, 92, 29)
 	d.am.chiefStatus = "queued"
 	d.keys("c")
 	if d.m.scr != scChief {
@@ -20,7 +20,7 @@ func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 	d.newline()
 	d.keys("second line")
 	d.fits()
-	golden(t, "chief-compose-92x30", d.view())
+	golden(t, "chief-compose-92x29", d.view())
 	d.keys("enter")
 	if want := []string{"first line\nsecond line"}; len(d.am.chiefs) != 1 || d.am.chiefs[0] != want[0] {
 		t.Fatalf("sent %q", d.am.chiefs)
@@ -31,7 +31,7 @@ func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 	if !strings.Contains(d.view(), "✉ chief · message 42 queued") {
 		t.Fatalf("no queued status:\n%s", d.view())
 	}
-	golden(t, "chief-queued-92x30", d.view())
+	golden(t, "chief-queued-92x29", d.view())
 	d.am.chiefStatus = "delivered"
 	d.poll()
 	if !strings.Contains(d.view(), "✉ chief · message 42 delivered") {
@@ -44,7 +44,7 @@ func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 }
 
 func TestChiefStatusUnavailableStopsPollingAfterThreeMisses(t *testing.T) {
-	d := newDrv(t, 92, 30)
+	d := newDrv(t, 92, 29)
 	d.am.chiefStatus = ""
 	d.keys("c", "hi", "enter")
 	for range 2 {
@@ -59,7 +59,7 @@ func TestChiefStatusUnavailableStopsPollingAfterThreeMisses(t *testing.T) {
 }
 
 func TestChiefEscKeepsTheDraftAndEmptyDoesNotSend(t *testing.T) {
-	d := newDrv(t, 92, 30)
+	d := newDrv(t, 92, 29)
 	d.keys("c", "enter")
 	if d.m.scr != scChief || len(d.am.chiefs) != 0 {
 		t.Fatal("an empty message sent or left the box")
@@ -76,7 +76,7 @@ func TestChiefEscKeepsTheDraftAndEmptyDoesNotSend(t *testing.T) {
 }
 
 func TestChiefFailureKeepsTheBoxAndDraft(t *testing.T) {
-	d := newDrv(t, 92, 30)
+	d := newDrv(t, 92, 29)
 	d.am.chiefErr = "no live session named 'chief'"
 	d.keys("c", "ping")
 	d.keys("enter")

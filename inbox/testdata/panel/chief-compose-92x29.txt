@@ -23,7 +23,6 @@ message chief
 ┃                                                                                           
 ┃                                                                                           
 ┃                                                                                           
-┃                                                                                           
 enter send · ctrl+j newline · esc cancel
 
 

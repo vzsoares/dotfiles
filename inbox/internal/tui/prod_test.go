@@ -126,7 +126,7 @@ func runWant() inbox.ProdAction {
 }
 
 func TestProdRunConfirmShowsFullCommand(t *testing.T) {
-	for _, sz := range append([][2]int{{92, 30}}, sizes...) {
+	for _, sz := range append([][2]int{{92, 29}}, sizes...) {
 		d := newDrvWith(t, sz[0], sz[1], func(d *drv) { d.ib.User = true })
 		dec, err := d.other.AskProd(inbox.AskInput{Task: "736", SessionID: "s1", Name: "spec-s1"}, runWant())
 		if err != nil {
@@ -138,8 +138,8 @@ func TestProdRunConfirmShowsFullCommand(t *testing.T) {
 			t.Fatalf("%v: a did not confirm:\n%s", sz, d.view())
 		}
 		d.fits()
-		if sz == [2]int{92, 30} {
-			golden(t, "confirm-run-92x30", d.view())
+		if sz == [2]int{92, 29} {
+			golden(t, "confirm-run-92x29", d.view())
 		}
 		v := d.text()
 		for _, want := range []string{"command", "core", "Approve? y/N"} {
@@ -185,7 +185,7 @@ func TestWrapCmdBreaksAtWhitespaceThenSeparators(t *testing.T) {
 func TestProdRunConfirmWrapsAtTokensNotMidWord(t *testing.T) {
 	const path = "/srv/releases/2026-11-10/widgets/hero/assets/images/banner-large-retina@2x.webp"
 	cmd := "rsync -av --delete " + path + "," + path + "," + path + " core:/srv/www"
-	d := newDrvWith(t, 92, 30, func(d *drv) { d.ib.User = true })
+	d := newDrvWith(t, 92, 29, func(d *drv) { d.ib.User = true })
 	if _, err := d.other.AskProd(inbox.AskInput{Task: "736", SessionID: "s1", Name: "spec-s1"},
 		inbox.ProdAction{Action: inbox.RunAction, Repo: "core", Cmd: cmd}); err != nil {
 		t.Fatal(err)
@@ -193,5 +193,5 @@ func TestProdRunConfirmWrapsAtTokensNotMidWord(t *testing.T) {
 	d.openWalk()
 	d.keys("a")
 	d.fits()
-	golden(t, "confirm-run-longtoken-92x30", d.view())
+	golden(t, "confirm-run-longtoken-92x29", d.view())
 }
