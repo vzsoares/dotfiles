@@ -139,7 +139,7 @@ func (a *App) ask() *cobra.Command {
 	var session string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S)",
+		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S | --prod run --repo R --cmd C)",
 		Short: "Record a decision; print its ID.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -190,6 +190,7 @@ func (a *App) ask() *cobra.Command {
 	f.StringVar(&prod.Repo, "repo", "", "with --prod: repo name")
 	f.StringVar(&prod.Branch, "branch", "", "with --prod: target branch")
 	f.StringVar(&prod.Sha, "sha", "", "with --prod: full 40-char commit sha")
+	f.StringVar(&prod.Cmd, "cmd", "", "with --prod run: the exact command")
 	return cmd
 }
 

@@ -1,0 +1,30 @@
+736.1  prod approval
+action run
+repo   core
+command
+bun scripts/app-widgets.ts --stage prod --tenant acme --apply --widgets
+hero,footer,banner,carousel,testimonials,pricing,faq,contact --log-level debug --migrate
+2026_11_10_add_widget_order_and_visibility_flags
+
+Approve? y/N
+y approve · n/esc back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+◆ 1 open · spec-s1

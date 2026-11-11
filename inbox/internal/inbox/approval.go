@@ -6,16 +6,27 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
+// schemaV6 binds a prod run to its exact command. A v5 reader names its
+// columns and needs a sha, so it never matches a run.
+const schemaV6 = `
+ALTER TABLE prod_actions ADD COLUMN cmd TEXT NOT NULL DEFAULT '';
+`
+
 // ProdAction is what a prod-action ask approves. Release tools match on
-// these fields, never on the question text.
+// these fields, never on the question text. A run binds Repo and Cmd only.
 type ProdAction struct {
-	Action, Repo, Branch, Sha string
-	UsedAt, UsedBy            string
+	Action, Repo, Branch, Sha, Cmd string
+	UsedAt, UsedBy                 string
 }
+
+// RunAction is the prod action for a script or migration run.
+const RunAction = "run"
 
 // ProdOptions are a prod-action ask's options; only a pick of "Approve" counts.
 var ProdOptions = []string{"Approve", "Hold"}
@@ -27,6 +38,12 @@ var (
 
 // CheckProd validates the bound fields; every failure is a usage error.
 func CheckProd(p ProdAction) error {
+	if p.Action == RunAction {
+		return checkRun(p)
+	}
+	if p.Cmd != "" {
+		return errf(2, "--cmd needs --prod run")
+	}
 	if err := CheckTarget(p); err != nil {
 		return err
 	}
@@ -38,6 +55,22 @@ func CheckProd(p ProdAction) error {
 	}
 	return nil
 }
+
+// checkRun refuses a command the panel could not show as it runs: the user
+// approves exactly what the confirm screen prints.
+func checkRun(p ProdAction) error {
+	switch {
+	case pyfmt.Blank(p.Repo) || pyfmt.Blank(p.Cmd):
+		return errf(2, "--prod run needs --repo and --cmd")
+	case p.Branch != "" || p.Sha != "":
+		return errf(2, "--prod run binds --cmd, not --branch or --sha")
+	case !utf8.ValidString(p.Cmd) || strings.ContainsFunc(p.Cmd, hidden):
+		return errf(2, "--cmd must be one line of printable UTF-8")
+	}
+	return nil
+}
+
+func hidden(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }
 
 // CheckTarget validates action, repo and branch.
 func CheckTarget(p ProdAction) error {
@@ -52,6 +85,9 @@ func CheckTarget(p ProdAction) error {
 
 // ProdQuestion is the question a prod-action ask shows.
 func ProdQuestion(p ProdAction) string {
+	if p.Action == RunAction {
+		return fmt.Sprintf("run in %s: %s?", p.Repo, p.Cmd)
+	}
 	return fmt.Sprintf("%s %s %s@%s?", p.Action, p.Repo, p.Branch, p.Sha[:12])
 }
 
@@ -65,15 +101,15 @@ func (ib *Inbox) AskProd(in AskInput, p ProdAction) (Decision, error) {
 }
 
 func (ib *Inbox) insertProd(id string, p ProdAction) error {
-	return ib.exec("INSERT INTO prod_actions (decision_id, action, repo, branch, sha) VALUES (?, ?, ?, ?, ?)",
-		id, p.Action, p.Repo, p.Branch, p.Sha)
+	return ib.exec("INSERT INTO prod_actions (decision_id, action, repo, branch, sha, cmd) VALUES (?, ?, ?, ?, ?, ?)",
+		id, p.Action, p.Repo, p.Branch, p.Sha, p.Cmd)
 }
 
 func (ib *Inbox) prodAction(id string) (ProdAction, bool, error) {
 	var p ProdAction
-	err := ib.conn.QueryRowContext(ctx, "SELECT action, repo, branch, sha, used_at, used_by"+
+	err := ib.conn.QueryRowContext(ctx, "SELECT action, repo, branch, sha, cmd, used_at, used_by"+
 		" FROM prod_actions WHERE decision_id = ?", id).
-		Scan(&p.Action, &p.Repo, &p.Branch, &p.Sha, &p.UsedAt, &p.UsedBy)
+		Scan(&p.Action, &p.Repo, &p.Branch, &p.Sha, &p.Cmd, &p.UsedAt, &p.UsedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, false, nil
 	}
@@ -114,6 +150,8 @@ func mismatch(p, want ProdAction) string {
 		return fmt.Sprintf("action mismatch: approved %s, requested %s", p.Action, want.Action)
 	case p.Repo != want.Repo:
 		return fmt.Sprintf("repo mismatch: approved %s, releasing %s", p.Repo, want.Repo)
+	case p.Cmd != want.Cmd:
+		return fmt.Sprintf("command mismatch: approved %s, requested %s", pyfmt.Repr(p.Cmd), pyfmt.Repr(want.Cmd))
 	case p.Branch != want.Branch:
 		return fmt.Sprintf("branch mismatch: approved %s, releasing %s", p.Branch, want.Branch)
 	case want.Sha != "" && p.Sha != want.Sha:
@@ -182,10 +220,10 @@ func (ib *Inbox) ApprovalMatch(want ProdAction, by string) (string, ProdAction, 
 		err := ib.conn.QueryRowContext(ctx, "SELECT d.id FROM decisions d"+
 			" JOIN prod_actions a ON a.decision_id = d.id"+
 			" JOIN decision_options o ON o.decision_id = d.id AND o.letter = d.answer_option"+
-			" WHERE a.action = ? AND a.repo = ? AND a.branch = ? AND a.sha = ? AND a.used_at = ''"+
+			" WHERE a.action = ? AND a.repo = ? AND a.branch = ? AND a.sha = ? AND a.cmd = ? AND a.used_at = ''"+
 			" AND d.status = 'answered' AND d.answer_kind = 'pick' AND o.text = 'Approve'"+
 			" ORDER BY d.created_at, d.rowid LIMIT 1",
-			want.Action, want.Repo, want.Branch, want.Sha).Scan(&id)
+			want.Action, want.Repo, want.Branch, want.Sha, want.Cmd).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errf(1, "no approved unused ask for %s", strings.TrimSuffix(ProdQuestion(want), "?"))
 		} else if err != nil {

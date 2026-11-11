@@ -92,7 +92,7 @@ func TestConcurrentFirstOpensOfV1DB(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "5" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "6" {
 		t.Fatal(v)
 	}
 }
@@ -114,7 +114,7 @@ func TestPythonDBsOpenListAndAnswer(t *testing.T) {
 			}
 		}
 		expect("open")
-		if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "5" {
+		if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "6" {
 			t.Fatalf("user_version %s", v)
 		}
 		f.zen(now, "answer", "7.1", "b")

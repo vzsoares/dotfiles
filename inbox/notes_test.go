@@ -160,10 +160,13 @@ func TestConcurrentNotesGetDistinctIDs(t *testing.T) {
 	}
 }
 
+// v5ProdCols reads prod_actions without v6's cmd column.
+const v5ProdCols = "SELECT decision_id, action, repo, branch, sha, used_at, used_by FROM prod_actions"
+
 func TestV4FixtureMigratesToV5(t *testing.T) {
 	f := newFake(t)
 	f.load("testdata/xver/v4.sql")
-	before := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; SELECT * FROM prod_actions")
+	before := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols)
 	var cmds []*exec.Cmd
 	for range 6 {
 		cmds = append(cmds, f.cmd(nil, zenBin, "notes", "--json"))
@@ -173,10 +176,10 @@ func TestV4FixtureMigratesToV5(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "5" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "6" {
 		t.Fatal(v)
 	}
-	if after := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; SELECT * FROM prod_actions"); after != before {
+	if after := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols); after != before {
 		t.Fatalf("migration changed rows:\n%s\n%s", before, after)
 	}
 }

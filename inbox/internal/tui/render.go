@@ -408,19 +408,29 @@ func (m *Model) viewReview() frame {
 		menu: menuSection(reviewMenu, m.cursor, menuH, m.w), cur: -1, help: true}
 }
 
-// viewConfirm shows the exact prod action an Approve binds; the sha gets a
-// line of its own so all 40 characters fit a 40-column pane.
+// viewConfirm shows the exact prod action an Approve binds; the sha and a
+// run's command get lines of their own so all of them fit a narrow pane.
 func (m *Model) viewConfirm() frame {
 	d, _ := m.decision(m.p.cur)
 	var p inbox.ProdAction
 	if d.Prod != nil {
 		p = *d.Prod
 	}
+	fields := [][2]string{{"action", p.Action}, {"repo", p.Repo}}
+	if p.Action != inbox.RunAction {
+		fields = append(fields, [2]string{"branch", p.Branch})
+	}
 	var body []string
-	for _, kv := range [][2]string{{"action", p.Action}, {"repo", p.Repo}, {"branch", p.Branch}} {
+	for _, kv := range fields {
 		body = append(body, view.WrapRest(fmt.Sprintf("%-7s%s", kv[0], kv[1]), m.w, "", "       ")...)
 	}
-	body = append(body, "sha", p.Sha, "", "Approve? y/N")
+	if p.Action == inbox.RunAction {
+		body = append(body, "command")
+		body = append(body, view.Wrap(p.Cmd, m.w, "")...)
+	} else {
+		body = append(body, "sha", p.Sha)
+	}
+	body = append(body, "", "Approve? y/N")
 	return frame{s: scConfirm, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  prod approval", m.w)}, style: &bannerStyle}},
 		body: []section{{lines: body}}, cur: -1, help: true}
 }

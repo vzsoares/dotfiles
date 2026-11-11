@@ -180,6 +180,9 @@ func TestV3DBMigratesToV4(t *testing.T) {
 		t.Fatalf("user_version %d", v)
 	}
 	for table, want := range v3 {
+		if table == "prod_actions" {
+			want = withCmd(want)
+		}
 		if got := createSQL(t, ib.conn, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)
 		}

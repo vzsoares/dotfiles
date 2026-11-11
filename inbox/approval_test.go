@@ -55,7 +55,7 @@ func TestAskProdWritesQuestionAndBinding(t *testing.T) {
 		!strings.Contains(r.stdout, `"options": [{"letter": "a", "text": "Approve"}, {"letter": "b", "text": "Hold"}]`) {
 		t.Fatalf("%+v", r)
 	}
-	if got := f.sqlite("SELECT * FROM prod_actions"); got != "680.1|release|dotfiles|prod|"+sha40+"||\n" {
+	if got := f.sqlite("SELECT * FROM prod_actions"); got != "680.1|release|dotfiles|prod|"+sha40+"|||\n" {
 		t.Fatalf("%q", got)
 	}
 	if r := f.zen([]string{"AGENT_MANAGER_SESSION_ID=s1"}, "amend", "680.1", "-q", "x?"); r.code != 1 {
@@ -129,7 +129,7 @@ func TestV2FixtureMigratesToV3(t *testing.T) {
 	if r := f.zen(nil, "list", "--json"); r.code != 0 {
 		t.Fatalf("%+v", r)
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "5" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "6" {
 		t.Fatal(v)
 	}
 	if after := f.sqlite("SELECT * FROM decisions ORDER BY id"); after != before {
@@ -278,5 +278,66 @@ func TestApprovalUsedCLI(t *testing.T) {
 	}
 	if r := f.zen(nil, "approval", "used", "680.1", "--action", "push", "--repo", "dotfiles", "--branch", "prod"); r.code != 1 {
 		t.Fatalf("%+v", r)
+	}
+}
+
+const runCmd = `bun scripts/app-widgets.ts --stage prod "a b"`
+
+var runAsk = []string{"--prod", "run", "--repo", "core", "--cmd", runCmd}
+
+func runApproval(verb, cmd string) []string {
+	return []string{"approval", verb, "736.1", "--action", "run", "--repo", "core", "--cmd", cmd}
+}
+
+func TestProdRunCLI(t *testing.T) {
+	f := newFake(t)
+	r := f.zen(nil, append([]string{"ask", "736", "--session", "s1", "--json"}, runAsk...)...)
+	if r.code != 0 || !strings.Contains(r.stdout, `"question": "run in core: bun scripts/app-widgets.ts --stage prod \"a b\"?"`) {
+		t.Fatalf("%+v", r)
+	}
+	if got := f.sqlite("SELECT action, repo, branch, sha, cmd FROM prod_actions"); got != "run|core|||"+runCmd+"\n" {
+		t.Fatalf("%q", got)
+	}
+	for _, env := range [][]string{nil, {"AGENT_MANAGER_SESSION_ID=s1"}, {"AGENT_MANAGER_SESSION_ID=orch"}} {
+		if r := f.zen(env, "answer", "736.1", "a"); r.code != 1 || !strings.Contains(r.stderr, "answer it in the decisions panel") {
+			t.Fatalf("%v: %+v", env, r)
+		}
+	}
+	if r := f.zen(nil, runApproval("check", runCmd)...); r.code != 1 || !strings.Contains(r.stderr, "not answered") {
+		t.Fatalf("%+v", r)
+	}
+	f.approve("736.1")
+	if r := f.zen(nil, runApproval("use", runCmd+" ")...); r.code != 1 || !strings.Contains(r.stderr, "command mismatch") {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(nil, runApproval("check", runCmd)...); r.code != 0 || r.stdout != "approved 736.1\n" {
+		t.Fatalf("%+v", r)
+	}
+	r = f.zen([]string{"AGENT_MANAGER_SESSION_ID=orch"}, runApproval("use", runCmd)...)
+	if r.code != 0 || r.stdout != "used 736.1 by orch\n" {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(nil, runApproval("use", runCmd)...); r.code != 1 || !strings.Contains(r.stderr, "already used by orch") {
+		t.Fatalf("%+v", r)
+	}
+}
+
+func TestProdRunUsageErrors(t *testing.T) {
+	f := newFake(t)
+	for _, args := range [][]string{
+		{"ask", "736", "--session", "s1", "--prod", "run", "--repo", "core"},
+		{"ask", "736", "--session", "s1", "--prod", "run", "--cmd", runCmd},
+		append([]string{"ask", "736", "--session", "s1", "--branch", "prod", "--sha", sha40}, runAsk...),
+		append([]string{"ask", "736", "--session", "s1"}, append(prodArgs, "--cmd", runCmd)...),
+		{"ask", "736", "--session", "s1", "-q", "Q?", "--cmd", runCmd},
+		{"approval", "use", "736.1", "--action", "run", "--repo", "core"},
+		append(approvalArgs("use", "680.1"), "--cmd", runCmd),
+	} {
+		if r := f.zen(nil, args...); r.code != 2 {
+			t.Fatalf("%v: %+v", args, r)
+		}
+	}
+	if got := f.sqlite("SELECT COUNT(*) FROM decisions"); got != "0\n" {
+		t.Fatalf("%q", got)
 	}
 }

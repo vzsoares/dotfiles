@@ -136,6 +136,8 @@ zen-inbox ask <task> -q "<question>" -o a -o b --rec a   # prints 580.1 (--gate:
 zen-inbox ask <task> --prod release --repo R --branch B --sha <40 hex>  # Approve/Hold
 zen-inbox approval use|check <id> --action A --repo R --branch B --sha S [--by who]
 zen-inbox approval use|check --match --action A --repo R --branch B --sha S  # oldest approved unused
+zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"  # prod script/migration
+zen-inbox approval use|check <id> --action run --repo R --cmd "<exact command>"  # byte for byte
 zen-inbox approval used <id> --action A --repo R --branch B  # read-only: prints the used ask's sha
 zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief

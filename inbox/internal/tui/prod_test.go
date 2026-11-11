@@ -115,3 +115,48 @@ func TestProdLockedInAgentSession(t *testing.T) {
 		}
 	}
 }
+
+const longRunCmd = "bun scripts/app-widgets.ts --stage prod --tenant acme --apply" +
+	" --widgets hero,footer,banner,carousel,testimonials,pricing,faq,contact" +
+	" --log-level debug --migrate 2026_11_10_add_widget_order_and_visibility_flags"
+
+func runWant() inbox.ProdAction {
+	return inbox.ProdAction{Action: inbox.RunAction, Repo: "core", Cmd: longRunCmd}
+}
+
+func TestProdRunConfirmShowsFullCommand(t *testing.T) {
+	for _, sz := range append([][2]int{{92, 30}}, sizes...) {
+		d := newDrvWith(t, sz[0], sz[1], func(d *drv) { d.ib.User = true })
+		dec, err := d.other.AskProd(inbox.AskInput{Task: "736", SessionID: "s1", Name: "spec-s1"}, runWant())
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.openWalk()
+		d.keys("a")
+		if d.m.scr != scConfirm {
+			t.Fatalf("%v: a did not confirm:\n%s", sz, d.view())
+		}
+		d.fits()
+		if sz == [2]int{92, 30} {
+			golden(t, "confirm-run-92x30", d.view())
+		}
+		v := d.text()
+		for _, want := range []string{"command", "core", "Approve? y/N"} {
+			if !strings.Contains(v, want) {
+				t.Fatalf("%v: %q missing:\n%s", sz, want, d.view())
+			}
+		}
+		// Long words split mid-word, so compare with the spaces dropped.
+		squeeze := func(s string) string { return strings.NewReplacer(" ", "", "\n", "").Replace(s) }
+		if !strings.Contains(squeeze(d.view()), squeeze(longRunCmd)) {
+			t.Fatalf("%v: command not shown in full:\n%s", sz, d.view())
+		}
+		if strings.Contains(v, "branch") || strings.Contains(v, "sha") {
+			t.Fatalf("%v: run shows branch or sha:\n%s", sz, d.view())
+		}
+		d.keys("y", "enter")
+		if _, err := d.ib.Approval(dec.ID, runWant(), "user"); err != nil {
+			t.Fatalf("%v: %v", sz, err)
+		}
+	}
+}

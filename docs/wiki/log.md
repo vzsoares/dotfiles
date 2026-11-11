@@ -64,3 +64,7 @@ Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
 ## [2026-11-11] update | zen-inbox notes (#707)
 Schema v5 adds `notes`: chief's non-decision messages (`zen-inbox note`, chief only), listed in the decisions panel below the decision rows with mark read/unread (`m`, `M`) and one reply per note sent back through the answer send path, with retry. Read notes hide after 24 h and are pruned after 30 days; notes never ring. Chief's preset gained the note/neither rule: chat holds replies only, notes carry what the user asked for or something very important, routine status goes nowhere.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-11] update | zen-inbox --prod run (#736)
+Schema v6 adds `prod_actions.cmd`: `zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"` files a user-only approval for a prod script or migration; `approval use|check --action run --repo R --cmd C` consumes it once, only on a byte-for-byte command match. The panel's y/N confirm prints the whole command. zen-flow Tags: copying/archiving data and API-writable CMS edits are Human Approval; drops/deletes of data or stacks and backoffice-UI CMS edits are Human Only.
+Pages updated: architecture/decision-inbox.md

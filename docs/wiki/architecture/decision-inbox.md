@@ -131,6 +131,15 @@ approved sha on stdout when the ask was answered `Approve`, has been used, and i
 action, repo and branch match; else 1 with the reason (`not used`, `answered Hold`,
 `branch mismatch …`, unknown id, not a prod ask), 2 usage, 4 db.
 
+`zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"` (#736) files an
+approval for a script or migration run against prod. It binds the repo (the main
+checkout folder name) and the command string, no branch or sha; `--cmd` must be one
+line of printable UTF-8 (no control or format characters), so the panel shows exactly
+what runs. The question is `run in <repo>: <cmd>?` and the y/N confirm prints the
+whole command, wrapped. `approval use|check <id> --action run --repo R --cmd C`
+(or `--match`) consumes it only when the command matches byte for byte, once.
+`--cmd` with any other action, or `--branch`/`--sha` with `run`, is exit 2.
+
 Both serve the global `git/hooks/pre-push` gate (#703): an agent push to
 `prod`/`main`/`master` runs `check --match` for every gated ref, then `use --match`
 for each; zen-release's own push passes via `ZEN_PROD_RELEASE=<id>` and `approval
@@ -204,7 +213,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 5. Tables `decisions` and `decision_options` use generic names because the db is
+now 6. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -212,7 +221,9 @@ working on a migrated db. v3 adds `prod_actions (decision_id, action, repo, bran
 sha, used_at, used_by)` and changes no existing table, so a v2 reader keeps working
 on a v3 db. v4 adds `decision_drafts (decision_id, kind, option, text, rev,
 updated_at)`, the panel's unsent answers, again without touching existing tables.
-v5 adds `notes` (below), also leaving existing tables alone.
+v5 adds `notes` (below), also leaving existing tables alone. v6 adds `prod_actions.cmd`
+(default `''`), a run's exact command; a v5 reader still works on a v6 db (it names its
+columns) and can never consume a run ask, since its checks need a branch and sha.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

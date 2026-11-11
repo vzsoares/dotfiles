@@ -22,9 +22,9 @@ func prodFlags(cmd *cobra.Command) error {
 		}
 		return nil
 	}
-	for _, name := range []string{"repo", "branch", "sha"} {
+	for _, name := range []string{"repo", "branch", "sha", "cmd"} {
 		if f.Changed(name) {
-			return usageErr("--repo, --branch and --sha need --prod")
+			return usageErr("--repo, --branch, --sha and --cmd need --prod")
 		}
 	}
 	if !f.Changed("question") {
@@ -54,7 +54,7 @@ func (a *App) approvalCmd(name, short string) *cobra.Command {
 	var by string
 	var match bool
 	cmd := &cobra.Command{
-		Use:   name + " (ID | --match) --action A --repo R --branch B --sha S",
+		Use:   name + " (ID | --match) --action A --repo R (--branch B --sha S | --cmd C)",
 		Short: short,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -97,6 +97,7 @@ func (a *App) approvalCmd(name, short string) *cobra.Command {
 	f.StringVar(&want.Repo, "repo", "", "repo name")
 	f.StringVar(&want.Branch, "branch", "", "target branch")
 	f.StringVar(&want.Sha, "sha", "", "full 40-char commit sha")
+	f.StringVar(&want.Cmd, "cmd", "", "with --action run: the exact command, byte for byte")
 	if name == "use" {
 		f.StringVar(&by, "by", "", "who uses it (default $AGENT_MANAGER_SESSION_ID, else user)")
 	}

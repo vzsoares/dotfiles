@@ -68,7 +68,8 @@ The relation is two-way, so one write links both pages.
 - `Human Only` — a step that needs the user's own eyes, hands, accounts or secrets:
   visual and device checks, steps on another machine, messages or calls to people,
   creating or typing secrets and API keys, logins to outside dashboards and apps,
-  purchases, irreversible destruction (DB drops, deleting prod stacks). When a session
+  purchases, irreversible destruction (any drop or delete of data or stacks), CMS edits
+  that need the backoffice UI. When a session
   leaves such steps behind, create one task per step with this tag so the board says
   what to do next. One task with a checklist is fine when the steps share a kind or a
   release (device checks, a prod rollout); append new items to an open checklist task
@@ -76,8 +77,10 @@ The relation is two-way, so one write links both pages.
 - `Human Approval` — a step an agent can run from this machine with credentials it
   already has, once the user approves: pushes, remote branch deletes, edits to
   `.claude/settings.json` or permissions, tool installs, `gh` repo settings, prod
-  releases, deploys and migrations, archiving data, scripts run against prod. It goes
-  to the inbox as an approval ask (see Agent roles), not as a Done/Later request.
+  releases, deploys and migrations, copying or archiving data, scripts run against
+  prod, CMS edits an API or script can write. It goes to the inbox as an approval ask
+  (see Agent roles), not as a Done/Later request; a prod script or migration is
+  `zen-inbox ask <task> --prod run --repo <repo> --cmd "<exact command>"`.
   If the user answers "I'll do it myself", re-tag the task `Human Only` and keep the
   ask's commands in it.
 - `Has Data` — the task page carries data/notes worth reading before starting.

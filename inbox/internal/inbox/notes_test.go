@@ -315,10 +315,13 @@ func TestV4DumpMigratesToV5(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ib.Close()
-	if v, _ := ib.userVersion(); v != 5 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	for table, want := range v4 {
+		if table == "prod_actions" {
+			want = withCmd(want)
+		}
 		if got := createSQL(t, ib.conn, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)
 		}
