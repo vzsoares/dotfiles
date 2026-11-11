@@ -445,21 +445,36 @@ func Render(open, held []inbox.Decision, undelivered []inbox.Batch, sessions am.
 	return strings.Join(lines, "\n")
 }
 
-// Notice is one banner: a decision not seen before.
+// Notice is one banner: a decision or note not seen before.
 type Notice struct{ Title, Body string }
 
-// Notices is one banner per decision not in seen, in open order.
-func Notices(open []inbox.Decision, seen map[string]bool) []Notice {
+// Notices is one banner per open decision and unread note not in seen: first
+// the decisions in open order, then the notes. A note takes its task's title
+// from an open decision of that task.
+func Notices(open []inbox.Decision, notes []inbox.Note, seen map[string]bool) []Notice {
 	var out []Notice
+	titles := map[string]string{}
 	for _, d := range open {
-		if seen[d.ID] {
-			continue
+		if d.Title != "" {
+			titles[d.Task] = d.Title
 		}
-		body, _, _ := strings.Cut(strings.TrimSpace(d.Question), "\n")
-		out = append(out, Notice{
-			Title: "zen-inbox · " + Brief{Task: d.Task, Title: d.Title}.Head(),
-			Body:  strings.TrimSpace(body),
-		})
+	}
+	title := func(task string) string {
+		if task == "" {
+			return "zen-inbox"
+		}
+		return "zen-inbox · " + Brief{Task: task, Title: titles[task]}.Head()
+	}
+	for _, d := range open {
+		if !seen[d.ID] {
+			body, _, _ := strings.Cut(strings.TrimSpace(d.Question), "\n")
+			out = append(out, Notice{title(d.Task), strings.TrimSpace(body)})
+		}
+	}
+	for _, n := range notes {
+		if n.Unread() && !seen[n.Label()] {
+			out = append(out, Notice{title(n.Task), n.Title})
+		}
 	}
 	return out
 }

@@ -630,18 +630,22 @@ func TestOneNoticePerNewItem(t *testing.T) {
 	d.ask("7", "s1", "First line?\nsecond line")
 	d.ask("7", "s1", "Another?")
 	d.ask("8", "s2", "Elsewhere?")
+	if _, err := d.other.AddNote(inbox.NoteInput{Task: "7", Title: "FYI from chief", SessionID: "c1", Name: "chief"}); err != nil {
+		t.Fatal(err)
+	}
 	d.poll()
 	want := [][2]string{
 		{"zen-inbox · #7 Brief title", "First line?"},
 		{"zen-inbox · #7 Brief title", "Another?"},
 		{"zen-inbox · #8", "Elsewhere?"},
+		{"zen-inbox · #7 Brief title", "FYI from chief"},
 	}
 	if !slices.Equal(d.am.notices, want) {
 		t.Fatalf("notices %q, want %q", d.am.notices, want)
 	}
 	d.poll()
 	d.poll()
-	if len(d.am.notices) != 3 {
+	if len(d.am.notices) != 4 {
 		t.Fatalf("notified again on later polls: %q", d.am.notices)
 	}
 }

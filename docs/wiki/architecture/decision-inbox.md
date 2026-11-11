@@ -23,8 +23,8 @@ message.
    the task context for that session.
 2. **watch** — a terminal named `decisions` in group `chief` runs `zen-inbox watch`:
    one row per asking session (`name · #task title · n open · age · [status]`, `gate`
-   when it has one). Each new decision (ask, gate, prod ask) posts one banner, never one
-   per poll: title `zen-inbox · #<task> <task title>`, body the question's first line.
+   when it has one). Each new decision (ask, gate, prod ask) or unread note posts one banner, never one
+   per poll: title `zen-inbox · #<task> <task title>`, body the question's first line or the note title.
    macOS posts with `terminal-notifier` (Ping sound, click activates the terminal app
    from `$__CFBundleIdentifier`) and falls back to `osascript` when it exits non-zero,
    e.g. notifications are off for it (exit 3; `terminal-notifier -diagnose`); Linux
