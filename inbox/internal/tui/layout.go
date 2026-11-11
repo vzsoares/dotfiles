@@ -168,7 +168,7 @@ var footers = map[screen][]key{
 	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
 	scNote:      {{"↑↓", ""}, {"m", "mark"}, {"f", "reply"}, {"esc", "back"}, {"?", "help"}},
 	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
-	scChief:     {{"enter", "send"}, {"ctrl+j", "newline"}, {"esc", "cancel"}},
+	scChief:     {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
 	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 }
 
@@ -182,7 +182,7 @@ var helps = map[screen]string{
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
 	scNote:    "m marks this note read or unread; opening it does not. f writes one reply to the sender and marks it read.",
-	scChief:   "enter sends the message to the live chief session, ctrl+j or alt+enter adds a line. esc cancels and keeps the draft for the next c.",
+	scChief:   "ctrl+d sends the message to the live chief session, enter adds a line. esc cancels and keeps the draft for the next c.",
 	scReply:   "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }
 

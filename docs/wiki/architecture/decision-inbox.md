@@ -101,7 +101,7 @@ message.
   bold, labels plain. A success flash (`» sent …`) tops the list for a few seconds;
   polls clear it.
 - **`c` message chief.** On the list, `c` opens a multi-line compose box sized to the
-  pane (crush-style): `enter` sends, `ctrl+j` or `alt+enter` adds a line, `esc`
+  pane (crush-style): `ctrl+d` sends (as in free text), `enter` adds a line, `esc`
   cancels and keeps the draft for the next `c`. Sending runs `zen-chief --json`
   (`scripts/chief.py`, the same script shells use), which finds the one live session
   named `chief` and queues the message with `agent-manager send --from zenha`. The

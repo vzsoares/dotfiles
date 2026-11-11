@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	bkey "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -44,7 +43,6 @@ func newChiefBox() textarea.Model {
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.Placeholder = "message to chief"
-	ta.KeyMap.InsertNewline = bkey.NewBinding(bkey.WithKeys("ctrl+j", "alt+enter"))
 	return ta
 }
 
@@ -116,7 +114,7 @@ func (m *Model) keyChief(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.scr, m.flash = scList, ""
 		return m, nil
-	case "enter":
+	case "ctrl+d":
 		text := m.chiefTA.Value()
 		if pyfmt.Blank(text) {
 			return m, nil

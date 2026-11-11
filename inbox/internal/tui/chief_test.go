@@ -3,11 +3,9 @@ package tui
 import (
 	"strings"
 	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (d *drv) newline() { d.send(tea.KeyMsg{Type: tea.KeyCtrlJ}) }
+func (d *drv) newline() { d.keys("enter") }
 
 func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 	d := newDrv(t, 92, 29)
@@ -21,7 +19,7 @@ func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 	d.keys("second line")
 	d.fits()
 	golden(t, "chief-compose-92x29", d.view())
-	d.keys("enter")
+	d.keys("ctrl+d")
 	if want := []string{"first line\nsecond line"}; len(d.am.chiefs) != 1 || d.am.chiefs[0] != want[0] {
 		t.Fatalf("sent %q", d.am.chiefs)
 	}
@@ -46,7 +44,7 @@ func TestChiefComposeSendsAndTracksStatus(t *testing.T) {
 func TestChiefStatusUnavailableStopsPollingAfterThreeMisses(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.am.chiefStatus = ""
-	d.keys("c", "hi", "enter")
+	d.keys("c", "hi", "ctrl+d")
 	for range 2 {
 		if d.m.chief.final() || !strings.Contains(d.view(), "message 42 queued") {
 			t.Fatalf("gave up after a miss:\n%s", d.view())
@@ -60,7 +58,7 @@ func TestChiefStatusUnavailableStopsPollingAfterThreeMisses(t *testing.T) {
 
 func TestChiefEscKeepsTheDraftAndEmptyDoesNotSend(t *testing.T) {
 	d := newDrv(t, 92, 29)
-	d.keys("c", "enter")
+	d.keys("c", "ctrl+d")
 	if d.m.scr != scChief || len(d.am.chiefs) != 0 {
 		t.Fatal("an empty message sent or left the box")
 	}
@@ -79,7 +77,7 @@ func TestChiefFailureKeepsTheBoxAndDraft(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.am.chiefErr = "no live session named 'chief'"
 	d.keys("c", "ping")
-	d.keys("enter")
+	d.keys("ctrl+d")
 	if d.m.scr != scChief || d.m.chiefTA.Value() != "ping" {
 		t.Fatalf("lost the box or the draft:\n%s", d.view())
 	}
@@ -90,4 +88,22 @@ func TestChiefFailureKeepsTheBoxAndDraft(t *testing.T) {
 		t.Fatal("tracked a message that never sent")
 	}
 	d.fits()
+}
+
+func TestChiefEnterAddsALineAndCtrlDSends(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.keys("c", "one", "enter", "two", "enter")
+	if len(d.am.chiefs) != 0 || d.m.scr != scChief {
+		t.Fatalf("enter sent or left the box: %q", d.am.chiefs)
+	}
+	if got := d.m.chiefTA.Value(); got != "one\ntwo\n" {
+		t.Fatalf("enter did not add lines: %q", got)
+	}
+	if !strings.Contains(d.last(), "ctrl+d send") {
+		t.Fatalf("footer %q", d.last())
+	}
+	d.keys("ctrl+d")
+	if len(d.am.chiefs) != 1 || d.am.chiefs[0] != "one\ntwo\n" {
+		t.Fatalf("ctrl+d sent %q", d.am.chiefs)
+	}
 }

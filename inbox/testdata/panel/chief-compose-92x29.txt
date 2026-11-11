@@ -26,4 +26,4 @@ message chief
 ┃                                                                                           
 
 
-enter send · ctrl+j newline · esc cancel
+ctrl+d send · enter newline · esc cancel
