@@ -177,7 +177,7 @@ var helps = map[screen]string{
 	scSession: "Answer walks the questions one by one; Talk opens the agent in a popup.",
 	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything. ← or shift+tab goes back a question, → forward, l lists them all. Answers are kept as drafts, even across esc and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
 	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
-	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the decisions terminal.",
+	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
 	scListNotes: "One row per asking session, oldest first. Open one to see its tasks and questions." +
 		" Notes from chief follow: m marks the one under the cursor read or unread, M marks them all read.",

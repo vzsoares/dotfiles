@@ -90,7 +90,7 @@ func TestProdLockedInAgentSession(t *testing.T) {
 		if d.m.p.cur != id {
 			t.Fatalf("%v: walking %s", sz, d.m.p.cur)
 		}
-		if !strings.Contains(d.text(), "prod approvals only from the decisions terminal (AGENT_MANAGER_SESSION_ID is set)") {
+		if !strings.Contains(d.text(), "prod approvals only from the cockpit terminal (AGENT_MANAGER_SESSION_ID is set)") {
 			t.Fatalf("%v: no notice:\n%s", sz, d.view())
 		}
 		if v := d.text(); strings.Contains(v, "a-d pick") || strings.Contains(v, "Free text") {

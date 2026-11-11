@@ -21,7 +21,7 @@ message.
    `$AGENT_MANAGER_SESSION_ID` (set in every agent-manager pane); its name comes from
    `agent-manager sessions --json`. `--title`/`--brief` (or `zen-inbox brief`) store
    the task context for that session.
-2. **watch** — a terminal named `decisions` in group `chief` runs `zen-inbox watch`:
+2. **watch** — a terminal named `cockpit` in group `chief` runs `zen-inbox watch`:
    one row per asking session (`name · #task title · n open · age · [status]`, `gate`
    when it has one). Each new decision (ask, gate, prod ask) or unread note posts one banner, never one
    per poll: title `zen-inbox · #<task> <task title>`, body the question's first line or the note title.
@@ -174,15 +174,15 @@ used`. See [[release-tooling]].
   levels refuses (fail closed). Gemini runs as `node`, so only the env check
   catches it.
 - **Refused panel.** Everything else works; a prod ask shows `prod approvals only
-  from the decisions terminal (<reason>)`, its menu is Skip / Talk / View full /
+  from the cockpit terminal (<reason>)`, its menu is Skip / Talk / View full /
   Back, `a`-`d` and `f` do nothing, and Talk's resolve list leaves it out.
 - **Confirm.** In a passing panel, Approve (`a` or enter) opens a screen with
   action, repo, branch and the full 40-char sha, and `Approve? y/N`. Only `y`
   stages the pick for the normal review → Send; any other key stages nothing and
   returns to the question. Hold, free text and talk need no confirm.
-- **Out of scope.** Deliberate bypasses: `tmux send-keys` into the decisions pane,
+- **Out of scope.** Deliberate bypasses: `tmux send-keys` into the cockpit pane,
   `tmux new-window 'zen-inbox watch'` (escapes the agent ancestry), raw `sqlite3`
-  writes, editing the source the launcher rebuilds. The decisions terminal must
+  writes, editing the source the launcher rebuilds. The cockpit terminal must
   not inherit an agent env var from the agentmgr tmux server's environment, or the
   guard refuses there too.
 
@@ -283,7 +283,7 @@ the send's `tea.Cmd`), outside the inbox mutex:
   for a caller with no session" when chief or an agent runs `answer`/`withdraw`. The
   send then retries once without `--from`, so the message shows the calling session as
   sender. A clean-env pane outside any session accepts `--from`; the unnested
-  `decisions` terminal is expected to as well.
+  `cockpit` terminal is expected to as well.
 - **Self-withdraw hands answers back (#582).** When an agent withdraws its own last
   open decision (`$AGENT_MANAGER_SESSION_ID` is the decision's session), the flush
   would run in that agent's process tree, where `--from` is refused and the fallback

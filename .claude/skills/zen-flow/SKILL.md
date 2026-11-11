@@ -183,7 +183,7 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
 - **chief** reads the board, gets the user's approval, spawns a spec-writer per task
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
   (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
-  decisions (see Decision inbox), keeps the `decisions` watcher running, records answers
+  decisions (see Decision inbox), keeps the `cockpit` watcher running, records answers
   the user gives in chat with `zen-inbox answer` (never a `--prod` ask: the user
   approves those in the panel), runs each Human Approval step the user approves (or hands
   it to the orchestrator; if auto mode blocks it, it asks for `go #<id>`), re-tags a step
@@ -270,7 +270,7 @@ are fewer than 3 sinks or no data. The same-job map is `scripts/telemetry/jobs.j
 Agents never message chief with decisions. They run `zen-inbox ask <task> -q ... -o ...
 --rec <letter>` (gates: `--gate`), passing `--title "<task title>" --brief "<1-3 lines>"`
 on the first ask, and end the turn; `zen-inbox brief` sets that context later. A
-terminal named `decisions` in group `chief` runs `zen-inbox watch`: one row per asking
+terminal named `cockpit` in group `chief` runs `zen-inbox watch`: one row per asking
 session (zen-bell rings once per session per poll). Opening one shows the task context, then
 its questions; the user walks them (pick, free text, skip) and sends them from a
 review screen, or talks (a tmux popup on `tmux -L agentmgr attach -t am_<session>`,
@@ -289,7 +289,7 @@ listed until `zen-inbox retry <session>`.
   a chat message. When the user says in chat they read one, chief runs `zen-inbox read
   <id>`. Anything the user must choose stays a `zen-inbox ask`.
 - Chief keeps the watcher up: `agent-manager terminal list --json` shows a running
-  `decisions` terminal in `chief`, else `agent-manager terminal create --name decisions
+  `cockpit` terminal in `chief`, else `agent-manager terminal create --name cockpit
   --group chief --nest=false --json` and `tmux -L agentmgr send-keys -t am_<terminal id>
   'zen-inbox watch' Enter` (agent-manager refuses `terminal send` to an un-nested
   terminal from inside a session).

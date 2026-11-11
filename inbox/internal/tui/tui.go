@@ -826,7 +826,7 @@ func (m *Model) notice(d inbox.Decision) string {
 	if !m.locked(d) {
 		return ""
 	}
-	return "prod approvals only from the decisions terminal (" + m.prodBlock + ")"
+	return "prod approvals only from the cockpit terminal (" + m.prodBlock + ")"
 }
 
 func (m *Model) chosen() []string {
