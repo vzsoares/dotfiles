@@ -422,9 +422,7 @@ def gum_confirm(prompt: str, default: bool = True) -> bool:
     return result.returncode == 0
 
 
-def run(
-    cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
-) -> subprocess.CompletedProcess[str]:
+def run(cmd: list[str], *, title: str = "") -> subprocess.CompletedProcess[str]:
     """Run a command, optionally under `gum spin`. Honors --dry-run."""
     if DRY_RUN:
         info(f"[dry-run] {' '.join(cmd)}")
@@ -433,10 +431,9 @@ def run(
         spin = subprocess.run(
             ["gum", "spin", "--show-error", "--title", title, "--", *cmd],
             check=False,
-            env=env,
         )
         return subprocess.CompletedProcess(cmd, spin.returncode, "", "")
-    return subprocess.run(cmd, text=True, capture_output=True, check=False, env=env)
+    return subprocess.run(cmd, text=True, capture_output=True, check=False)
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -706,6 +703,12 @@ def apply_branches_from_repo(
         info(f"Releasing {state.target_branch} (no merge)")
     else:
         info(" -> ".join(chain))
+
+
+def release_token_path() -> Path:
+    """Single-use token the global pre-push hook reads for zen-release's push."""
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(common.stdout.strip()) / "zen-release-token"
 
 
 def repo_name() -> str:
@@ -1467,24 +1470,28 @@ def phase_push(state: State) -> None:
     if not gum_confirm(f"Push {target} and tags to origin?"):
         info("Skipped push. Don't forget to push later.")
         return
-    # The global pre-push hook accepts the target push on this used approval.
-    env, prefix = None, ""
-    if state.approval_id and not state.dev:
-        env = {**os.environ, "ZEN_PROD_RELEASE": state.approval_id}
-        prefix = f"ZEN_PROD_RELEASE={state.approval_id} "
+    # The global pre-push hook lets the target push through on this used
+    # approval once: it consumes the token and records the sha it saw.
+    token = release_token_path() if state.approval_id and not state.dev else None
+    if token and not DRY_RUN:
+        sha = git("rev-parse", f"refs/heads/{target}").stdout.strip()
+        token.write_text(f"{state.approval_id} {target} {sha}\n")
     # The hook may ask on the tty (also when the approval check falls through);
     # a spinner would draw over it.
     spin = state.dev
-    result = run(
-        ["git", "push", "origin", target, "--follow-tags"],
-        title=f"Pushing {target}..." if spin else "",
-        env=env,
-    )
+    try:
+        result = run(
+            ["git", "push", "origin", target, "--follow-tags"],
+            title=f"Pushing {target}..." if spin else "",
+        )
+    finally:
+        if token:
+            token.unlink(missing_ok=True)
     if result.returncode != 0:
         if result.stderr:
             info(result.stderr.strip())
-        fail("Push failed. Resolve the issue and push manually:")
-        info(f"  {prefix}git push origin {target} --follow-tags")
+        fail("Push failed. Resolve the issue, then rerun zen-release --resume")
+        info(f"  or push it yourself: git push origin {target} --follow-tags")
         raise typer.Exit(1)
     good(f"Pushed {target}")
 

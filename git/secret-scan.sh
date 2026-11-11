@@ -34,31 +34,33 @@ EOF
 
 # One git-log range over every pushed ref, empty when nothing is new. Commits
 # reachable from a remote tip or remote-tracking ref are already on a remote.
-scan_range() {
-	local lsha rsha base range pos="" neg=""
+scan_ranges() {
+	local lsha rsha base tip range pairs="" tips=""
 	while read -r _ lsha _ rsha; do
 		[ -n "$lsha" ] || continue
 		zero "$lsha" && continue
 		[ "$lsha" = "$rsha" ] && continue
 		lsha=$(git rev-parse -q --verify "$lsha^{commit}") || continue
-		case " $pos " in *" $lsha "*) ;; *) pos="$pos $lsha" ;; esac
+		case " $tips " in *" $lsha "*) ;; *) tips="$tips $lsha" ;; esac
 		if ! zero "$rsha" && base=$(git rev-parse -q --verify "$rsha^{commit}"); then
-			neg="$neg $base"
+			pairs="$pairs$lsha $base
+"
 		fi
 	done <<EOF
 $input
 EOF
-	[ -n "$pos" ] || return 0
-	range="${pos# } --not$neg --remotes"
-	# shellcheck disable=SC2086 # the range is several rev-list arguments
-	[ -n "$(git rev-list -n 1 $range)" ] && echo "$range"
+	for tip in $tips; do
+		range="$tip --not$(printf '%s' "$pairs" | awk -v t="$tip" '$1 == t { printf " %s", $2 }') --remotes"
+		# shellcheck disable=SC2086 # the range is several rev-list arguments
+		[ -z "$(git rev-list -n 1 $range)" ] || echo "$range"
+	done
 	return 0
 }
 
-# The first pushed sha supplies .gitleaks.toml and .gitleaksignore, so work-tree
+# Each tip supplies its own .gitleaks.toml and .gitleaksignore, so work-tree
 # edits cannot hide a finding (gitleaks scans $common: it reads ignores from
-# its source dir). With several refs pushed, all use that sha's config.
-# A repo .gitleaks.toml without [extend] only adds to the global config.
+# its source dir). A repo .gitleaks.toml without [extend] only adds to the
+# global config.
 tip_file() {
 	git cat-file -e "$tip:$1" 2>/dev/null && git show "$tip:$1" >"$2"
 }
@@ -82,6 +84,7 @@ scan_gitleaks() {
 	local cfg rc=0
 	command -v gitleaks >/dev/null 2>&1 ||
 		refuse "gitleaks not found; install it (macOS: brew install gitleaks, Manjaro: sudo pacman -S gitleaks)"
+	rm -rf "$scan_tmp/ignore" "$scan_tmp/own.toml" "$scan_tmp/gitleaks.toml"
 	cfg=$(scan_config)
 	mkdir "$scan_tmp/ignore"
 	tip_file .gitleaksignore "$scan_tmp/ignore/.gitleaksignore" || true
@@ -143,13 +146,19 @@ scan_ggshield() {
 
 # $1 remote name, $2 url, as git passes them to pre-push.
 secret_scan() {
-	range=$(scan_range)
-	[ -n "$range" ] || return 0
+	local ranges found=""
+	ranges=$(scan_ranges)
+	[ -n "$ranges" ] || return 0
 	scan_tmp=$(mktemp -d "${TMPDIR:-/tmp}/zen-prepush.XXXXXX")
 	trap 'rm -rf "$scan_tmp"' EXIT
-	tip=${range%% *}
 	top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-	if ! scan_gitleaks || ! scan_ggshield "$1" "$2"; then
+	while read -r range; do
+		tip=${range%% *}
+		scan_gitleaks || found=1
+	done <<EOF
+$ranges
+EOF
+	if [ -n "$found" ] || ! scan_ggshield "$1" "$2"; then
 		scan_guidance
 		exit 1
 	fi

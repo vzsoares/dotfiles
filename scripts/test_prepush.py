@@ -49,6 +49,19 @@ echo "$*" >> "$FAKE_GUM_LOG"
 exit "${FAKE_GUM:-1}"
 """
 
+# `ps -o ppid=,args= -p <pid>`. FAKE_PS_TREE holds "pid ppid args" lines; the
+# hook's own pid is not in it and maps to 100, so a tree starts at pid 100.
+FAKE_PS = """#!/bin/bash
+[ "${FAKE_PS:-}" = fail ] && exit 1
+pid=${*: -1}
+if [ -n "${FAKE_PS_TREE:-}" ]; then
+	line=$(awk -v p="$pid" '$1 == p { $1 = ""; print; exit }' "$FAKE_PS_TREE")
+	echo "${line:- 100 /bin/bash}"
+	exit 0
+fi
+echo "    1 /bin/bash"
+"""
+
 FAKE_GITLEAKS = """#!/bin/bash
 echo "$*" >> "$FAKE_GITLEAKS_LOG"
 while [ $# -gt 0 ]; do
@@ -166,6 +179,7 @@ def env(tmp_path: Path) -> Env:
     e.bin.mkdir()
     e.fake("zen-inbox", FAKE_INBOX)
     e.fake("gum", FAKE_GUM)
+    e.fake("ps", FAKE_PS)
     e.fake("gitleaks", FAKE_GITLEAKS)
     e.fake("ggshield", FAKE_GGSHIELD)
     e.repo.mkdir()
@@ -219,7 +233,7 @@ def test_gated_push_rejected_prints_ask(env: Env) -> None:
     r = env.run("push", "origin", "master")
     assert_refused(
         r,
-        "refused master: no approved unused ask (check)",
+        "refused update of master: no approved unused ask (check)",
         f"zen-inbox ask <task> --prod push --repo myrepo --branch master --sha {head}",
     )
     assert env.remote_sha("master") == before
@@ -236,7 +250,7 @@ def test_agent_marker_enforces_even_with_tty(env: Env, marker: str) -> None:
         }
     )
     env.vars[marker] = "1"
-    assert_refused(env.run("push", "origin", "master"), "refused master")
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
     assert env.gum_log.exists() is False
 
 
@@ -253,7 +267,7 @@ def test_worktree_uses_main_checkout_name(env: Env) -> None:
 def test_multi_ref_checks_all_before_use(env: Env, pair: tuple[str, str]) -> None:
     env.vars["FAKE_FAIL_BRANCH"] = "master"
     refs = [f"HEAD:refs/heads/{b}" for b in pair]
-    assert_refused(env.run("push", "origin", *refs), "refused master")
+    assert_refused(env.run("push", "origin", *refs), "refused create of master")
     calls = env.calls()
     assert not any(c.startswith("approval use") for c in calls)
     assert all("--branch dev" not in c for c in calls)
@@ -267,29 +281,58 @@ def test_multi_ref_all_approved_uses_each(env: Env) -> None:
     assert verbs == ["check", "check", "use", "use"]
 
 
-@pytest.mark.parametrize("release", ["", "680.1"])
-def test_deletion_refused(env: Env, release: str) -> None:
-    seed(env, "master")
-    env.vars.update({"ZEN_PROD_RELEASE": release, "FAKE_USED": "0"})
-    r = env.run("push", "origin", ":master")
-    assert_refused(r, "deleting master is refused", "git push --no-verify")
-    assert env.remote_sha("master") != ""
-    assert env.calls() == []
+def test_delete_needs_approved_ask(env: Env) -> None:
+    seed(env, "prod")
+    before = env.remote_sha("prod")
+    env.vars["FAKE_CHECK"] = "1"
+    r = env.run("push", "origin", ":prod")
+    assert_refused(
+        r,
+        "refused delete of prod",
+        f'--branch prod --sha {ZERO} --context "delete prod at {before[:12]}"',
+    )
+    assert env.remote_sha("prod") == before
+    assert env.calls() == [
+        f"approval check --match --action push --repo myrepo --branch prod --sha {ZERO}"
+    ]
 
 
-@pytest.mark.parametrize("release", ["", "680.1"])
-def test_force_non_ancestor_refused(env: Env, release: str) -> None:
+def test_delete_with_approved_ask_passes(env: Env) -> None:
+    seed(env, "prod")
+    r = env.run("push", "origin", ":prod")
+    assert r.returncode == 0, r.stderr
+    assert env.remote_sha("prod") == ""
+    assert [c.split()[1] for c in env.calls()] == ["check", "use"]
+
+
+def orphan(env: Env) -> str:
+    env.git("checkout", "-q", "--orphan", "other")
+    return env.commit("orphan")
+
+
+def test_force_non_ancestor_needs_approved_ask(env: Env) -> None:
     seed(env, "master")
     before = env.remote_sha("master")
-    env.git("checkout", "-q", "--orphan", "other")
-    env.commit("orphan")
-    env.vars.update({"ZEN_PROD_RELEASE": release, "FAKE_USED": "0"})
+    head = orphan(env)
+    env.vars["FAKE_CHECK"] = "1"
     r = env.run("push", "--force", "origin", "HEAD:refs/heads/master")
-    assert_refused(r, "force push to master is refused", "git push --no-verify")
+    assert_refused(
+        r,
+        "refused force of master",
+        f'--sha {head} --context "force push over {before[:12]}"',
+    )
     assert env.remote_sha("master") == before
 
 
-def test_force_unknown_remote_sha_refused(env: Env) -> None:
+def test_force_with_approved_ask_passes(env: Env) -> None:
+    seed(env, "master")
+    head = orphan(env)
+    r = env.run("push", "--force", "origin", "HEAD:refs/heads/master")
+    assert r.returncode == 0, r.stderr
+    assert env.remote_sha("master") == head
+
+
+def test_force_unknown_remote_sha_needs_approved_ask(env: Env) -> None:
     seed(env, "master")
     other = env.tmp / "other"
     env.git("clone", "-q", str(env.remote), str(other), cwd=env.tmp)
@@ -297,9 +340,106 @@ def test_force_unknown_remote_sha_refused(env: Env) -> None:
     env.git("push", "-q", "--no-verify", "origin", "master", cwd=other)
     theirs = env.remote_sha("master")
     env.commit("mine")
+    env.vars["FAKE_CHECK"] = "1"
     r = env.run("push", "--force", "origin", "master")
-    assert_refused(r, "force push to master is refused")
+    assert_refused(r, "refused force of master", "force push over")
     assert env.remote_sha("master") == theirs
+
+
+def test_fast_forward_is_update_not_force(env: Env) -> None:
+    seed(env, "master")
+    env.commit("next")
+    env.vars["FAKE_CHECK"] = "1"
+    r = env.run("push", "origin", "master")
+    assert_refused(r, "refused update of master")
+    assert "--context" not in r.stderr
+
+
+def test_create_is_classified(env: Env) -> None:
+    env.vars["FAKE_CHECK"] = "1"
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+
+
+# --------------------------------------------------------------------------- #
+# Agent detection without env markers                                          #
+# --------------------------------------------------------------------------- #
+
+
+def tree(env: Env, *lines: str) -> None:
+    path = env.tmp / "ps-tree"
+    path.write_text("".join(f"{ln}\n" for ln in lines))
+    env.vars["FAKE_PS_TREE"] = str(path)
+
+
+@pytest.fixture
+def unmarked(env: Env) -> Env:
+    """An agent that unset its env markers, on a usable tty."""
+    env.vars.update(
+        {
+            "AGENT_MANAGER_SESSION_ID": "",
+            "ZEN_PREPUSH_TTY": "/dev/null",
+            "FAKE_GUM": "0",
+        }
+    )
+    return env
+
+
+@pytest.mark.parametrize(
+    "ancestor",
+    [
+        "/Users/x/.local/share/claude/versions/2.1.0 --model opus",
+        "claude --resume",
+        "/usr/bin/node /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+        "codex exec",
+        "/opt/homebrew/bin/tmux -L agentmgr new-session",
+        "tmux -Lagentmgr attach",
+    ],
+)
+def test_agent_ancestor_enforces_with_env_unset(unmarked: Env, ancestor: str) -> None:
+    tree(unmarked, "100 200 /bin/zsh -c git push", f"200 1 {ancestor}")
+    unmarked.vars["FAKE_CHECK"] = "1"
+    r = unmarked.run("push", "origin", "master")
+    assert_refused(r, "agent push: inside", "refused create of master")
+    assert unmarked.gum_log.exists() is False
+
+
+def test_agent_ancestor_with_approved_ask_passes(unmarked: Env) -> None:
+    tree(unmarked, "100 1 claude")
+    head = unmarked.git("rev-parse", "HEAD")
+    r = unmarked.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert unmarked.remote_sha("master") == head
+    assert [c.split()[1] for c in unmarked.calls()] == ["check", "use"]
+
+
+@pytest.mark.parametrize(
+    "ancestor",
+    [
+        "/bin/zsh -l",
+        "/opt/homebrew/bin/tmux -L default new-session",
+        "/usr/bin/node /home/x/claudette/cli.js",
+        "/usr/bin/vim notes/claude/plan.md",
+    ],
+)
+def test_human_ancestors_confirm_with_gum(unmarked: Env, ancestor: str) -> None:
+    tree(unmarked, f"100 1 {ancestor}")
+    r = unmarked.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert unmarked.calls() == []
+    assert unmarked.gum_log.exists()
+
+
+def test_unreadable_process_tree_fails_closed(unmarked: Env) -> None:
+    unmarked.vars.update({"FAKE_PS": "fail", "FAKE_CHECK": "1"})
+    r = unmarked.run("push", "origin", "master")
+    assert_refused(r, "process tree unreadable", "refused create of master")
+    assert unmarked.gum_log.exists() is False
+
+
+def test_agent_manager_pid_marker_enforces(unmarked: Env) -> None:
+    unmarked.vars.update({"AGENT_MANAGER_AGENT_PID": "42", "FAKE_CHECK": "1"})
+    r = unmarked.run("push", "origin", "master")
+    assert_refused(r, "AGENT_MANAGER_AGENT_PID is set")
 
 
 # --------------------------------------------------------------------------- #
@@ -330,6 +470,26 @@ def test_interactive_decline_refuses(human: Env) -> None:
     assert human.remote_sha("master") == ""
 
 
+def test_interactive_force_needs_approved_ask(human: Env) -> None:
+    seed(human, "master")
+    before = human.remote_sha("master")
+    orphan(human)
+    human.vars.update({"FAKE_GUM": "0", "FAKE_CHECK": "1"})
+    r = human.run("push", "--force", "origin", "HEAD:refs/heads/master")
+    assert_refused(r, "refused force of master")
+    assert human.remote_sha("master") == before
+    assert human.gum_log.exists() is False
+
+
+def test_interactive_delete_with_approved_ask_passes(human: Env) -> None:
+    seed(human, "prod")
+    r = human.run("push", "origin", ":prod")
+    assert r.returncode == 0, r.stderr
+    assert human.remote_sha("prod") == ""
+    assert [c.split()[1] for c in human.calls()] == ["check", "use"]
+    assert human.gum_log.exists() is False
+
+
 def test_interactive_without_gum_refuses(human: Env) -> None:
     human.no_fake("gum")
     assert_refused(human.run("push", "origin", "master"), "gum not found")
@@ -358,62 +518,120 @@ def test_inbox_error_refuses(env: Env, rc: str) -> None:
 
 def test_use_failure_refuses(env: Env) -> None:
     env.vars["FAKE_USE"] = "1"
-    assert_refused(env.run("push", "origin", "master"), "refused master")
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
     assert env.remote_sha("master") == ""
 
 
 # --------------------------------------------------------------------------- #
-# ZEN_PROD_RELEASE                                                             #
+# zen-release token                                                            #
 # --------------------------------------------------------------------------- #
 
 
-def test_release_ancestor_passes_without_match(env: Env) -> None:
+def release_token(env: Env, line: str) -> Path:
+    token = env.repo / ".git" / "zen-release-token"
+    token.write_text(line + "\n")
+    return token
+
+
+def ledger(env: Env) -> Path:
+    return env.repo / ".git" / "zen-release-ledger"
+
+
+def test_env_flag_without_approval_is_refused(env: Env) -> None:
+    env.vars.update({"ZEN_PROD_RELEASE": "680.1", "FAKE_USED": "0", "FAKE_CHECK": "1"})
+    env.vars["FAKE_USED_SHA"] = env.git("rev-parse", "HEAD")
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+    assert [c.split()[1] for c in env.calls()] == ["check"]
+    assert env.remote_sha("master") == ""
+
+
+def test_release_token_passes_and_is_consumed(env: Env) -> None:
     approved = env.git("rev-parse", "HEAD")
     head = env.commit("bump")
-    env.vars.update(
-        {"ZEN_PROD_RELEASE": "680.1", "FAKE_USED": "0", "FAKE_USED_SHA": approved}
-    )
+    token = release_token(env, f"680.1 master {head}")
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": approved})
     r = env.run("push", "origin", "master")
     assert r.returncode == 0, r.stderr
     assert env.remote_sha("master") == head
     assert env.calls() == [
         "approval used 680.1 --action release --repo myrepo --branch master"
     ]
+    assert not token.exists()
+    assert ledger(env).read_text() == f"680.1 {head}\n"
 
 
 def test_release_sha_after_launcher_stderr(env: Env) -> None:
     approved = env.git("rev-parse", "HEAD")
     head = env.commit("bump")
+    release_token(env, f"680.1 master {head}")
     env.vars.update(
-        {
-            "ZEN_PROD_RELEASE": "680.1",
-            "FAKE_USED": "0",
-            "FAKE_USED_SHA": f"go: downloading x\n{approved}",
-        }
+        {"FAKE_USED": "0", "FAKE_USED_SHA": f"go: downloading x\n{approved}"}
     )
     r = env.run("push", "origin", "master")
     assert r.returncode == 0, r.stderr
-    assert env.remote_sha("master") == head
     assert [c.split()[1] for c in env.calls()] == ["used"]
+
+
+def test_release_token_replayed_for_new_sha_falls_back(env: Env) -> None:
+    approved = env.git("rev-parse", "HEAD")
+    ledger(env).write_text(f"680.1 {approved}\n")
+    head = env.commit("later")
+    release_token(env, f"680.1 master {head}")
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": approved, "FAKE_CHECK": "1"})
+    r = env.run("push", "origin", "master")
+    assert_refused(r, "release token 680.1 already pushed", "refused create of master")
+    assert [c.split()[1] for c in env.calls()] == ["check"]
+
+
+def test_release_token_repush_of_same_sha_passes(env: Env) -> None:
+    head = env.git("rev-parse", "HEAD")
+    ledger(env).write_text(f"680.1 {head}\n")
+    release_token(env, f"680.1 master {head}")
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": head})
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert ledger(env).read_text() == f"680.1 {head}\n"
+
+
+@pytest.mark.parametrize("field", ["branch", "sha"])
+def test_release_token_for_other_ref_falls_back(env: Env, field: str) -> None:
+    head = env.git("rev-parse", "HEAD")
+    line = f"680.1 main {head}" if field == "branch" else f"680.1 master {ZERO}"
+    token = release_token(env, line)
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": head, "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+    assert [c.split()[1] for c in env.calls()] == ["check"]
+    assert not token.exists()
+
+
+def test_release_token_never_covers_force(env: Env) -> None:
+    seed(env, "master")
+    head = orphan(env)
+    release_token(env, f"680.1 master {head}")
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": head, "FAKE_CHECK": "1"})
+    r = env.run("push", "--force", "origin", "HEAD:refs/heads/master")
+    assert_refused(r, "refused force of master")
+    assert [c.split()[1] for c in env.calls()] == ["check"]
 
 
 def test_release_non_ancestor_falls_back(env: Env) -> None:
     env.git("checkout", "-q", "-b", "side")
     side = env.commit("side")
     env.git("checkout", "-q", "master")
-    env.commit("main-line")
-    env.vars.update(
-        {"ZEN_PROD_RELEASE": "680.1", "FAKE_USED": "0", "FAKE_USED_SHA": side}
-    )
+    head = env.commit("main-line")
+    release_token(env, f"680.1 master {head}")
+    env.vars.update({"FAKE_USED": "0", "FAKE_USED_SHA": side})
     r = env.run("push", "origin", "master")
     assert r.returncode == 0, r.stderr
-    verbs = [c.split()[1] for c in env.calls()]
-    assert verbs == ["used", "check", "use"]
+    assert [c.split()[1] for c in env.calls()] == ["used", "check", "use"]
+    assert not ledger(env).exists()
 
 
 def test_release_unused_falls_back_and_refuses(env: Env) -> None:
-    env.vars.update({"ZEN_PROD_RELEASE": "680.1", "FAKE_USED": "1", "FAKE_CHECK": "1"})
-    assert_refused(env.run("push", "origin", "master"), "refused master")
+    head = env.git("rev-parse", "HEAD")
+    release_token(env, f"680.1 master {head}")
+    env.vars.update({"FAKE_USED": "1", "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
     assert [c.split()[1] for c in env.calls()] == ["used", "check"]
 
 
@@ -743,6 +961,43 @@ def test_multi_ref_one_finding_refuses_all(env: Env) -> None:
     (call,) = scans(env)
     assert_log_opts(call, f"{bad} --not {base} --remotes")
     assert env.remote_sha("a") == base and env.remote_sha("b") == ""
+
+
+def test_multi_ref_scans_each_tip_with_its_own_config(env: Env) -> None:
+    env.git("checkout", "-q", "-b", "fixtures")
+    commit_file(env, ".gitleaks.toml", "[[allowlists]]\npaths = ['fixtures/']\n")
+    allowed = env.git("rev-parse", "HEAD")
+    env.git("checkout", "-q", "master")
+    plain = env.commit("plain")
+    append_cfg = FAKE_GITLEAKS.replace(
+        'cat "$2" > "$FAKE_GITLEAKS_LOG.cfg"', 'cat "$2" >> "$FAKE_GITLEAKS_LOG.cfg"'
+    )
+    env.fake("gitleaks", append_cfg)
+    r = env.run("push", "origin", "HEAD:refs/heads/a", "fixtures:refs/heads/b")
+    assert r.returncode == 0, r.stderr
+    plain_call, allowed_call = scans(env)
+    assert_log_opts(plain_call, f"{plain} --not --remotes")
+    assert f"--config {GLOBAL_CFG} " in plain_call
+    assert_log_opts(allowed_call, f"{allowed} --not --remotes")
+    assert f"--config {GLOBAL_CFG} " not in allowed_call
+    assert "paths = ['fixtures/']" in (env.tmp / "gitleaks.log.cfg").read_text()
+
+
+def test_multi_ref_finding_in_second_tip_refuses_all(env: Env) -> None:
+    env.git("checkout", "-q", "-b", "two")
+    two = env.commit("two")
+    env.git("checkout", "-q", "master")
+    leak_on_two = FAKE_GITLEAKS.replace(
+        'echo "$*" >>', 'all="$*"; echo "$all" >>'
+    ).replace(
+        "case ${FAKE_GITLEAKS:-0} in",
+        f'case $([[ $all == *"{two} --not"* ]] && echo leak) in',
+    )
+    env.fake("gitleaks", leak_on_two)
+    r = env.run("push", "origin", "HEAD:refs/heads/a", "two:refs/heads/b")
+    assert_refused(r, "Fingerprint:")
+    assert len(scans(env)) == 2
+    assert env.remote_sha("a") == "" and env.remote_sha("b") == ""
 
 
 def test_repo_allowlist_is_layered_on_global(env: Env) -> None:

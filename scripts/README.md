@@ -69,8 +69,9 @@ first mutating phase, and must match the repo (main checkout name), target branc
 and full tip sha of the chain's first branch; otherwise it exits 3 and prints the ask
 to file. A TTY run in your own terminal may go without one after a default-No
 confirm. `--resume` reuses the consumed id unless the branch moved before the
-merge; `--dry-run` never consumes. `--dev` needs no approval. The target push runs
-with `ZEN_PROD_RELEASE=<id>` so the global pre-push hook accepts it.
+merge; `--dry-run` never consumes. `--dev` needs no approval. Before the target
+push it writes a single-use `<git-common-dir>/zen-release-token` (id, branch, sha)
+that the global pre-push hook consumes.
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them.
 
@@ -165,10 +166,12 @@ once (exit 1 with the reason when it does not match); `check` never consumes; am
 of a prod-action ask is refused. `--match` takes no id and picks the oldest approved
 unused ask bound to all four fields. `git/hooks/pre-push` (global `core.hooksPath`
 in `.gitconfig`) runs `check --match` then `use --match --action push` before an
-agent push to `prod`/`main`/`master` lands, refuses deletion and force push, asks a
-default-No `gum confirm` in your own terminal, and accepts zen-release's push via
-`ZEN_PROD_RELEASE=<id>` and `approval used`. Before all of that it scans the
-pushed commits (`git/secret-scan.sh`): gitleaks with `git/gitleaks.toml` on every
+agent push, a force push or a delete of `prod`/`main`/`master` lands (an agent is
+an agent env var or a claude/codex/agentmgr-tmux ancestor), asks a default-No
+`gum confirm` for a human create or update in your own terminal, and accepts
+zen-release's push via its token and `approval used`. Before all of that it scans
+the pushed commits (`git/secret-scan.sh`): gitleaks with `git/gitleaks.toml` and
+each pushed tip's own committed `.gitleaks.toml`/`.gitleaksignore` on every
 push, ggshield on `github.com/vzsoares/*` remotes (a skip line when it cannot
 run), and a finding refuses the push with ignore/rotate steps. `--no-verify` skips
 it; see `docs/wiki/architecture/release-tooling.md`. `watch` is a Bubble Tea panel: one row per

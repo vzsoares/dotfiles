@@ -167,11 +167,11 @@ def offline_gum(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(release, "gum_style", lambda *a, **k: None)
 
     def plain_run(
-        cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
+        cmd: list[str], *, title: str = ""
     ) -> subprocess.CompletedProcess[str]:
         if release.DRY_RUN:
             return subprocess.CompletedProcess(cmd, 0, "", "")
-        return subprocess.run(cmd, text=True, capture_output=True, check=False, env=env)
+        return subprocess.run(cmd, text=True, capture_output=True, check=False)
 
     monkeypatch.setattr(release, "run", plain_run)
 
@@ -1910,21 +1910,25 @@ def test_dry_run_checks_but_never_consumes(dev_prod: Path) -> None:
 
 
 class _PushRecorder:
+    """Records each push and the release token the hook would read then."""
+
     def __init__(self, code: int = 0) -> None:
         self.code = code
-        self.envs: list[dict[str, str] | None] = []
+        self.tokens: list[str | None] = []
         self.titles: list[str] = []
 
     def __call__(
-        self, cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
+        self, cmd: list[str], *, title: str = ""
     ) -> subprocess.CompletedProcess[str]:
-        self.envs.append(env)
+        token = release.release_token_path()
+        self.tokens.append(token.read_text() if token.exists() else None)
         self.titles.append(title)
         return subprocess.CompletedProcess(cmd, self.code, "", "")
 
 
 @pytest.fixture
-def push_recorder(monkeypatch: pytest.MonkeyPatch) -> _PushRecorder:
+def push_recorder(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> _PushRecorder:
+    _git("branch", "-M", "prod")
     rec = _PushRecorder()
     monkeypatch.setattr(release, "run", rec)
     monkeypatch.setattr(release, "gum_confirm", lambda *a, **k: True)
@@ -1932,24 +1936,25 @@ def push_recorder(monkeypatch: pytest.MonkeyPatch) -> _PushRecorder:
     return rec
 
 
-def test_phase_push_passes_approval_to_hook(push_recorder: _PushRecorder) -> None:
+def test_phase_push_writes_single_use_token(push_recorder: _PushRecorder) -> None:
+    tip = _git("rev-parse", "HEAD").strip()
     release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
-    env = push_recorder.envs[0]
-    assert env is not None and env["ZEN_PROD_RELEASE"] == "680.1"
-    assert env["PATH"] == os.environ["PATH"]
+    assert push_recorder.tokens == [f"680.1 prod {tip}\n"]
+    assert not release.release_token_path().exists()
 
 
-def test_phase_push_without_approval_or_dev_sets_nothing(
+def test_phase_push_without_approval_or_dev_writes_no_token(
     push_recorder: _PushRecorder,
 ) -> None:
+    _git("branch", "dev")
     release.phase_push(release.State(target_branch="prod"))
     release.phase_push(release.State(target_branch="dev", dev=True, approval_id="x"))
-    assert push_recorder.envs == [None, None]
+    assert push_recorder.tokens == [None, None]
     # The hook may prompt on the tty, so no prod push runs under a spinner.
     assert push_recorder.titles == ["", "Pushing dev..."]
 
 
-def test_phase_push_manual_hint_has_prefix(
+def test_phase_push_failure_removes_token_and_hints_resume(
     push_recorder: _PushRecorder, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     push_recorder.code = 1
@@ -1958,7 +1963,8 @@ def test_phase_push_manual_hint_has_prefix(
     monkeypatch.setattr(release, "fail", lambda *a: None)
     with pytest.raises(typer.Exit):
         release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
-    assert hints == ["  ZEN_PROD_RELEASE=680.1 git push origin prod --follow-tags"]
+    assert hints == ["  or push it yourself: git push origin prod --follow-tags"]
+    assert not release.release_token_path().exists()
 
 
 def test_resumed_push_uses_stored_approval(
@@ -1968,20 +1974,17 @@ def test_resumed_push_uses_stored_approval(
     _push_fails_once(monkeypatch)
     with pytest.raises(typer.Exit):
         full_release(approval=approval)
-    rec = _PushRecorder()
+    tokens: list[str] = []
     real_run = release.run
 
-    def spy(
-        cmd: list[str], *, title: str = "", env: dict[str, str] | None = None
-    ) -> subprocess.CompletedProcess[str]:
-        if cmd[:2] == ["git", "push"]:
-            rec.envs.append(env)
-        return real_run(cmd, title=title, env=env)
+    def spy(cmd: list[str], *, title: str = "") -> subprocess.CompletedProcess[str]:
+        if cmd == ["git", "push", "origin", "prod", "--follow-tags"]:
+            tokens.append(release.release_token_path().read_text())
+        return real_run(cmd, title=title)
 
     monkeypatch.setattr(release, "run", spy)
     full_release(resume=True)
-    assert rec.envs and rec.envs[0] is not None
-    assert rec.envs[0]["ZEN_PROD_RELEASE"] == approval
+    assert tokens and tokens[0].startswith(f"{approval} prod ")
 
 
 def _push_fails_once(monkeypatch: pytest.MonkeyPatch) -> None:

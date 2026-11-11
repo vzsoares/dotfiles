@@ -137,10 +137,11 @@ closed on it. Right after branch resolution, before hooks or any mutating phase:
   an id, else prints that a real run needs one.
 - **Exit codes.** 3 = approval missing, rejected or used; every other failure stays
   1. `--dev` is unchanged and needs no approval, so `zen-merge` is unaffected.
-- **Push phase.** `phase_push` runs its `git push origin <target> --follow-tags`
-  with `ZEN_PROD_RELEASE=<state.approval_id>` (a resumed run uses the stored id; a
-  `--dev` push or an unapproved TTY release sets nothing). The manual-push hint
-  after a failed push carries the same prefix.
+- **Push phase.** Before `git push origin <target> --follow-tags`, `phase_push`
+  writes `<git-common-dir>/zen-release-token` = `<approval_id> <target> <tip sha>`
+  and deletes it after the push either way (a resumed run uses the stored id; a
+  `--dev` push or an unapproved TTY release writes none). A failed push says to
+  rerun `--resume`, or to push by hand through the normal gate.
 - **Not covered.** Deploys, the `rebase_source` push of the source branch, and an
   agent that edits `zen-flow.db` or the state file by hand.
 
@@ -152,21 +153,31 @@ that updates `refs/heads/{prod,main,master}` on any remote. Tags and other branc
 pass without calling zen-inbox. It is a guard rail for agents: `--no-verify` skips it.
 
 - **Binding.** action `push`, repo = the main checkout's folder (as above), branch =
-  the remote ref minus `refs/heads/`, sha = the full local sha pushed. A ref whose
-  local sha equals the remote sha passes; creating a gated branch needs an ask.
-- **Deletion and force** to a gated ref are always refused (`run it yourself with
-  git push --no-verify`). Force = remote sha not all zeros and not an ancestor of
-  the pushed sha, including a remote sha unknown locally.
-- **Who.** With `AGENT_MANAGER_SESSION_ID` or `CLAUDECODE` set, or `/dev/tty`
-  unopenable, it runs `zen-inbox approval check --match` for every gated ref, then
-  `use --match` for each only when all pass; a refusal prints the reason and the
-  `zen-inbox ask <task> --prod push …` line. Otherwise a default-No `gum confirm`
-  on `/dev/tty` per ref; no gum refuses. `ZEN_PREPUSH_TTY` overrides the tty path
-  (tests only).
+  the remote ref minus `refs/heads/`, sha = the full local sha pushed (40 zeros for
+  a delete). A ref whose local sha equals the remote sha passes.
+- **Classes.** Each gated ref from stdin is `create` (remote sha zeros), `update`
+  (remote sha an ancestor of the local one), `force` (not an ancestor, or unknown
+  locally) or `delete` (local sha zeros). Force and delete always need an approved
+  ask, from a human too; the printed ask line carries a `--context` naming the
+  overwritten or deleted sha.
+- **Who.** An agent is `AGENT_MANAGER_SESSION_ID`, `AGENT_MANAGER_AGENT_PID` or
+  `CLAUDECODE` set, or an ancestor (`ps -o ppid=,args=`, same segment rule as
+  zen-inbox's guard) that is claude, claude-code, codex, or the `tmux -L agentmgr`
+  server; an unreadable tree counts as an agent. An agent, no openable `/dev/tty`,
+  or a force/delete runs `zen-inbox approval check --match` for every such ref,
+  then `use --match` for each only when all pass; a refusal prints the reason and
+  the `zen-inbox ask <task> --prod push …` line. A human create or update gets a
+  default-No `gum confirm` on `/dev/tty`; no gum refuses. `ZEN_PREPUSH_TTY`
+  overrides the tty path (tests only). Any terminal inside the agentmgr tmux
+  server, the cockpit included, takes the ask path.
 - **Fail closed.** zen-inbox missing, or exiting other than 0/1, refuses the push.
-- **zen-release.** With `ZEN_PROD_RELEASE=<id>`, a gated ref passes when `zen-inbox
-  approval used <id> --action release --repo R --branch B` prints a sha that is an
-  ancestor of the pushed sha; otherwise the ref falls through to the rules above.
+- **zen-release.** The hook reads and deletes `<git-common-dir>/zen-release-token`
+  on every gated push. A create or update whose branch and sha equal the token's
+  passes when `zen-inbox approval used <id> --action release --repo R --branch B`
+  prints a sha that is an ancestor of the pushed sha and
+  `<git-common-dir>/zen-release-ledger` binds that id to no other sha; the first
+  pass records `<id> <sha>` there, so a resume re-pushing the same tip still
+  passes. Anything else falls through to the rules above. No env var is read.
 - **Known limits.** `git push --dry-run` runs the hook and consumes (preview with
   `approval check --match`). A push that fails after the hook consumed has burned
   its approval.

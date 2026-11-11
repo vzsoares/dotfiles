@@ -22,8 +22,8 @@ aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
               #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
 i3/           # i3 window manager config (linux)
-git/hooks/    # global core.hooksPath (.gitconfig): pre-push refuses an agent
-              #   push to prod/main/master without an approved zen-inbox
+git/hooks/    # global core.hooksPath (.gitconfig): pre-push refuses an agent,
+              #   force or delete push to prod/main/master without an approved zen-inbox
               #   --prod push ask; every other hook name runs the repo's own
 git/gitleaks.toml # tuned global gitleaks config; git/secret-scan.sh runs it
               #   (and ggshield) over the pushed commits from pre-push
