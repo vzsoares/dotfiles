@@ -226,6 +226,10 @@ func (m *Model) frame() frame {
 		return m.viewTalkPick()
 	case scConfirm:
 		return m.viewConfirm()
+	case scNote:
+		return m.viewNote()
+	case scReply:
+		return m.viewReply()
 	case scTalkNote:
 		return frame{s: scTalkNote, top: []section{{lines: []string{"note (optional)"}}},
 			body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
@@ -246,22 +250,37 @@ func (m *Model) status() (string, lipgloss.Style) {
 	case m.busy != "":
 		text := "» " + strings.ToLower(m.busy[:1]) + m.busy[1:]
 		return pyfmt.Clip(text, max(m.w-2, 0)) + " " + m.sp.View(), busyStyle
-	case len(m.snap.undelivered) > 0:
-		name := m.snap.undelivered[0].Decisions[0].SessionName
-		if n := len(m.snap.undelivered) - 1; n > 0 {
+	case len(m.snap.undelivered) > 0 || len(m.snap.failedNotes) > 0:
+		var name string
+		if len(m.snap.undelivered) > 0 {
+			name = m.snap.undelivered[0].Decisions[0].SessionName
+		} else {
+			name = m.snap.failedNotes[0].SessionName
+		}
+		if n := len(m.snap.undelivered) + len(m.snap.failedNotes) - 1; n > 0 {
 			name += " +" + strconv.Itoa(n)
 		}
 		return pyfmt.Clip("✕ delivery failed · "+name+" · r retry", m.w), failStyle
 	case !m.loaded:
 		return "○ loading…", footerStyle
-	case len(m.snap.open) == 0:
+	}
+	unread := inbox.Unread(m.snap.notes)
+	mail := "✉ " + strconv.Itoa(unread) + " unread"
+	switch {
+	case len(m.snap.open) == 0 && unread == 0:
 		return "○ inbox empty", footerStyle
+	case len(m.snap.open) == 0:
+		return pyfmt.Clip(mail, m.w), footerStyle
 	}
 	var names []string
 	for _, r := range view.Rows(m.snap.open, m.snap.sessions) {
 		names = append(names, r.Name)
 	}
-	return pyfmt.Clip("◆ "+strconv.Itoa(len(m.snap.open))+" open · "+strings.Join(names, ", "), m.w), footerStyle
+	line := "◆ " + strconv.Itoa(len(m.snap.open)) + " open · " + strings.Join(names, ", ")
+	if unread > 0 {
+		line += " · " + mail
+	}
+	return pyfmt.Clip(line, m.w), footerStyle
 }
 
 func (m *Model) viewList() frame {
@@ -286,8 +305,26 @@ func (m *Model) viewList() frame {
 		return frame{s: scList, body: append(body, section{lines: []string{empty}}), cur: -1, help: true}
 	}
 	cur := len(flash) + len(top) + m.cursor
-	body = append(body, menuSection(items, m.cursor, len(items), m.w)...)
-	return frame{s: scList, body: body, cur: cur, help: true}
+	first := len(items) - len(m.snap.notes)
+	if first > 0 {
+		c := m.cursor
+		if c >= first {
+			c = -1
+		}
+		body = append(body, menuSection(items[:first], c, first, m.w)...)
+	}
+	if first == len(items) {
+		return frame{s: scList, body: body, cur: cur, help: true}
+	}
+	gap := first > 0
+	if m.cursor >= first {
+		cur++
+		if gap {
+			cur++
+		}
+	}
+	body = append(body, m.noteSections(items[first:], m.cursor-first, gap)...)
+	return frame{s: scListNotes, body: body, cur: cur, help: true}
 }
 
 func (m *Model) markerLines() []string {

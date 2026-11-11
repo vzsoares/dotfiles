@@ -30,6 +30,8 @@ const (
 	SessionsEvery = 10 * time.Second
 	// FlashFor is how long a success flash stays; polls clear it.
 	FlashFor = 6 * time.Second
+
+	freePlaceholder = "answer (empty cancels)"
 )
 
 type screen int
@@ -49,6 +51,10 @@ const (
 	// on a locked prod ask and of an empty free-text box.
 	scLocked
 	scFreeBlank
+	scNote
+	scReply
+	// scListNotes names the list's footer and help while notes are shown.
+	scListNotes
 )
 
 // snapshot is one read of everything the panel shows.
@@ -59,6 +65,8 @@ type snapshot struct {
 	byID        map[string]inbox.Decision
 	sessions    am.Sessions
 	drafts      map[string]inbox.Draft
+	notes       []inbox.Note
+	failedNotes []inbox.Note
 	// gen is the panel's draftGen when the read started.
 	gen       int
 	refreshed bool
@@ -192,12 +200,14 @@ type Model struct {
 	prodBlock string
 	// confirm is the Approve letter scConfirm stages on y.
 	confirm string
+	// note is the one scNote and scReply show.
+	note inbox.Note
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
 	ta := textarea.New()
 	ta.ShowLineNumbers = false
-	ta.Placeholder = "answer (empty cancels)"
+	ta.Placeholder = freePlaceholder
 	ti := textinput.New()
 	ti.Placeholder = "note (optional)"
 	// A blinking cursor keeps a timer running in Update; static is enough.
@@ -245,6 +255,12 @@ func load(ib *inbox.Inbox, client am.Client, ids []string, sessions am.Sessions,
 		return s
 	}
 	if s.drafts, s.err = ib.Drafts(); s.err != nil {
+		return s
+	}
+	if s.notes, s.err = ib.Notes(false); s.err != nil {
+		return s
+	}
+	if s.failedNotes, s.err = ib.FailedNotes(); s.err != nil {
 		return s
 	}
 	for _, id := range ids {
@@ -309,6 +325,7 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		return nil
 	}
 	m.snap, m.loaded = s, true
+	m.refreshNote()
 	if s.gen == m.draftGen && !m.saving && len(m.draftOps) == 0 {
 		m.drafts = map[string]view.Staged{}
 		for id, d := range s.drafts {
@@ -929,6 +946,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.busy, m.snap = "", msg.snap
 		m.finishTalk(msg.resolved, msg.flash)
 		return m, nil
+	case notesMsg:
+		m.onNotes(msg)
+		return m, nil
+	case noteSentMsg:
+		m.onNoteSent(msg)
+		return m, nil
 	case retriedMsg:
 		m.busy, m.snap = "", msg.snap
 		m.toList(msg.flash)
@@ -988,6 +1011,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyFull(msg)
 	case scTalkNote:
 		return m.keyNote(msg)
+	case scReply:
+		return m.keyReply(msg)
 	}
 	n := m.menuLen()
 	switch k {
@@ -1014,6 +1039,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyJump(k)
 	case scTalkPick:
 		return m.keyTalkPick(k)
+	case scNote:
+		return m.keyNoteScreen(k)
 	}
 	return m, nil
 }
@@ -1027,7 +1054,7 @@ func (m *Model) scrollBy(k string) int {
 	case "pgup":
 		return -half
 	}
-	if m.scr == scFree || m.scr == scTalkNote {
+	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReply {
 		return 0
 	}
 	switch k {
@@ -1036,7 +1063,7 @@ func (m *Model) scrollBy(k string) int {
 	case "ctrl+u", "ctrl+b":
 		return -half
 	}
-	if m.scr == scFull {
+	if m.scr == scFull || m.scr == scNote {
 		switch k {
 		case "down", "j":
 			return 1
@@ -1058,7 +1085,10 @@ func (m *Model) listItems() []item {
 		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s)"
 		out = append(out, item{pyfmt.Clip(label, room), "r:" + b.SessionID})
 	}
-	return out
+	for _, n := range m.snap.failedNotes {
+		out = append(out, item{pyfmt.Clip("retry reply "+n.Label(), room), "nr:" + noteValue(n)})
+	}
+	return append(out, m.noteItems(room)...)
 }
 
 func (m *Model) undeliveredName(sid string) string {
@@ -1075,8 +1105,14 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 	case "q", "esc":
 		return m, m.quit()
 	case "r":
-		if len(m.snap.undelivered) > 0 {
-			return m, m.retryCmd(m.snap.undelivered[0].SessionID)
+		return m, m.retryFirst()
+	case "m":
+		if n, ok := m.cursorNote(); ok {
+			return m, m.markCmd(n.ID, false, n.Unread())
+		}
+	case "M":
+		if inbox.Unread(m.snap.notes) > 0 {
+			return m, m.markCmd(0, true, true)
 		}
 	case "enter":
 		items := m.listItems()
@@ -1084,8 +1120,15 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		kind, sid, _ := strings.Cut(items[m.cursor].value, ":")
-		if kind == "r" {
+		switch kind {
+		case "r":
 			return m, m.retryCmd(sid)
+		case "nr":
+			id, _ := strconv.ParseInt(sid, 10, 64)
+			return m, m.retryNoteCmd(id)
+		case "n":
+			m.openNote(sid)
+			return m, nil
 		}
 		m.enterSession(sid)
 	}
@@ -1171,6 +1214,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.ta.Reset()
+		m.ta.Placeholder = freePlaceholder
 		m.freeID, m.freeRev = d.ID, d.Rev
 		if s, ok := m.p.staged[d.ID]; ok && s.Kind == "text" {
 			m.ta.SetValue(s.Text)

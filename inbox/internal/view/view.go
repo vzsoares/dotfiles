@@ -481,3 +481,43 @@ func StagedText(d inbox.Decision, s *Staged) string {
 	}
 	return "free text: " + s.Text
 }
+
+// NoteLabel is a note's list row: ● unread or ○ read, then title, sender,
+// task and age; ↩ marks a sent reply.
+func NoteLabel(n inbox.Note, at time.Time) string {
+	dot := "○ "
+	if n.Unread() {
+		dot = "● "
+	}
+	parts := []string{n.Title, n.SessionName}
+	if n.Task != "" {
+		parts = append(parts, "#"+n.Task)
+	}
+	parts = append(parts, Age(n.CreatedAt, at))
+	label := dot + strings.Join(parts, " · ")
+	if n.Reply != "" {
+		label += " ↩"
+	}
+	return label
+}
+
+// NoteHead is the note screen's first line: n12 · #707 · chief · 5m.
+func NoteHead(n inbox.Note, at time.Time) string {
+	parts := []string{n.Label()}
+	if n.Task != "" {
+		parts = append(parts, "#"+n.Task)
+	}
+	return strings.Join(append(parts, n.SessionName, Age(n.CreatedAt, at)), " · ")
+}
+
+// PanelNoteLines is a note's title, painted body and sent reply.
+func PanelNoteLines(n inbox.Note, width int, p Painter) []string {
+	out := Wrap(n.Title, width, "")
+	if !pyfmt.Blank(n.Body) {
+		out = append(append(out, ""), painted(p, md.Key{ID: n.Label(), Field: "note"}, n.Body, width, "", "")...)
+	}
+	if n.Reply != "" {
+		out = append(append(out, ""), WrapRest("↩ replied: "+n.Reply, width, "", "  ")...)
+	}
+	return out
+}

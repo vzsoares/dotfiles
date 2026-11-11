@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SchemaVersion = 4
+	SchemaVersion = 5
 	Letters       = "abcd"
 	// A 'sending' row older than this is a crashed send, not one in flight.
 	StaleSeconds = 2 * 30
@@ -91,7 +91,7 @@ CREATE TABLE prod_actions (
 
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
 // can build a db of any version.
-var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4}
+var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5}
 
 // Error carries the exit code the CLI reports it with.
 type Error struct {

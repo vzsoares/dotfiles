@@ -21,17 +21,18 @@ macOS arm64 and Manjaro amd64.
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v4, IDs, guarded transitions, flush, message,
-                    prod-action approvals
+internal/inbox      store: schema v5, IDs, guarded transitions, flush, message,
+                    prod-action approvals, chief's notes
 internal/guard      refuses prod answers from inside an agent session (env, ps walk)
 internal/am         agent-manager, tmux popup, stuck-paste follow-up and zen-bell calls
 internal/view       text for list rows, context blocks and question screens
 internal/md         glamour markdown for the panel: ANSI-16 style, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
-internal/tui        the watch panel (list, session, walk, review, talk)
+internal/tui        the watch panel (list, session, walk, review, talk, notes)
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
-testdata/xver       v1 and v2 dbs written by inbox.py, as SQL dumps
+testdata/xver       v1 and v2 dbs written by inbox.py, and a v4 db written by the
+                    v4 binary (v4.sql), as SQL dumps
 testdata/fakes      fake agent-manager, tmux and zen-bell for tests
 ```
 

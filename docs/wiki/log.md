@@ -60,3 +60,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-10] update | Prod push hook (#703)
 Global `core.hooksPath` = `git/hooks`: pre-push refuses an agent push to prod/main/master unless `zen-inbox approval use --match --action push` consumes an approved ask for that repo, branch and sha; deletion and force are refused; a human push gets a default-No gum confirm; zen-release's push passes via `ZEN_PROD_RELEASE` + read-only `approval used`. Every other hook name dispatches to the repo's own `.git/hooks`. zen-sweep reports `hooks-path` repos that skip it.
 Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
+
+## [2026-11-11] update | zen-inbox notes (#707)
+Schema v5 adds `notes`: chief's non-decision messages (`zen-inbox note`, chief only), listed in the decisions panel below the decision rows with mark read/unread (`m`, `M`) and one reply per note sent back through the answer send path, with retry. Read notes hide after 24 h and are pruned after 30 days; notes never ring. Chief's preset gained the note/neither rule: chat holds replies only, notes carry what the user asked for or something very important, routine status goes nowhere.
+Pages updated: architecture/decision-inbox.md

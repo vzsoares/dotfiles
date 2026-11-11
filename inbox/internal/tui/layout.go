@@ -165,6 +165,9 @@ var footers = map[screen][]key{
 	scTalkPick:  {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote:  {{"enter", "done"}, {"esc", "no note"}},
 	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
+	scListNotes: {{"↑↓", ""}, {"enter", "open"}, {"m", "mark"}, {"M", "all read"}, {"q", "quit"}, {"?", "help"}},
+	scNote:      {{"↑↓", ""}, {"m", "mark"}, {"f", "reply"}, {"esc", "back"}, {"?", "help"}},
+	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
 	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 }
 
@@ -175,6 +178,10 @@ var helps = map[screen]string{
 	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the decisions terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
+	scListNotes: "One row per asking session, oldest first. Open one to see its tasks and questions." +
+		" Notes from chief follow: m marks the one under the cursor read or unread, M marks them all read.",
+	scNote:  "m marks this note read or unread; opening it does not. f writes one reply to the sender and marks it read.",
+	scReply: "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }
 
 func footerLines(s screen, width int, scroll bool) []string {
@@ -182,7 +189,7 @@ func footerLines(s screen, width int, scroll bool) []string {
 	if scroll {
 		// ctrl+u/d edit text on the input screens, so only pgup/dn scroll there.
 		hint := key{"^u/^d", "scroll"}
-		if s == scFree || s == scFreeBlank || s == scTalkNote {
+		if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply {
 			hint = key{"pgup/dn", "scroll"}
 		}
 		keys = append(append([]key(nil), keys...), hint)

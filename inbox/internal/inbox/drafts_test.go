@@ -176,7 +176,7 @@ func TestV3DBMigratesToV4(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ib.Close()
-	if v, _ := ib.userVersion(); v != 4 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	for table, want := range v3 {

@@ -181,7 +181,15 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   so in one line. It never waits on sessions, merges or cuts dev releases; a prod
   action it runs only after an approved ask (Write permissions). After an agent-manager restart it revives the
   orchestrator and the watcher. At its first start each ISO week it runs the telemetry
-  review (see Telemetry).
+  review (see Telemetry). Its chat holds only replies to what the user says there, plus
+  the start-of-session sweep findings, board recommendation and approvals. It leaves a
+  `zen-inbox note` (Decision inbox) only for what the user asked to hear back about,
+  one per approved task when it finishes (from the orchestrator's line: task, tag,
+  follow-up tasks, Human Only steps), or something very important that is not a
+  decision (a session dead after a revive, a failure the user must know). Routine
+  status (SPEC_READY handoffs, tasks set In Progress or queued, telemetry filed, a
+  watcher restart) goes to neither; the board records it. A turn that only sent notes
+  ends with nothing in chat.
 - **spec-writer** writes the spec into the task page body: goal, done-criteria, file
   scope, required tests, expected load, settled decisions, out of scope, Human Only
   steps. Open decisions go to the inbox, one `zen-inbox ask` each; the answers arrive
@@ -258,6 +266,12 @@ listed until `zen-inbox retry <session>`.
 - IDs `<task>.<n>` and gates `<task>.g`, `.g2`, never reused; `amend`/`withdraw` are
   the asker's (`--force` for chief).
 - Storage: `<vault>/config/zen-flow.db` (SQLite, gitignored in the vault).
+- Notes: only chief sends them, `zen-inbox note [<task>] --title "<one line>" [--body
+  "<markdown>" | --body -]` (prints `n12`); they never ring. The panel lists them under
+  `Notes · n unread`; the user marks them read (`m`, `M`) or writes one reply (`f`),
+  which reaches chief as `[zen-inbox] Reply to your note n12 (…)` and is treated like
+  a chat message. When the user says in chat they read one, chief runs `zen-inbox read
+  <id>`. Anything the user must choose stays a `zen-inbox ask`.
 - Chief keeps the watcher up: `agent-manager terminal list --json` shows a running
   `decisions` terminal in `chief`, else `agent-manager terminal create --name decisions
   --group chief --nest=false --json` and `tmux -L agentmgr send-keys -t am_<terminal id>

@@ -165,6 +165,36 @@ used`. See [[release-tooling]].
   not inherit an agent env var from the agentmgr tmux server's environment, or the
   guard refuses there too.
 
+## Notes (#707)
+
+A second channel from chief to the user: a note is a short message that is not a
+decision (a task finished, something very important). `zen-inbox note [<task>]
+--title "<one line>" [--body <markdown> | --body -]` prints `n<id>`; the sender must
+resolve to the session named `chief` (else exit 1: a guard against mistakes, not a
+security boundary). Titles are one line of at most 120 characters, bodies at most
+16 KiB. IDs are a global `AUTOINCREMENT`, never reused, separate from decision IDs.
+
+- **Visible** means unread, read within 24 h, or with a reply in flight or failed;
+  `zen-inbox notes [--all] [--json]` lists them newest first. Each insert prunes notes
+  read over 30 days ago. `zen-inbox read <id>... | --all [--unread]` marks them.
+- **Panel.** After the decision and retry rows: a `Notes · n unread` header and one
+  row per note (`● title · sender · #task · age`, bold unread, dim `○` read, `↩` once
+  replied). Enter opens the note screen (header, title, glamour body cached per note
+  id and width, `↩ replied: …`), which scrolls like View full. `m` toggles read on the
+  list row or the note, `M` marks every visible note read; opening never marks read.
+  Notes bind none of `←`, `→`, `shift+tab`, `l`.
+- **Reply.** `f` opens the textarea; `ctrl+d` sends one reply per note through the
+  answer send path (`agent-manager send … --from zen-inbox`, the refusal fallback, the
+  30 s timeout and the stuck-paste follow-up) as `[zen-inbox] Reply to your note n12
+  (#707 <title>):` plus the text, cut at a UTF-8 boundary under the send limit. The
+  `none → sending` claim runs in one `BEGIN IMMEDIATE`, so two panels never send
+  twice. Success marks the note read; a failure keeps the reply and its error, shows
+  a `retry reply n12` row and the `✕ delivery failed` status, and `r` / `zen-inbox
+  retry <session>` resend it (answers first; a `sending` claim older than 60 s counts).
+- **Status and bell.** `◆ n open · names · ✉ k unread`, or `✉ k unread` alone;
+  `○ inbox empty` only when both are zero. Notes never ring zen-bell and refresh on
+  the same 2 s poll.
+
 ## IDs
 
 `<task>.<n>` with n = 1 + the highest n ever used for that task (withdrawn included);
@@ -174,7 +204,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 4. Tables `decisions` and `decision_options` use generic names because the db is
+now 5. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -182,6 +212,7 @@ working on a migrated db. v3 adds `prod_actions (decision_id, action, repo, bran
 sha, used_at, used_by)` and changes no existing table, so a v2 reader keeps working
 on a v3 db. v4 adds `decision_drafts (decision_id, kind, option, text, rev,
 updated_at)`, the panel's unsent answers, again without touching existing tables.
+v5 adds `notes` (below), also leaving existing tables alone.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

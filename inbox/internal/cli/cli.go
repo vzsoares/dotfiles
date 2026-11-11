@@ -75,7 +75,7 @@ func (a *App) root() *cobra.Command {
 	root.SetErr(a.Stderr)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })
 	root.AddCommand(a.ask(), a.brief(), a.amend(), a.withdraw(), a.list(), a.show(),
-		a.answer(), a.resolve(), a.retry(), a.watch(), a.approval())
+		a.answer(), a.resolve(), a.retry(), a.watch(), a.approval(), a.note(), a.notes(), a.read())
 	return root
 }
 
@@ -510,7 +510,7 @@ func (a *App) resolve() *cobra.Command {
 func (a *App) retry() *cobra.Command {
 	return &cobra.Command{
 		Use:   "retry SESSION",
-		Short: "Resend a session's failed delivery as one message.",
+		Short: "Resend a session's failed delivery as one message, and its failed note replies.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			ib, err := a.open()
@@ -519,10 +519,35 @@ func (a *App) retry() *cobra.Command {
 			}
 			defer ib.Close()
 			res, err := ib.Retry(args[0])
-			if err != nil {
+			var ie *inbox.Error
+			noAnswers := errors.As(err, &ie) && ie.Code == 1
+			if err != nil && !noAnswers {
 				return err
 			}
-			return a.report(ib, res, res.SessionID)
+			replies, rerr := ib.RetryNotes(args[0])
+			failed := false
+			for _, r := range replies {
+				if r.OK {
+					a.out(r.Describe())
+				} else {
+					fmt.Fprintln(a.Stderr, r.Describe())
+					failed = true
+				}
+			}
+			if rerr != nil {
+				return rerr
+			}
+			if noAnswers {
+				if len(replies) == 0 {
+					return err
+				}
+			} else if rep := a.report(ib, res, res.SessionID); rep != nil {
+				return rep
+			}
+			if failed {
+				return exitCode(3)
+			}
+			return nil
 		},
 	}
 }
