@@ -292,6 +292,21 @@ func osError(err error, path string) string {
 	return err.Error()
 }
 
+// lockDir takes an exclusive flock on dir. Converting a fresh db to WAL
+// returns SQLITE_BUSY without consulting busy_timeout, so concurrent cold
+// starts must queue here instead.
+func lockDir(dir string) (unlock func(), err error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return func() { _ = f.Close() }, nil
+}
+
 // Open connects, sets WAL and busy_timeout, and migrates under BEGIN IMMEDIATE.
 func Open(path string, client am.Client) (*Inbox, error) {
 	fail := func(err error) error { return errf(4, "db unavailable: %s: %s", path, err) }
@@ -309,7 +324,14 @@ func Open(path string, client am.Client) (*Inbox, error) {
 		return nil, fail(err)
 	}
 	ib := &Inbox{db: db, conn: conn, AM: client, Path: path}
-	if err := ib.setup(); err != nil {
+	unlock, err := lockDir(filepath.Dir(path))
+	if err != nil {
+		_ = ib.Close()
+		return nil, fail(err)
+	}
+	err = ib.setup()
+	unlock()
+	if err != nil {
 		_ = ib.Close()
 		return nil, fail(err)
 	}

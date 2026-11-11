@@ -596,3 +596,21 @@ func TestCompareID(t *testing.T) {
 		t.Fatal(ids)
 	}
 }
+
+func TestOpenConcurrentColdStarts(t *testing.T) {
+	for range 50 {
+		path := filepath.Join(t.TempDir(), "cold.db")
+		var wg sync.WaitGroup
+		for range 4 {
+			wg.Go(func() {
+				ib, err := Open(path, nil)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				_ = ib.Close()
+			})
+		}
+		wg.Wait()
+	}
+}

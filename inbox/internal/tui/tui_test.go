@@ -717,7 +717,13 @@ func TestKeysAndFooterPerScreen(t *testing.T) {
 	if d.m.scr != scFree {
 		t.Fatal("enter on Free text did not open it")
 	}
+	footer("ctrl+d send", "esc back")
+	if strings.Contains(d.view(), "esc keep") {
+		t.Fatal("blank box offers esc keep")
+	}
+	d.keys("x")
 	footer("ctrl+d send", "esc keep")
+	d.keys("backspace")
 	d.keys("esc", "v")
 	footer("esc back")
 	d.keys("esc", "s")

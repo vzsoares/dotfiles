@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
 
@@ -241,5 +242,35 @@ func TestStagedProdApproveIsNotCalledADraft(t *testing.T) {
 	d.keys("a", "y", "esc")
 	if strings.Contains(d.m.flash, "drafts kept") {
 		t.Fatalf("flash %q", d.m.flash)
+	}
+}
+
+func TestFreeTextOnAmendedQuestionStaysOpen(t *testing.T) {
+	for _, key := range []string{"esc", "ctrl+d"} {
+		t.Run(key, func(t *testing.T) {
+			d := newDrv(t, 92, 29)
+			d.asks(2)
+			d.openWalk()
+			d.keys("f", "my answer")
+			q := "Which road?"
+			if _, err := d.other.Amend("7.1", "s1", false, inbox.AmendInput{Question: &q}); err != nil {
+				t.Fatal(err)
+			}
+			d.poll()
+			d.keys(key)
+			if d.m.scr != scFree || d.m.ta.Value() != "my answer" {
+				t.Fatalf("box closed or lost its text: screen %d %q", d.m.scr, d.m.ta.Value())
+			}
+			if !strings.Contains(d.view(), "question changed; review before saving") {
+				t.Fatalf("no warning:\n%s", d.view())
+			}
+			if _, ok := d.m.p.staged["7.1"]; ok {
+				t.Fatalf("staged against the new rev: %v", d.m.p.staged)
+			}
+			d.keys(key)
+			if s := d.staged("7.1"); s.Text != "my answer" || s.Rev != d.get("7.1").Rev {
+				t.Fatalf("second %s staged %+v", key, s)
+			}
+		})
 	}
 }

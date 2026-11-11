@@ -154,17 +154,18 @@ var spare = map[string]bool{"t talk": true, "v full": true}
 // Footer labels stay short so the walk's keys fit in two rows at 40 columns;
 // ? adds the longer explanation.
 var footers = map[screen][]key{
-	scList:     {{"↑↓", ""}, {"enter", "open"}, {"q", "quit"}, {"?", "help"}},
-	scSession:  {{"↑↓", ""}, {"enter", ""}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
-	scWalk:     {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
-	scReview:   {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
-	scJump:     {{"↑↓", ""}, {"enter", "jump"}, {"esc", "back"}},
-	scFree:     {{"ctrl+d", "send"}, {"esc", "keep"}},
-	scFull:     {{"↑↓", "scroll"}, {"esc", "back"}},
-	scTalkPick: {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
-	scTalkNote: {{"enter", "done"}, {"esc", "no note"}},
-	scConfirm:  {{"y", "approve"}, {"n/esc", "back"}},
-	scLocked:   {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
+	scList:      {{"↑↓", ""}, {"enter", "open"}, {"q", "quit"}, {"?", "help"}},
+	scSession:   {{"↑↓", ""}, {"enter", ""}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
+	scWalk:      {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
+	scReview:    {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
+	scJump:      {{"↑↓", ""}, {"enter", "jump"}, {"esc", "back"}},
+	scFree:      {{"ctrl+d", "send"}, {"esc", "keep"}},
+	scFreeBlank: {{"ctrl+d", "send"}, {"esc", "back"}},
+	scFull:      {{"↑↓", "scroll"}, {"esc", "back"}},
+	scTalkPick:  {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
+	scTalkNote:  {{"enter", "done"}, {"esc", "no note"}},
+	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
+	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
@@ -181,7 +182,7 @@ func footerLines(s screen, width int, scroll bool) []string {
 	if scroll {
 		// ctrl+u/d edit text on the input screens, so only pgup/dn scroll there.
 		hint := key{"^u/^d", "scroll"}
-		if s == scFree || s == scTalkNote {
+		if s == scFree || s == scFreeBlank || s == scTalkNote {
 			hint = key{"pgup/dn", "scroll"}
 		}
 		keys = append(append([]key(nil), keys...), hint)

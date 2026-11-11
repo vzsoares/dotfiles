@@ -45,8 +45,10 @@ const (
 	scTalkPick
 	scTalkNote
 	scConfirm
-	// scLocked is never m.scr: it names the footer of a walk on a locked prod ask.
+	// scLocked and scFreeBlank are never m.scr: they name the footer of a walk
+	// on a locked prod ask and of an empty free-text box.
 	scLocked
+	scFreeBlank
 )
 
 // snapshot is one read of everything the panel shows.
@@ -174,6 +176,8 @@ type Model struct {
 
 	ta textarea.Model
 	ti textinput.Model
+	// freeRev is the rev of the question the free-text box was typed against.
+	freeRev int64
 
 	// md takes its colour profile from a lipgloss renderer; tests inject one.
 	md *md.Renderer
@@ -1166,9 +1170,12 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.ta.Reset()
+		m.freeRev = d.Rev
 		if s, ok := m.p.staged[d.ID]; ok && s.Kind == "text" {
 			m.ta.SetValue(s.Text)
+			m.freeRev = s.Rev
 		}
+		m.flash = ""
 		m.scr = scFree
 		return m, m.ta.Focus()
 	case "full":
@@ -1212,26 +1219,38 @@ func (m *Model) brief(d inbox.Decision) view.Brief {
 func (m *Model) keyFree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.scr = scWalk
-		d, ok := m.decision(m.p.cur)
-		if text := m.ta.Value(); ok && !pyfmt.Blank(text) {
-			s := view.Staged{Kind: "text", Text: text, Rev: d.Rev}
-			m.p.staged[d.ID] = s
-			return m, m.saveDraft(d.ID, s)
-		}
-		return m, nil
+		return m, m.saveFree(false)
 	case "ctrl+d":
-		text := m.ta.Value()
-		d, ok := m.decision(m.p.cur)
-		if !ok || pyfmt.Blank(text) {
-			m.scr = scWalk
-			return m, nil
-		}
-		return m, m.stage(view.Staged{Kind: "text", Text: text, Rev: d.Rev})
+		return m, m.saveFree(true)
 	}
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
 	return m, cmd
+}
+
+// saveFree leaves the free-text box: send stages the text and advances, else it
+// is kept as a draft. A blank box saves nothing. A question amended since the
+// text was typed keeps the box open until the next press.
+func (m *Model) saveFree(send bool) tea.Cmd {
+	d, ok := m.decision(m.p.cur)
+	text := m.ta.Value()
+	if !ok || pyfmt.Blank(text) {
+		m.scr = scWalk
+		return nil
+	}
+	if d.Rev != m.freeRev {
+		m.freeRev = d.Rev
+		m.flash, m.flashOK = "question changed; review before saving", false
+		return nil
+	}
+	m.flash = ""
+	s := view.Staged{Kind: "text", Text: text, Rev: d.Rev}
+	if send {
+		return m.stage(s)
+	}
+	m.scr = scWalk
+	m.p.staged[d.ID] = s
+	return m.saveDraft(d.ID, s)
 }
 
 func (m *Model) keyFull(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

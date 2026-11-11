@@ -344,7 +344,15 @@ func (m *Model) viewWalk() frame {
 func (m *Model) viewFree() frame {
 	d, _ := m.decision(m.p.cur)
 	head := pyfmt.Clip(d.ID+"  "+d.Question, m.w)
-	return frame{s: scFree, top: []section{{lines: []string{head}}},
+	s := scFree
+	if pyfmt.Blank(m.ta.Value()) {
+		s = scFreeBlank
+	}
+	var flash []string
+	if m.flash != "" {
+		flash = view.WrapRest("» "+m.flash, m.w, "", "  ")
+	}
+	return frame{s: s, top: []section{{lines: []string{head}}, {lines: flash, style: &bannerStyle}},
 		body: []section{{lines: strings.Split(m.ta.View(), "\n")}}, cur: -1, help: true}
 }
 
