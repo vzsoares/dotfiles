@@ -55,11 +55,6 @@ func (n Note) Label() string { return "n" + strconv.FormatInt(n.ID, 10) }
 
 func (n Note) Unread() bool { return n.ReadAt == "" }
 
-// Failed is a reply waiting for retry.
-func (n Note) Failed() bool {
-	return n.Delivery == "failed" || (n.Delivery == "sending" && n.RepliedAt < staleCutoff())
-}
-
 // JSON is the note's --json shape; key order is part of the output.
 func (n Note) JSON() pyfmt.Object {
 	return pyfmt.Object{
@@ -111,7 +106,8 @@ func checkNote(in NoteInput) error {
 	return nil
 }
 
-// AddNote stores a note from chief and prunes notes read over KeepFor ago.
+// AddNote stores a note from chief and prunes notes read over KeepFor ago,
+// keeping any whose reply still awaits delivery.
 func (ib *Inbox) AddNote(in NoteInput) (Note, error) {
 	if err := checkNote(in); err != nil {
 		return Note{}, err
@@ -123,7 +119,8 @@ func (ib *Inbox) AddNote(in NoteInput) (Note, error) {
 	defer ib.mu.Unlock()
 	var id int64
 	err := ib.immediate(func() error {
-		if err := ib.exec("DELETE FROM notes WHERE read_at != '' AND read_at < ?",
+		if err := ib.exec("DELETE FROM notes WHERE read_at != '' AND read_at < ?"+
+			" AND delivery NOT IN ('sending', 'failed')",
 			Stamp(Now().Add(-KeepFor))); err != nil {
 			return err
 		}

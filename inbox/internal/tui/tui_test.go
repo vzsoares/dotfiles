@@ -32,6 +32,7 @@ type fakeAM struct {
 	popups   []string
 	bells    []string
 	noPopup  bool
+	fail     string
 }
 
 func (f *fakeAM) Sessions() am.Sessions {
@@ -44,6 +45,9 @@ func (f *fakeAM) Send(sid, msg string) (bool, string, string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sends = append(f.sends, [2]string{sid, msg})
+	if f.fail != "" {
+		return false, "", f.fail
+	}
 	return true, "42", ""
 }
 

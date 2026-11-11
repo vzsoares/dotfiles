@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
@@ -41,10 +40,7 @@ func (a *App) note() *cobra.Command {
 				return err
 			}
 			defer ib.Close()
-			in.Name = in.SessionID
-			if s := am.Find(a.AM.Sessions(), in.SessionID); s != nil && pyfmt.Truthy(s["name"]) {
-				in.Name = pyfmt.Str(s["name"])
-			}
+			in.Name = a.sessionName(in.SessionID)
 			n, err := ib.AddNote(in)
 			if err != nil {
 				return err

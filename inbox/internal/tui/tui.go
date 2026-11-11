@@ -202,6 +202,8 @@ type Model struct {
 	confirm string
 	// note is the one scNote and scReply show.
 	note inbox.Note
+	// replyFor is the note the textarea holds a reply for.
+	replyFor int64
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -1215,6 +1217,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		}
 		m.ta.Reset()
 		m.ta.Placeholder = freePlaceholder
+		m.replyFor = 0
 		m.freeID, m.freeRev = d.ID, d.Rev
 		if s, ok := m.p.staged[d.ID]; ok && s.Kind == "text" {
 			m.ta.SetValue(s.Text)

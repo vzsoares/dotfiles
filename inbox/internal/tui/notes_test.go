@@ -293,3 +293,37 @@ func TestNoteNeverRingsAndShowsOnNextPoll(t *testing.T) {
 		t.Fatalf("a note rang: %v", d.am.bells)
 	}
 }
+
+func TestFailedReplyKeepsCursorOnItsNote(t *testing.T) {
+	d := newDrv(t, 60, 20)
+	d.addNote("", "older", "")
+	d.addNote("", "newer", "")
+	d.poll()
+	d.cursorTo("older")
+	d.keys("enter", "f", "hi")
+	d.am.fail = "session gone"
+	d.keys("ctrl+d")
+	if !strings.Contains(d.view(), "retry reply n1") {
+		t.Fatalf("%s", d.view())
+	}
+	if n, ok := d.m.cursorNote(); !ok || n.ID != 1 {
+		t.Fatalf("cursor moved off the replied note:\n%s", d.view())
+	}
+}
+
+func TestRefusedReplyKeepsText(t *testing.T) {
+	d := newDrv(t, 60, 20)
+	d.addNote("", "raced", "")
+	d.poll()
+	d.keys("enter", "f", "my words")
+	if _, err := d.other.Reply(1, "other panel"); err != nil {
+		t.Fatal(err)
+	}
+	d.keys("ctrl+d")
+	if d.m.scr != scNote || !strings.Contains(d.view(), "already replied") {
+		t.Fatalf("%s", d.view())
+	}
+	if d.m.ta.Value() != "my words" {
+		t.Fatalf("text lost: %q", d.m.ta.Value())
+	}
+}

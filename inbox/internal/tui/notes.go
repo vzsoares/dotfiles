@@ -7,7 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
@@ -103,16 +102,6 @@ func (m *Model) replyCmd(n inbox.Note, text string) tea.Cmd {
 	}
 }
 
-func followupText(f, sid string) string {
-	switch f {
-	case am.Submitted:
-		return " (submitted a stuck paste)"
-	case am.StillStuck:
-		return "; the paste is still stuck, attach: " + am.AttachCommand(sid)
-	}
-	return ""
-}
-
 func (m *Model) onNoteSent(msg noteSentMsg) {
 	m.busy, m.snap = "", msg.snap
 	m.refreshNote()
@@ -122,9 +111,15 @@ func (m *Model) onNoteSent(msg noteSentMsg) {
 	}
 	flash := msg.res.Describe()
 	if msg.res.OK {
-		flash = "reply sent to " + m.note.SessionName + followupText(msg.res.Followup, m.note.SessionID)
+		flash = "reply sent to " + m.note.SessionName + inbox.FollowupText(msg.res.Followup, m.note.SessionID)
 	}
 	m.scr, m.flash, m.flashOK, m.flashAt = scList, flash, msg.res.OK, m.now()
+	m.cursor = min(m.cursor, max(m.menuLen()-1, 0))
+	for i, it := range m.listItems() {
+		if it.value == "n:"+noteValue(m.note) {
+			m.cursor = i
+		}
+	}
 }
 
 func (m *Model) retryNoteCmd(id int64) tea.Cmd {
@@ -161,7 +156,11 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 			m.flash, m.flashOK = "already replied", false
 			return m, nil
 		}
-		m.ta.Reset()
+		// A reply refused by the store keeps its text for the next f.
+		if m.replyFor != n.ID {
+			m.ta.Reset()
+			m.replyFor = n.ID
+		}
 		m.ta.Placeholder = "reply (empty cancels)"
 		m.scr, m.flash = scReply, ""
 		return m, m.ta.Focus()

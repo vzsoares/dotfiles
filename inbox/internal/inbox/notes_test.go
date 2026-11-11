@@ -332,3 +332,21 @@ func TestV4DumpMigratesToV5(t *testing.T) {
 	}
 	addNote(t, ib, "", "first")
 }
+
+func TestPruneKeepsUndeliveredReplies(t *testing.T) {
+	ib, fake, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "read, reply failed")
+	if err := ib.MarkNotes([]int64{1}, true); err != nil {
+		t.Fatal(err)
+	}
+	fake.fail = "gone"
+	if _, err := ib.Reply(1, "kept"); err != nil {
+		t.Fatal(err)
+	}
+	at(t, "2026-03-01T00:00:00+00:00")
+	addNote(t, ib, "", "new")
+	if got := labels(t, ib, true); got != "n2 n1" {
+		t.Fatalf("%q", got)
+	}
+}

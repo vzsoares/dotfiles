@@ -113,6 +113,14 @@ func (a *App) report(ib *inbox.Inbox, res *inbox.Delivery, sid string) error {
 	return nil
 }
 
+// sessionName is sid's agent-manager name, or sid when it has none.
+func (a *App) sessionName(sid string) string {
+	if s := am.Find(a.AM.Sessions(), sid); s != nil && pyfmt.Truthy(s["name"]) {
+		return pyfmt.Str(s["name"])
+	}
+	return sid
+}
+
 func optional(cmd *cobra.Command, name string) *string {
 	if !cmd.Flags().Changed(name) {
 		return nil
@@ -151,10 +159,7 @@ func (a *App) ask() *cobra.Command {
 				return err
 			}
 			defer ib.Close()
-			in.Name = in.SessionID
-			if s := am.Find(a.AM.Sessions(), in.SessionID); s != nil && pyfmt.Truthy(s["name"]) {
-				in.Name = pyfmt.Str(s["name"])
-			}
+			in.Name = a.sessionName(in.SessionID)
 			ask := ib.Ask
 			if cmd.Flags().Changed("prod") {
 				ask = func(in inbox.AskInput) (inbox.Decision, error) { return ib.AskProd(in, prod) }
@@ -524,6 +529,10 @@ func (a *App) retry() *cobra.Command {
 			if err != nil && !noAnswers {
 				return err
 			}
+			var rep error
+			if !noAnswers {
+				rep = a.report(ib, res, res.SessionID)
+			}
 			replies, rerr := ib.RetryNotes(args[0])
 			failed := false
 			for _, r := range replies {
@@ -534,17 +543,14 @@ func (a *App) retry() *cobra.Command {
 					failed = true
 				}
 			}
-			if rerr != nil {
+			switch {
+			case rerr != nil:
 				return rerr
-			}
-			if noAnswers {
-				if len(replies) == 0 {
-					return err
-				}
-			} else if rep := a.report(ib, res, res.SessionID); rep != nil {
+			case noAnswers && len(replies) == 0:
+				return err
+			case rep != nil:
 				return rep
-			}
-			if failed {
+			case failed:
 				return exitCode(3)
 			}
 			return nil

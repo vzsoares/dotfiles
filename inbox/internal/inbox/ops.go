@@ -535,6 +535,17 @@ func (ib *Inbox) Retry(session string) (*Delivery, error) {
 	return ib.deliver(sid, todo)
 }
 
+// FollowupText is what a send's stuck-paste followup adds to its outcome line.
+func FollowupText(f, sid string) string {
+	switch f {
+	case am.Submitted:
+		return " (submitted a stuck paste)"
+	case am.StillStuck:
+		return "; the paste is still stuck, attach: " + am.AttachCommand(sid)
+	}
+	return ""
+}
+
 // Describe is the one-line outcome of a close or a retry.
 func (ib *Inbox) Describe(res *Delivery, sid, name string) (string, error) {
 	if res == nil {
@@ -554,14 +565,7 @@ func (ib *Inbox) Describe(res *Delivery, sid, name string) (string, error) {
 		if res.Message != "" {
 			return fmt.Sprintf("recorded %s; nothing sent to your own session", strings.Join(res.IDs, ", ")), nil
 		}
-		line := fmt.Sprintf("sent %s to %s", strings.Join(res.IDs, ", "), name)
-		switch res.Followup {
-		case am.Submitted:
-			line += " (submitted a stuck paste)"
-		case am.StillStuck:
-			line += "; the paste is still stuck, attach: " + am.AttachCommand(sid)
-		}
-		return line, nil
+		return fmt.Sprintf("sent %s to %s", strings.Join(res.IDs, ", "), name) + FollowupText(res.Followup, sid), nil
 	}
 	return fmt.Sprintf("delivery failed: %s; zen-inbox retry %s", res.Error, sid), nil
 }
