@@ -92,9 +92,9 @@ def test_dirty_unpushed_and_stash(remote_repo: Path) -> None:
 def test_local_hooks_path_reported(remote_repo: Path, tmp_path: Path) -> None:
     other = _init(tmp_path / "plain")
     assert sweep.sweep_repo(other, live_dirs=set()).findings == []
-    _git("config", "core.hooksPath", ".husky/_", cwd=remote_repo)
+    _git("config", "core.hooksPath", "custom-hooks", cwd=remote_repo)
     assert _kinds(sweep.sweep_repo(remote_repo, live_dirs=set()).findings) == [
-        ("hooks-path", ".husky/_ (skips the global prod-push hook)")
+        ("hooks-path", "custom-hooks (skips the global prod-push hook)")
     ]
 
 
@@ -274,6 +274,39 @@ def test_run_sweep_notes_missing_agent_manager(tmp_path: Path) -> None:
     result = sweep.run_sweep([repo], None)
     assert result.findings == []
     assert result.notes
+
+
+def _hooks(repo: Path) -> tuple[list[str], list[str]]:
+    result = sweep.sweep_repo(repo, None)
+    kinds = [f.kind for f in result.findings if f.kind == "hooks-path"]
+    return kinds, [n for n in result.notes if "husky" in n]
+
+
+def test_hooks_no_override_is_silent(tmp_path: Path) -> None:
+    assert _hooks(_init(tmp_path / "r")) == ([], [])
+
+
+@pytest.mark.parametrize("value", [".husky", ".husky/_", ".husky/"])
+def test_hooks_husky_value_is_info(tmp_path: Path, value: str) -> None:
+    repo = _init(tmp_path / "r")
+    _git("config", "core.hooksPath", value, cwd=repo)
+    kinds, notes = _hooks(repo)
+    assert kinds == []
+    assert notes[0].endswith("husky hooks: prod gate via zen-release only")
+
+
+def test_hooks_husky_dir_is_info(tmp_path: Path) -> None:
+    repo = _init(tmp_path / "r")
+    (repo / ".husky").mkdir()
+    _git("config", "core.hooksPath", "custom", cwd=repo)
+    assert _hooks(repo)[0] == []
+    assert len(_hooks(repo)[1]) == 1
+
+
+def test_hooks_other_override_is_warning(tmp_path: Path) -> None:
+    repo = _init(tmp_path / "r")
+    _git("config", "core.hooksPath", "custom-hooks", cwd=repo)
+    assert _hooks(repo) == (["hooks-path"], [])
 
 
 if __name__ == "__main__":

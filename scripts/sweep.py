@@ -33,8 +33,8 @@
 #        orphan-branch   am/* branch with no worktree
 #        orphan-worktree linked worktree with no live agent-manager session
 #        merged          branch already merged into its base (dev, else main/master)
-#        hooks-path      a local core.hooksPath (e.g. husky) that skips the
-#                        global git/hooks prod-push gate
+#        hooks-path      repo-local core.hooksPath shadowing the global prod-push
+#                        gate; husky (value or .husky/ dir) is a note instead
 #        branch-model    personal repos only: dev without prod (or the reverse),
 #                        a main/master left beside dev+prod, or a dev+prod
 #                        origin/HEAD that is not dev. main/master-only is valid.
@@ -225,6 +225,17 @@ def branch_model(repo: Path) -> list[str]:
     return problems
 
 
+def hooks_override(repo: Path) -> tuple[str, str] | None:
+    """(kind, detail) for a repo-local core.hooksPath that shadows the global
+    prod-push gate; kind is "husky" or "hooks-path"."""
+    value = git(repo, "config", "--local", "--get", "core.hooksPath").stdout.strip()
+    if not value:
+        return None
+    if value.rstrip("/") in (".husky", ".husky/_") or (repo / ".husky").is_dir():
+        return ("husky", "husky hooks: prod gate via zen-release only")
+    return ("hooks-path", f"{value} (skips the global prod-push hook)")
+
+
 def sweep_repo(repo: Path, live_dirs: set[str] | None, personal: bool = False) -> Sweep:
     """Findings for one repo. live_dirs=None skips the session check; only a
     personal repo gets the branch-model check."""
@@ -284,11 +295,11 @@ def sweep_repo(repo: Path, live_dirs: set[str] | None, personal: bool = False) -
             ):
                 found.append(Finding(name, "merged", f"{branch} (into {base})"))
 
-    hooks = git(repo, "config", "--local", "--get", "core.hooksPath").stdout.strip()
-    if hooks:
-        found.append(
-            Finding(name, "hooks-path", f"{hooks} (skips the global prod-push hook)")
-        )
+    override = hooks_override(repo)
+    if override and override[0] == "husky":
+        result.notes.append(f"{name}: {override[1]}")
+    elif override:
+        found.append(Finding(name, *override))
 
     if personal:
         found += [Finding(name, "branch-model", p) for p in branch_model(repo)]
