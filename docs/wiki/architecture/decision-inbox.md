@@ -68,7 +68,8 @@ message.
   again with its y/N confirm. Cancel and esc keep drafts.
 - **Moving in the walk.** `←` or `shift+tab` shows the previous question of the pass
   (from the review, the last one) with the cursor on its drafted option, and free
-  text reopens with its text; `→` goes forward without changing anything. `l` (and
+  text reopens with its text; `→` goes forward without changing anything (on the
+  last question it opens the review once every question has a draft, else stays). `l` (and
   Change one) opens a jump list of every open question with its draft or `—`; enter
   shows it, esc returns. After answering, the walk goes on at the first question
   with no draft. The walk footer drops `t talk · v full` (still menu items) when it

@@ -124,6 +124,19 @@ func TestJumpListEditsThenReturnsToFirstUndrafted(t *testing.T) {
 	}
 	d.keys("l", "esc")
 	d.at("7.4")
+	d.keys("l")
+	d.poll()
+	if d.m.scr != scJump {
+		t.Fatalf("a poll closed the jump list opened from the walk:\n%s", d.view())
+	}
+	if _, err := d.other.Answer("7.4", ptr("a"), nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	d.keys("esc")
+	if d.m.scr != scReview {
+		t.Fatalf("esc after the current question closed: screen %d cur %q", d.m.scr, d.m.p.cur)
+	}
 }
 
 func TestRestartResumesWithDrafts(t *testing.T) {
@@ -196,5 +209,37 @@ func TestProdApproveAskedAgainAfterRestart(t *testing.T) {
 	d.keys("a")
 	if d.m.scr != scConfirm {
 		t.Fatal("Approve after restart skipped its confirm")
+	}
+}
+
+func TestRightOnLastStaysUnlessAllDrafted(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(3)
+	d.openWalk()
+	d.keys("a", "right", "right")
+	d.at("7.3")
+	d.keys("a")
+	d.at("7.2")
+	d.keys("right", "right")
+	d.at("7.3")
+	d.keys("left", "s")
+	if d.m.scr != scReview {
+		t.Fatalf("expected review, got %d", d.m.scr)
+	}
+	d.keys("left")
+	d.at("7.3")
+	d.keys("right")
+	if d.m.scr != scReview {
+		t.Fatalf("→ on the last drafted question should open the review, got %d", d.m.scr)
+	}
+}
+
+func TestStagedProdApproveIsNotCalledADraft(t *testing.T) {
+	d := newDrvWith(t, 92, 29, func(d *drv) { d.ib.User = true })
+	d.askProd("s1")
+	d.openWalk()
+	d.keys("a", "y", "esc")
+	if strings.Contains(d.m.flash, "drafts kept") {
+		t.Fatalf("flash %q", d.m.flash)
 	}
 }

@@ -113,13 +113,17 @@ type pass struct {
 	result   *inbox.Delivery
 }
 
-func (p *pass) stopped(how string) string {
+// stopped is the flash for leaving the pass; drafts lists what is saved.
+func (p *pass) stopped(how string, drafts map[string]view.Staged) string {
 	kept := "nothing recorded"
 	if len(p.recorded) > 0 {
 		kept = strings.Join(p.recorded, ", ") + " recorded earlier"
 	}
-	if len(p.staged) > 0 {
-		kept += ", drafts kept"
+	for id := range p.staged {
+		if _, ok := drafts[id]; ok {
+			kept += ", drafts kept"
+			break
+		}
 	}
 	return strings.Join(append([]string{how + ": " + kept}, p.notes...), "; ")
 }
@@ -421,7 +425,8 @@ func (m *Model) livePass() {
 			m.advance()
 		}
 	case scReview, scJump:
-		if m.next() != "" || len(m.entries()) == 0 {
+		fromWalk := m.scr == scJump && m.jumpFrom == scWalk
+		if len(m.entries()) == 0 || (!fromWalk && m.next() != "") {
 			m.advance()
 		}
 	}
@@ -488,7 +493,7 @@ func (m *Model) advance() {
 		d, ok := m.decision(id)
 		if ok && d.Status != "open" && !p.gone[id] {
 			p.gone[id] = true
-			delete(p.staged, id)
+			m.unstage(id)
 			p.notes = append(p.notes, id+" already "+d.Status)
 		}
 	}
@@ -617,7 +622,9 @@ func (m *Model) writeDrafts() tea.Cmd {
 }
 
 func (m *Model) onDraftsSaved(msg draftsSavedMsg) tea.Cmd {
+	// A poll started while the write ran may have read the db before it.
 	m.saving = false
+	m.draftGen++
 	if msg.err != nil {
 		note := "draft not saved: " + msg.err.Error()
 		if m.p != nil {
@@ -1122,7 +1129,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	case "left", "shift+tab":
 		m.step(-1)
 	case "right":
-		if !m.step(1) {
+		if !m.step(1) && m.next() == "" {
 			m.advance()
 		}
 	case "l":
@@ -1131,7 +1138,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	switch choice {
 	case "":
 	case "back":
-		m.toList(m.p.stopped("back"))
+		m.toList(m.p.stopped("back", m.drafts))
 	case "skip":
 		return m, m.stage(view.Staged{Kind: "skip", Rev: d.Rev})
 	case "free":
@@ -1228,7 +1235,7 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 	case "change":
 		m.openJump()
 	case "cancel":
-		m.toList(m.p.stopped("cancelled"))
+		m.toList(m.p.stopped("cancelled", m.drafts))
 	}
 	return m, nil
 }
@@ -1268,8 +1275,10 @@ func (m *Model) keyJump(k string) (tea.Model, tea.Cmd) {
 	items := m.jumpItems()
 	back := k == "esc" || (k == "enter" && items[min(m.cursor, len(items)-1)].value == "")
 	switch {
-	case back && m.jumpFrom == scWalk && m.p.cur != "":
+	case back && m.jumpFrom == scWalk && m.p.cur != "" && !m.p.gone[m.p.cur]:
 		m.show(m.p.cur)
+	case back && m.jumpFrom == scWalk:
+		m.advance()
 	case back:
 		m.scr, m.cursor = scReview, 0
 	case k == "enter":
