@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fake terminal-notifier: argv saved NUL-separated, one file per call, under
+# $FAKE_AM/notified; exits $FAKE_AM/notifier_rc when present (3 = denied).
+d="$FAKE_AM/notified"
+mkdir -p "$d"
+n=$(find "$d" -type f | wc -l | tr -d ' ')
+{ printf 'terminal-notifier\0'; printf '%s\0' "$@"; } >"$d/$(printf %06d "$n")"
+[ -f "$FAKE_AM/notifier_rc" ] && exit "$(cat "$FAKE_AM/notifier_rc")"
+exit 0

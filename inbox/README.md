@@ -24,7 +24,7 @@ main.go             wires the CLI to the real agent-manager client and the panel
 internal/inbox      store: schema v7, IDs, guarded transitions, flush, message,
                     prod-action approvals, chief's notes
 internal/guard      refuses prod answers from inside an agent session (env, ps walk)
-internal/am         agent-manager, tmux popup, stuck-paste follow-up and zen-bell calls
+internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell)
 internal/view       text for list rows, context blocks and question screens
 internal/md         glamour markdown for the panel: ANSI-16 style, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
@@ -33,7 +33,7 @@ internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
 testdata/xver       v1 and v2 dbs written by inbox.py, and a v4 db written by the
                     v4 binary (v4.sql), as SQL dumps
-testdata/fakes      fake agent-manager, tmux and zen-bell for tests
+testdata/fakes      fake agent-manager, tmux, zen-bell, terminal-notifier, osascript for tests
 ```
 
 ## Test

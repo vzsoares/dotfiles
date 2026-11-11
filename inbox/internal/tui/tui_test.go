@@ -31,6 +31,7 @@ type fakeAM struct {
 	sends    [][2]string
 	popups   []string
 	bells    []string
+	notices  [][2]string
 	noPopup  bool
 	fail     string
 }
@@ -62,6 +63,12 @@ func (f *fakeAM) Bell(msg string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.bells = append(f.bells, msg)
+}
+
+func (f *fakeAM) Notify(title, body string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.notices = append(f.notices, [2]string{title, body})
 }
 
 func (f *fakeAM) Followup(string) string { return "" }
@@ -611,24 +618,31 @@ func TestTalkUnavailablePrintsAttach(t *testing.T) {
 	}
 }
 
-func TestOneBellPerSessionPerCycle(t *testing.T) {
+func TestOneNoticePerNewItem(t *testing.T) {
 	d := newDrvWith(t, 92, 29, func(d *drv) { d.ask("7", "s1", "Q?") })
-	if len(d.am.bells) != 0 {
-		t.Fatalf("first read should not ring: %v", d.am.bells)
+	if len(d.am.notices) != 0 {
+		t.Fatalf("first read should not notify: %v", d.am.notices)
 	}
-	for range 3 {
-		d.ask("7", "s1", "Q?")
+	title := "Brief title"
+	if _, err := d.other.SetBrief("s1", "7", &title, nil); err != nil {
+		t.Fatal(err)
 	}
-	d.ask("8", "s2", "Q?")
+	d.ask("7", "s1", "First line?\nsecond line")
+	d.ask("7", "s1", "Another?")
+	d.ask("8", "s2", "Elsewhere?")
 	d.poll()
-	got := append([]string(nil), d.am.bells...)
-	slices.Sort(got)
-	if !slices.Equal(got, []string{"spec-s1: 3 new decision(s)", "spec-s2: 1 new decision(s)"}) {
-		t.Fatalf("bells %v", got)
+	want := [][2]string{
+		{"zen-inbox · #7 Brief title", "First line?"},
+		{"zen-inbox · #7 Brief title", "Another?"},
+		{"zen-inbox · #8", "Elsewhere?"},
+	}
+	if !slices.Equal(d.am.notices, want) {
+		t.Fatalf("notices %q, want %q", d.am.notices, want)
 	}
 	d.poll()
-	if len(d.am.bells) != 2 {
-		t.Fatalf("rang again: %v", d.am.bells)
+	d.poll()
+	if len(d.am.notices) != 3 {
+		t.Fatalf("notified again on later polls: %q", d.am.notices)
 	}
 }
 

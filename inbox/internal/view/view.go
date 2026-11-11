@@ -445,23 +445,21 @@ func Render(open, held []inbox.Decision, undelivered []inbox.Batch, sessions am.
 	return strings.Join(lines, "\n")
 }
 
-// BellMessages is one message per session with decisions not seen before.
-func BellMessages(open []inbox.Decision, seen map[string]bool) []string {
-	var order []string
-	fresh := map[string][]inbox.Decision{}
+// Notice is one banner: a decision not seen before.
+type Notice struct{ Title, Body string }
+
+// Notices is one banner per decision not in seen, in open order.
+func Notices(open []inbox.Decision, seen map[string]bool) []Notice {
+	var out []Notice
 	for _, d := range open {
 		if seen[d.ID] {
 			continue
 		}
-		if _, ok := fresh[d.SessionID]; !ok {
-			order = append(order, d.SessionID)
-		}
-		fresh[d.SessionID] = append(fresh[d.SessionID], d)
-	}
-	out := make([]string, 0, len(order))
-	for _, sid := range order {
-		ds := fresh[sid]
-		out = append(out, fmt.Sprintf("%s: %d new decision(s)", ds[0].SessionName, len(ds)))
+		body, _, _ := strings.Cut(strings.TrimSpace(d.Question), "\n")
+		out = append(out, Notice{
+			Title: "zen-inbox · " + Brief{Task: d.Task, Title: d.Title}.Head(),
+			Body:  strings.TrimSpace(body),
+		})
 	}
 	return out
 }

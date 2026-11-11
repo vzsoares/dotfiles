@@ -140,7 +140,7 @@ func TestFollowupReportsStillStuckAfterOnePress(t *testing.T) {
 	fastFollowup(t, 5*time.Second)
 	data := fakes(t, claude)
 	screens(t, data, box("❯ [Pasted text #1 +12 lines]"))
-	if got := (Exec{}).Followup("s1"); got != StillStuck {
+	if got := (Exec{OS: "linux"}).Followup("s1"); got != StillStuck {
 		t.Fatal(got)
 	}
 	if got := presses(t, data); len(got) != 1 {
@@ -159,7 +159,7 @@ func TestFollowupSkipsNonClaudeAndGone(t *testing.T) {
 	} {
 		data := fakes(t, sessions)
 		screens(t, data, box("❯ [Pasted text #1 +12 lines]"))
-		if got := (Exec{}).Followup("s1"); got != "" || len(presses(t, data)) != 0 {
+		if got := (Exec{OS: "linux"}).Followup("s1"); got != "" || len(presses(t, data)) != 0 {
 			t.Fatal(sessions, got)
 		}
 		if _, err := os.Stat(filepath.Join(data, "capture.n")); err == nil {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -22,6 +23,8 @@ const (
 	Socket      = "agentmgr"
 	// SenderRefused is agent-manager's error for --from inside an agent pane.
 	SenderRefused = "a sender name is for a caller with no session"
+	// Sound is zen-bell's window-attention sound on macOS.
+	Sound = "Ping"
 )
 
 // Session is one entry of `agent-manager sessions --json`, as decoded.
@@ -36,6 +39,8 @@ type Client interface {
 	Send(sessionID, message string) (ok bool, messageID, errText string)
 	Popup(sessionID string) bool
 	Bell(message string)
+	// Notify posts one banner.
+	Notify(title, body string)
 	// Followup runs after a successful Send and returns "", Submitted or StillStuck.
 	Followup(sessionID string) string
 }
@@ -44,6 +49,8 @@ type Client interface {
 type Exec struct {
 	// TmuxEnv is $TMUX of the watcher, for the popup's server.
 	TmuxEnv string
+	// OS overrides runtime.GOOS, for tests.
+	OS string
 }
 
 type result struct {
@@ -234,11 +241,43 @@ func (e Exec) Popup(sessionID string) bool {
 	return cmd.Run() == nil
 }
 
-func (Exec) Bell(message string) {
-	cmd := exec.Command("zen-bell", "window-attention", "-n", "zen-inbox", "-b", message)
-	if cmd.Start() == nil {
-		go func() { _ = cmd.Wait() }()
+func (e Exec) Bell(message string) { e.Notify("zen-inbox", message) }
+
+// Notify posts the banner in the background. macOS posts directly: going
+// through zen-bell hides terminal-notifier refusing to post (notifications off
+// for it), so a failed post falls back to osascript.
+func (e Exec) Notify(title, body string) {
+	goos := e.OS
+	if goos == "" {
+		goos = runtime.GOOS
 	}
+	go notify(goos, title, body)
+}
+
+func notify(goos, title, body string) {
+	if goos != "darwin" {
+		_, _ = run([]string{"zen-bell", "window-attention", "-n", title, "-b", body})
+		return
+	}
+	// terminal-notifier reads a leading "[" as markup.
+	msg := body
+	if strings.HasPrefix(body, "[") {
+		msg = `\` + body
+	}
+	argv := []string{"terminal-notifier", "-title", title, "-message", msg, "-sound", Sound}
+	if id := os.Getenv("__CFBundleIdentifier"); id != "" {
+		argv = append(argv, "-activate", id)
+	}
+	if r, err := run(argv); err == nil && r.code == 0 {
+		return
+	}
+	_, _ = run([]string{
+		"osascript",
+		"-e", "on run argv",
+		"-e", `display notification (item 2 of argv) with title (item 1 of argv) sound name "` + Sound + `"`,
+		"-e", "end run",
+		"--", title, body,
+	})
 }
 
 // DirName is Python's Path(directory).name.

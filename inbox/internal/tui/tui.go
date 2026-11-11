@@ -356,14 +356,14 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	return cmds
 }
 
-// ring is one bell per session with decisions not seen before; the first
-// read only learns what is already there.
+// ring is one banner per decision not seen before; the first read only learns
+// what is already there.
 func (m *Model) ring() []tea.Cmd {
 	var cmds []tea.Cmd
 	if m.seen != nil {
-		for _, msg := range view.BellMessages(m.snap.open, m.seen) {
+		for _, n := range view.Notices(m.snap.open, m.seen) {
 			client := m.am
-			cmds = append(cmds, func() tea.Msg { client.Bell(msg); return nil })
+			cmds = append(cmds, func() tea.Msg { client.Notify(n.Title, n.Body); return nil })
 		}
 	} else {
 		m.seen = map[string]bool{}

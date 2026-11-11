@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Fake osascript: argv saved NUL-separated, one file per call, under
+# $FAKE_AM/notified.
+d="$FAKE_AM/notified"
+mkdir -p "$d"
+n=$(find "$d" -type f | wc -l | tr -d ' ')
+{ printf 'osascript\0'; printf '%s\0' "$@"; } >"$d/$(printf %06d "$n")"
+exit 0
