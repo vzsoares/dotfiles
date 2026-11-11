@@ -147,7 +147,10 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   it; the global pre-push hook (`git/hooks`) consumes a `--prod push` ask for that
   repo, branch and sha, so file it before any such `git push`. Agents never answer a `--prod` ask. Workers
   never run one; chief or the orchestrator may after my approval. Never ff-merge a
-  worker branch into `prod`.
+  worker branch into `prod`. A release push rides its approval only when the
+  tip adds just CHANGELOG.md and the root package version (parsed) to the approved
+  sha; a hotfix-on-target release (the target has commits the approved sha lacks)
+  is refused, so file a `--prod push` ask for the exact tip.
 - Prod script or migration: `zen-inbox ask <task> --prod run --repo <repo> --cmd "<exact
   command>"`; the approval covers that exact command once and only I answer it.
 - Secret scan: the same pre-push hook first scans the pushed commits (gitleaks with

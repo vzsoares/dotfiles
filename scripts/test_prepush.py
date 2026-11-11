@@ -189,6 +189,7 @@ def env(tmp_path: Path) -> Env:
     e.fake("zen-inbox", FAKE_INBOX)
     e.fake("gum", FAKE_GUM)
     e.fake("ps", FAKE_PS)
+    e.fake("python3", f'#!/bin/bash\nexec "{sys.executable}" "$@"\n')
     e.fake("gitleaks", FAKE_GITLEAKS)
     e.fake("ggshield", FAKE_GGSHIELD)
     e.repo.mkdir()
@@ -541,12 +542,22 @@ VERSION_FILES = {
     "package.json": '{\n  "name": "app",\n  "version": "1.0.0",\n'
     '  "scripts": {\n    "build": "tsc"\n  }\n}\n',
     "package-lock.json": '{\n  "name": "app",\n  "version": "1.0.0",\n'
-    '  "packages": {\n    "": {\n      "version": "1.0.0"\n    }\n  }\n}\n',
+    '  "packages": {\n    "": {\n      "version": "1.0.0"\n    },\n'
+    '    "node_modules/dep": {\n      "version": "2.0.0"\n    }\n  }\n}\n',
+    "Cargo.toml": '[package]\nname = "app"\nversion = "1.0.0"\n\n'
+    '[dependencies]\nserde = "1"\n',
     "pyproject.toml": '[project]\nname = "app"\nversion = "1.0.0"\n'
     'dependencies = ["typer"]\n',
     "app/pubspec.yaml": "name: app\nversion: 1.0.0+3 # store build\n",
     "app/config.py": 'VERSION: str = "1.0.0"\nDEBUG = False\n',
 }
+
+
+POETRY = (
+    '[tool.poetry]\nname = "app"\nversion = "1.0.0"\n\n'
+    '[tool.poetry.dependencies]\npython = "^3.11"\n\n'
+    '[tool.poetry.dependencies.dep]\nversion = "2.0"\n'
+)
 
 
 def write_commit(env: Env, files: dict[str, str | None], msg: str = "bump") -> str:
@@ -609,12 +620,11 @@ def test_release_picks_the_approval_that_fits(env: Env) -> None:
 
 BUMPED = {
     "package.json": VERSION_FILES["package.json"].replace("1.0.0", "1.0.1"),
-    "package-lock.json": VERSION_FILES["package-lock.json"]
-    .replace("1.0.0", "1.0.1")
-    .replace('"app"', '"app2"'),
+    "package-lock.json": VERSION_FILES["package-lock.json"].replace("1.0.0", "1.0.1"),
+    "Cargo.toml": VERSION_FILES["Cargo.toml"].replace("1.0.0", "1.0.1"),
     "pyproject.toml": VERSION_FILES["pyproject.toml"].replace("1.0.0", "1.0.1"),
     "app/pubspec.yaml": "name: app\nversion: 1.0.1+4 # store build\n",
-    "app/config.py": 'VERSION: str = "1.0.1"\n\nDEBUG = False\n',
+    "app/config.py": 'VERSION: str = "1.0.1"\nDEBUG = False\n',
     "CHANGELOG.md": "## v1.0.1\n\n- anything goes here\n",
 }
 
@@ -638,6 +648,24 @@ def test_release_version_lines_and_changelog_pass(env: Env) -> None:
         {"app/config.py": 'VERSION: str = "1.0.1"\nDEBUG = True\n'},
         {"app/pubspec.yaml": "name: app\nversion: 1.0.1+4\nflutter: x\n"},
         {"src/version.json": '{"version": "1.0.1"}\n'},
+        {
+            "package-lock.json": VERSION_FILES["package-lock.json"].replace(
+                "2.0.0", "2.0.1"
+            )
+        },
+        {
+            "package-lock.json": VERSION_FILES["package-lock.json"].replace(
+                '"app"', '"evil"'
+            )
+        },
+        {"package.json": '{"version": "1.0.0", "version": "1.0.1"}\n'},
+        {
+            "Cargo.toml": VERSION_FILES["Cargo.toml"].replace(
+                'serde = "1"', 'serde = { version = "2" }'
+            )
+        },
+        {"app/config.py": 'VERSION: str = "1.0.1\\"\nDEBUG = False\n'},
+        {"package.json": '{"version": "1.0.1"'},
         {"init.txt": "changed"},
         {"init.txt": None},
         {"docs/CHANGELOG.md": "## v1.0.1\n"},
@@ -649,6 +677,12 @@ def test_release_version_lines_and_changelog_pass(env: Env) -> None:
         "py-other-line",
         "pubspec-other-line",
         "new-file",
+        "lock-dependency",
+        "lock-name",
+        "json-duplicate-version",
+        "cargo-dependency",
+        "py-escaped-quote",
+        "malformed-json",
         "code",
         "deletion",
         "nested-changelog",
@@ -663,6 +697,48 @@ def test_release_other_changes_need_their_own_ask(
     r = env.run("push", "origin", "master")
     assert_refused(r, "refused create of master", f"--sha {head}")
     assert [c.split()[1] for c in env.calls()] == ["check"]
+
+
+def test_release_poetry_root_version_passes(env: Env) -> None:
+    approved = write_commit(env, {"pyproject.toml": POETRY}, "base")
+    head = write_commit(
+        env,
+        {"pyproject.toml": POETRY.replace('version = "1.0.0"', 'version = "1.0.1"')},
+    )
+    env.vars["FAKE_PENDING"] = f"680.1 {approved}"
+    r = env.run("push", "origin", "master")
+    assert r.returncode == 0, r.stderr
+    assert env.calls() == release_calls(head)[1:]
+
+
+def test_release_poetry_dependency_version_is_refused(env: Env) -> None:
+    approved = write_commit(env, {"pyproject.toml": POETRY}, "base")
+    write_commit(env, {"pyproject.toml": POETRY.replace('"2.0"', '"2.1"')})
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+
+
+def test_release_without_python_fails_closed(env: Env) -> None:
+    approved = write_commit(env, dict(VERSION_FILES), "base")
+    write_commit(env, dict(BUMPED))
+    for py in ("python3", "uv"):
+        env.fake(py, "#!/bin/bash\nexit 1\n")
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+
+
+def test_release_nested_package_json_is_refused(env: Env) -> None:
+    approved = write_commit(env, {"vendor/package.json": '{"version": "1.0.0"}\n'})
+    write_commit(env, {"vendor/package.json": '{"version": "1.0.1"}\n'})
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
+
+
+def test_release_malformed_base_fails_closed(env: Env) -> None:
+    approved = write_commit(env, {"package.json": '{"version": "1.0.0"'}, "base")
+    write_commit(env, {"package.json": '{"version": "1.0.1"}\n'})
+    env.vars.update({"FAKE_PENDING": f"680.1 {approved}", "FAKE_CHECK": "1"})
+    assert_refused(env.run("push", "origin", "master"), "refused create of master")
 
 
 def test_release_mode_change_needs_its_own_ask(env: Env) -> None:

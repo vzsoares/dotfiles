@@ -6,6 +6,11 @@
 # create or update with gum. The repo's own pre-push runs before the consume,
 # so its failure leaves the approval unused. A guard rail, not a boundary:
 # --no-verify skips it.
+# A release push passes on its approval only if the remote tip is behind the
+# approved sha and the pushed sha adds just CHANGELOG.md and the root package
+# version in the files zen-release bumps (parsed, not pattern-matched). A
+# hotfix-on-target release, where the target branch has commits the approved
+# sha lacks, is refused; the fallback is a --prod push ask for the exact tip.
 # Known limit: git push --dry-run runs this hook too, so it consumes.
 set -e
 
@@ -171,8 +176,8 @@ EOF
 
 # $1 approved sha, $2 pushed sha, $3 remote sha: true when the remote tip is
 # behind the approved sha (no rollback to old approved content), the pushed sha
-# descends from it, and between them only CHANGELOG.md and the version lines
-# zen-release writes change.
+# descends from it, and between them only CHANGELOG.md and the root package
+# version of the files zen-release bumps change.
 release_fits() {
 	local meta path old new status
 	zero "$3" || git merge-base --is-ancestor "$3" "$1" 2>/dev/null || return 1
@@ -189,30 +194,28 @@ release_fits() {
 	done < <(git diff --raw -z --no-renames --no-abbrev "$1" "$2")
 }
 
-# Every changed line of $3 between $1 and $2 is blank or a version line of
-# that file's kind; other files fail.
+# $3 changed between $1 and $2 in nothing but the root package's own version,
+# judged on the parsed file (git/release-fits.py); a parse error fails.
 version_lines() {
-	local kind
-	case ${3##*/} in
-	package.json) kind=json ;;
-	package-lock.json) kind=lock ;;
-	pyproject.toml) kind=toml ;;
-	pubspec.yaml) kind=pubspec ;;
-	config.py | settings.py) kind=py ;;
+	case $3 in
+	package.json | package-lock.json | pyproject.toml | Cargo.toml) ;;
+	*/*) case ${3##*/} in pubspec.yaml | config.py | settings.py) ;; *) return 1 ;; esac ;;
+	pubspec.yaml | config.py | settings.py) ;;
 	*) return 1 ;;
 	esac
-	git diff -U0 --no-color --no-ext-diff --no-textconv "$1" "$2" -- ":(literal)$3" | awk -v kind="$kind" '
-		/^@@/ { body = 1; next }
-		!body || /^\\/ { next }
-		{ line = substr($0, 2) }
-		line ~ /^[ \t]*$/ { next }
-		(kind == "json" || kind == "lock") && line ~ /^[ \t]*"version"[ \t]*:[ \t]*"[^"]*",?[ \t]*$/ { next }
-		kind == "lock" && line ~ /^[ \t]*"name"[ \t]*:[ \t]*"[^"]*",?[ \t]*$/ { next }
-		kind == "toml" && line ~ /^[ \t]*version[ \t]*=[ \t]*"[^"]*"[ \t]*(#.*)?$/ { next }
-		kind == "pubspec" && line ~ /^version:[ \t]*[^ \t+#]+(\+[0-9]+)?[ \t]*(#.*)?$/ { next }
-		kind == "py" && line ~ /^[ \t]*(VERSION|VERSAO|__version__)([ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_]*)?[ \t]*=[ \t]*"[^"]*"[ \t]*(#.*)?$/ { next }
-		{ bad = 1 }
-		END { exit bad }'
+	local py
+	for py in python3 python3.13 python3.12 python3.11; do
+		if "$py" -I -c 'import tomllib' 2>/dev/null; then
+			"$py" -I "$zen_git/release-fits.py" "$1" "$2" "$3"
+			return
+		fi
+	done
+	if command -v uv >/dev/null 2>&1; then
+		uv run --no-project --no-python-downloads --python '>=3.11' python -I "$zen_git/release-fits.py" "$1" "$2" "$3"
+		return
+	fi
+	zen_say "no python >= 3.11 or uv to parse $3"
+	return 1
 }
 
 # zen-release consumes its approval before it merges and bumps; the inbox

@@ -57,8 +57,9 @@
 #      --resume reuses the id saved in the state unless the branch moved
 #      before the merge; --restart needs a new one. The pre-push hook then
 #      lets exactly one push through on the used approval, and only when the
-#      pushed tip adds nothing but version lines and CHANGELOG.md to the
-#      approved sha; a retry after a failed push needs a --prod push ask.
+#      pushed tip adds nothing but the root package version and CHANGELOG.md
+#      to the approved sha (a hotfix-on-target release is refused); a retry
+#      after a failed push needs a --prod push ask.
 #
 #  EXIT CODES
 #      0 ok · 1 failure or refusal · 3 approval missing, rejected or used

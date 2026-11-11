@@ -71,7 +71,9 @@ to file. A TTY run in your own terminal may go without one after a default-No
 confirm. `--resume` reuses the consumed id unless the branch moved before the
 merge; `--dry-run` never consumes. `--dev` needs no approval. The global pre-push
 hook then lets one push through on the used approval, recorded in the inbox, when
-the tip adds only version lines and `CHANGELOG.md` to the approved sha.
+the tip adds only the root package version (parsed, not pattern-matched) and
+`CHANGELOG.md` to the approved sha. A hotfix-on-target release (the target has
+commits the approved sha lacks) is refused; file a `--prod push` ask for the tip.
 Resumable, interactive orchestrator — state is saved so an interrupted run can
 `--resume`. `--dry-run` echoes mutating commands instead of running them.
 
