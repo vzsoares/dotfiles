@@ -75,8 +75,8 @@ inbox() {
 	esac
 }
 
-# Same rule as zen-inbox's guard: a path segment names the agent, also as a
-# runtime's script; the agent-manager tmux server (-L agentmgr) counts too.
+# Same rule as zen-inbox's guard: an agent binary, its install dir or npm
+# package, also as a runtime's script; the agentmgr tmux server counts too.
 agent_in() {
 	local exe f fields
 	read -ra fields <<<"$1"
@@ -94,8 +94,11 @@ agent_in() {
 	*) fields=("$exe") ;;
 	esac
 	for f in "${fields[@]}"; do
+		case ${f##*/} in
+		claude | claude-code | codex) return 0 ;;
+		esac
 		case /$f/ in
-		*/claude/* | */claude-code/* | */codex/*) return 0 ;;
+		*/claude/versions/* | */@anthropic-ai/claude-code/* | */@openai/codex/*) return 0 ;;
 		esac
 	done
 	return 1

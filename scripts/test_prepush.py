@@ -391,6 +391,7 @@ def unmarked(env: Env) -> Env:
         "claude --resume",
         "/usr/bin/node /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js",
         "codex exec",
+        "/usr/local/bin/node /usr/lib/node_modules/@openai/codex/bin/codex.js",
         "/opt/homebrew/bin/tmux -L agentmgr new-session",
         "tmux -Lagentmgr attach",
     ],
@@ -418,6 +419,7 @@ def test_agent_ancestor_with_approved_ask_passes(unmarked: Env) -> None:
         "/bin/zsh -l",
         "/opt/homebrew/bin/tmux -L default new-session",
         "/usr/bin/node /home/x/claudette/cli.js",
+        "/usr/bin/node /home/x/code/claude/tools/x.js",
         "/usr/bin/vim notes/claude/plan.md",
     ],
 )
