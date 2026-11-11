@@ -240,8 +240,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
   2 gate, 3 not ff, 4 dirty, 5 release, 6 refused (see Branch model), 7 board.
 - `zen-board` (everyone): the routine board ops above, over REST.
 - `zen-sweep` (chief, at start and after a restart): read-only report of dirty
-  trees, unpushed work, stashes, orphan branches and worktrees, a local `core.hooksPath` shadowing the prod gate (husky is only a note), and `branch-model`
-  drift in personal repos.
+  trees, unpushed work, stashes, orphan branches and worktrees, a local
+  `core.hooksPath` shadowing the prod gate (husky is only a note), and
+  `branch-model` drift in personal repos.
 - `zen-lock <name> [--wait SECS] -- <cmd>` (worker): runs a core-heavy command under
   `~/.cache/zen/<name>.lock`; releases on exit/INT/TERM, takes over a lock whose owner
   pid is gone, exits 75 on timeout. `status <name>`, `break <name>`.

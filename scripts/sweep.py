@@ -34,7 +34,7 @@
 #        orphan-worktree linked worktree with no live agent-manager session
 #        merged          branch already merged into its base (dev, else main/master)
 #        hooks-path      repo-local core.hooksPath shadowing the global prod-push
-#                        gate; husky (value or .husky/ dir) is a note instead
+#                        gate; husky (.husky or .husky/_) is a note instead
 #        branch-model    personal repos only: dev without prod (or the reverse),
 #                        a main/master left beside dev+prod, or a dev+prod
 #                        origin/HEAD that is not dev. main/master-only is valid.
@@ -231,7 +231,7 @@ def hooks_override(repo: Path) -> tuple[str, str] | None:
     value = git(repo, "config", "--local", "--get", "core.hooksPath").stdout.strip()
     if not value:
         return None
-    if value.rstrip("/") in (".husky", ".husky/_") or (repo / ".husky").is_dir():
+    if value.rstrip("/").removesuffix("/_").split("/")[-1] == ".husky":
         return ("husky", "husky hooks: prod gate via zen-release only")
     return ("hooks-path", f"{value} (skips the global prod-push hook)")
 

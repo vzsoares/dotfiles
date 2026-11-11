@@ -128,7 +128,9 @@ zen-sweep                                       # 0 clean · 1 findings; never c
   Repos under `~/code/personal` also get `branch-model`: `dev` without `prod` (or
   the reverse), a `main`/`master` beside dev+prod, or a dev+prod `origin/HEAD`
   other than `dev`. Single-branch repos are valid.
-  A repo-local `core.hooksPath` shadows the global prod-push gate: `hooks-path` warning, except husky (`.husky`, `.husky/_` or a `.husky/` dir), noted as `husky hooks: prod gate via zen-release only`.
+  A repo-local `core.hooksPath` shadows the global prod-push gate: `hooks-path`
+  warning, except a husky value (`.husky` or `.husky/_`), noted as `husky hooks:
+  prod gate via zen-release only`.
 
 ### zen-inbox
 ```

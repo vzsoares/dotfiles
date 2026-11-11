@@ -286,7 +286,9 @@ def test_hooks_no_override_is_silent(tmp_path: Path) -> None:
     assert _hooks(_init(tmp_path / "r")) == ([], [])
 
 
-@pytest.mark.parametrize("value", [".husky", ".husky/_", ".husky/"])
+@pytest.mark.parametrize(
+    "value", [".husky", ".husky/_", ".husky/", "/work/repo/.husky/_"]
+)
 def test_hooks_husky_value_is_info(tmp_path: Path, value: str) -> None:
     repo = _init(tmp_path / "r")
     _git("config", "core.hooksPath", value, cwd=repo)
@@ -295,12 +297,11 @@ def test_hooks_husky_value_is_info(tmp_path: Path, value: str) -> None:
     assert notes[0].endswith("husky hooks: prod gate via zen-release only")
 
 
-def test_hooks_husky_dir_is_info(tmp_path: Path) -> None:
+def test_hooks_husky_dir_with_other_value_is_warning(tmp_path: Path) -> None:
     repo = _init(tmp_path / "r")
     (repo / ".husky").mkdir()
-    _git("config", "core.hooksPath", "custom", cwd=repo)
-    assert _hooks(repo)[0] == []
-    assert len(_hooks(repo)[1]) == 1
+    _git("config", "core.hooksPath", "/other/hooks", cwd=repo)
+    assert _hooks(repo) == (["hooks-path"], [])
 
 
 def test_hooks_other_override_is_warning(tmp_path: Path) -> None:
