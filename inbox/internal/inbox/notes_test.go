@@ -240,11 +240,11 @@ func TestFailedReplyKeptAndRetried(t *testing.T) {
 		t.Fatalf("%+v", n)
 	}
 	// n2 is a fresh claim (in flight), n3 a crashed one.
-	if err := ib.Exec("UPDATE notes SET reply = 'x', delivery = 'sending', replied_at = ? WHERE id = 2",
+	if err := ib.Exec("UPDATE notes SET reply = 'x', delivery = 'sending', claimed_at = ? WHERE id = 2",
 		Stamp(Now())); err != nil {
 		t.Fatal(err)
 	}
-	if err := ib.Exec("UPDATE notes SET reply = 'y', delivery = 'sending', replied_at = ? WHERE id = 3",
+	if err := ib.Exec("UPDATE notes SET reply = 'y', delivery = 'sending', claimed_at = ? WHERE id = 3",
 		"2025-12-31T23:58:00+00:00"); err != nil {
 		t.Fatal(err)
 	}
@@ -351,5 +351,138 @@ func TestPruneKeepsUndeliveredReplies(t *testing.T) {
 	addNote(t, ib, "", "new")
 	if got := labels(t, ib, true); got != "n2 n1" {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestRetryKeepsRepliedAtAndMovesClaim(t *testing.T) {
+	ib, fake, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "a")
+	fake.fail = "session gone"
+	if _, err := ib.Reply(1, "first"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := ib.Note(1)
+	if n.RepliedAt != "2026-01-01T00:00:00+00:00" || n.ClaimedAt != n.RepliedAt {
+		t.Fatalf("%+v", n)
+	}
+	at(t, "2026-01-02T00:00:00+00:00")
+	if _, err := ib.RetryNote(1); err != nil {
+		t.Fatal(err)
+	}
+	n, _ = ib.Note(1)
+	if n.RepliedAt != "2026-01-01T00:00:00+00:00" || n.ClaimedAt != "2026-01-02T00:00:00+00:00" {
+		t.Fatalf("retry must move only the claim: %+v", n)
+	}
+}
+
+func TestClaimExpiresAndReclaimsOnClaimedAt(t *testing.T) {
+	ib, fake, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "a")
+	// Replied long ago, claimed now: in flight, not stale.
+	if err := ib.Exec("UPDATE notes SET reply = 'x', delivery = 'sending', replied_at = ?, claimed_at = ?"+
+		" WHERE id = 1", "2025-12-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"); err != nil {
+		t.Fatal(err)
+	}
+	if failed, _ := ib.FailedNotes(); len(failed) != 0 {
+		t.Fatalf("a fresh claim is not stale: %+v", failed)
+	}
+	at(t, "2026-01-01T00:02:00+00:00")
+	if failed, _ := ib.FailedNotes(); len(failed) != 1 {
+		t.Fatalf("an expired claim is stale: %+v", failed)
+	}
+	out, err := ib.RetryNotes("c1")
+	if err != nil || len(out) != 1 || !out[0].OK || len(fake.sends) != 1 {
+		t.Fatalf("%+v %v", out, err)
+	}
+	n, _ := ib.Note(1)
+	if n.RepliedAt != "2025-12-01T00:00:00+00:00" || n.ClaimedAt != "2026-01-01T00:02:00+00:00" {
+		t.Fatalf("%+v", n)
+	}
+}
+
+func TestV6DBMigratesToV7(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "zen-flow.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v := 1; v <= 6; v++ {
+		for _, stmt := range strings.Split(Migrations[v], ";") {
+			if strings.TrimSpace(stmt) != "" {
+				if _, err := raw.Exec(stmt); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	for _, stmt := range []string{
+		"PRAGMA user_version = 6",
+		"INSERT INTO notes (task, session_id, session_name, title, created_at) VALUES ('', 'c1', 'chief', 'plain', '2026-01-01T00:00:00+00:00')",
+		"INSERT INTO notes (task, session_id, session_name, title, created_at, reply, replied_at, delivery)" +
+			" VALUES ('', 'c1', 'chief', 'sending', '2026-01-01T00:00:00+00:00', 'r', '2026-01-02T00:00:00+00:00', 'sending')",
+		"INSERT INTO notes (task, session_id, session_name, title, created_at, reply, replied_at, delivery)" +
+			" VALUES ('', 'c1', 'chief', 'sent', '2026-01-01T00:00:00+00:00', 'r', '2026-01-03T00:00:00+00:00', 'sent')",
+	} {
+		if _, err := raw.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = raw.Close()
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	for i := range errs {
+		wg.Go(func() {
+			ib, err := Open(path, &fakeAM{})
+			if err == nil {
+				_, err = ib.Notes(true)
+				_ = ib.Close()
+			}
+			errs[i] = err
+		})
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		ib, err := Open(path, &fakeAM{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v, _ := ib.userVersion(); v != 7 {
+			t.Fatalf("user_version %d", v)
+		}
+		ns, err := ib.Notes(true)
+		if err != nil || len(ns) != 3 {
+			t.Fatalf("%+v %v", ns, err)
+		}
+		want := map[string][2]string{
+			"plain":   {"", ""},
+			"sending": {"2026-01-02T00:00:00+00:00", "2026-01-02T00:00:00+00:00"},
+			"sent":    {"2026-01-03T00:00:00+00:00", "2026-01-03T00:00:00+00:00"},
+		}
+		for _, n := range ns {
+			if got := [2]string{n.RepliedAt, n.ClaimedAt}; got != want[n.Title] {
+				t.Fatalf("%s: %v want %v", n.Title, got, want[n.Title])
+			}
+		}
+		_ = ib.Close()
+	}
+}
+
+func TestV6ClaimThroughRepliedAtIsNotStale(t *testing.T) {
+	ib, _, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "a")
+	if err := ib.Exec("UPDATE notes SET reply = 'x', delivery = 'sending', replied_at = ?, claimed_at = ''"+
+		" WHERE id = 1", Stamp(Now())); err != nil {
+		t.Fatal(err)
+	}
+	if failed, _ := ib.FailedNotes(); len(failed) != 0 {
+		t.Fatalf("a v6 claim in flight is not stale: %+v", failed)
 	}
 }

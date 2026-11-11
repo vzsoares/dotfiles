@@ -30,16 +30,25 @@ CREATE TABLE notes (
 );
 `
 
+// schemaV7 splits the claim clock from the reply time: replied_at stays when
+// the user replied, claimed_at is when a send last took the reply. A v6
+// reader still works but a retry there rewrites replied_at.
+const schemaV7 = `
+ALTER TABLE notes ADD COLUMN claimed_at TEXT NOT NULL DEFAULT '';
+UPDATE notes SET claimed_at = replied_at WHERE reply != '';
+`
+
 const (
 	NoteSender   = "chief"
 	TitleMax     = 120
 	BodyMax      = 16 * 1024
 	VisibleFor   = 24 * time.Hour
 	KeepFor      = 30 * 24 * time.Hour
-	noteColumns  = "id, task, session_id, session_name, title, body, created_at, read_at, reply, replied_at, delivery, message_id, delivery_error"
+	noteColumns  = "id, task, session_id, session_name, title, body, created_at, read_at, reply, replied_at, claimed_at, delivery, message_id, delivery_error"
 	visibleNotes = "(read_at = '' OR read_at >= ? OR delivery IN ('sending', 'failed'))"
-	// failedNotes is a failed reply, or a claim older than StaleSeconds.
-	failedNotes = "(delivery = 'failed' OR (delivery = 'sending' AND replied_at < ?))"
+	// failedNotes is a failed reply, or a claim older than StaleSeconds. A v6
+	// binary claims through replied_at only, so the later of the two counts.
+	failedNotes = "(delivery = 'failed' OR (delivery = 'sending' AND max(claimed_at, replied_at) < ?))"
 )
 
 // Note is one message from chief; ID is shown as n<ID>.
@@ -48,6 +57,7 @@ type Note struct {
 	Task, SessionID, SessionName        string
 	Title, Body                         string
 	CreatedAt, ReadAt, Reply, RepliedAt string
+	ClaimedAt                           string
 	Delivery, MessageID, DeliveryError  string
 }
 
@@ -150,7 +160,7 @@ func (ib *Inbox) selNotes(where string, args ...any) ([]Note, error) {
 	for rows.Next() {
 		var n Note
 		if err := rows.Scan(&n.ID, &n.Task, &n.SessionID, &n.SessionName, &n.Title, &n.Body, &n.CreatedAt,
-			&n.ReadAt, &n.Reply, &n.RepliedAt, &n.Delivery, &n.MessageID, &n.DeliveryError); err != nil {
+			&n.ReadAt, &n.Reply, &n.RepliedAt, &n.ClaimedAt, &n.Delivery, &n.MessageID, &n.DeliveryError); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
@@ -264,8 +274,9 @@ func (ib *Inbox) claimReply(id int64, text string) (Note, error) {
 			return errf(1, "%s already replied", n.Label())
 		}
 		n.Reply, n.RepliedAt, n.Delivery = text, stamp(), "sending"
-		return ib.exec("UPDATE notes SET reply = ?, replied_at = ?, delivery = 'sending'"+
-			" WHERE id = ? AND delivery = 'none'", n.Reply, n.RepliedAt, id)
+		n.ClaimedAt = n.RepliedAt
+		return ib.exec("UPDATE notes SET reply = ?, replied_at = ?, claimed_at = ?, delivery = 'sending'"+
+			" WHERE id = ? AND delivery = 'none'", n.Reply, n.RepliedAt, n.ClaimedAt, id)
 	})
 	return n, err
 }
@@ -373,8 +384,8 @@ func (ib *Inbox) claimRetries(where string, args ...any) ([]Note, error) {
 		}
 		now := stamp()
 		for i := range ns {
-			ns[i].Delivery, ns[i].RepliedAt = "sending", now
-			if err := ib.exec("UPDATE notes SET delivery = 'sending', replied_at = ? WHERE id = ?",
+			ns[i].Delivery, ns[i].ClaimedAt = "sending", now
+			if err := ib.exec("UPDATE notes SET delivery = 'sending', claimed_at = ? WHERE id = ?",
 				now, ns[i].ID); err != nil {
 				return err
 			}

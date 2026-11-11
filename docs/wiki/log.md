@@ -72,3 +72,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-11] update | Pre-push secret scan (#714)
 The global pre-push first scans the pushed commits (`git/secret-scan.sh`): gitleaks with the tuned `git/gitleaks.toml` (defaults plus basic-auth URI, password assignment and high-entropy rules) on every push, ggshield on `github.com/vzsoares/*` remotes with a 15 s watchdog and a skip line when it can't run. A repo `.gitleaks.toml` without `[extend]` is layered on the global config. A finding refuses the push before any zen-inbox call. Dotfiles' own fixture hits went to `.gitleaksignore`.
 Pages updated: manjaroi3/fresh-install.md, architecture/release-tooling.md
+
+## [2026-11-11] update | notes claim clock (#779)
+Schema v7 adds `notes.claimed_at`. A delivery retry used to rewrite `replied_at`, losing the reply's real time and skewing retry order; now `replied_at` is written once and claims/retries move `claimed_at`.
+Pages updated: architecture/decision-inbox.md

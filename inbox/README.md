@@ -21,7 +21,7 @@ macOS arm64 and Manjaro amd64.
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v6, IDs, guarded transitions, flush, message,
+internal/inbox      store: schema v7, IDs, guarded transitions, flush, message,
                     prod-action approvals, chief's notes
 internal/guard      refuses prod answers from inside an agent session (env, ps walk)
 internal/am         agent-manager, tmux popup, stuck-paste follow-up and zen-bell calls

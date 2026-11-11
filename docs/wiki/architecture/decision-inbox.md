@@ -199,7 +199,7 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
   `none → sending` claim runs in one `BEGIN IMMEDIATE`, so two panels never send
   twice. Success marks the note read; a failure keeps the reply and its error, shows
   a `retry reply n12` row and the `✕ delivery failed` status, and `r` / `zen-inbox
-  retry <session>` resend it (answers first; a `sending` claim older than 60 s counts).
+  retry <session>` resend it (answers first; a `sending` claim whose `claimed_at` is older than 60 s counts).
 - **Status and bell.** `◆ n open · names · ✉ k unread`, or `✉ k unread` alone;
   `○ inbox empty` only when both are zero. Notes never ring zen-bell and refresh on
   the same 2 s poll.
@@ -224,6 +224,9 @@ updated_at)`, the panel's unsent answers, again without touching existing tables
 v5 adds `notes` (below), also leaving existing tables alone. v6 adds `prod_actions.cmd`
 (default `''`), a run's exact command; a v5 reader still works on a v6 db (it names its
 columns) and can never consume a run ask, since its checks need a branch and sha.
+v7 adds `notes.claimed_at`: `replied_at` is the user's reply time, written once; a send
+claim and every retry set `claimed_at`, which the 60 s staleness check reads. The
+migration copies `replied_at` into `claimed_at` for rows with a reply.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

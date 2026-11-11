@@ -185,7 +185,7 @@ func TestV5DBMigratesToV6(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ib.Close()
-	if v, _ := ib.userVersion(); v != 6 {
+	if v, _ := ib.userVersion(); v != 7 {
 		t.Fatalf("user_version %d", v)
 	}
 	ib.User = true
