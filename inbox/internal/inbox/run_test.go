@@ -48,6 +48,9 @@ func TestAskRunValidation(t *testing.T) {
 		run(func(w *ProdAction) { w.Cmd = "ok \x1b[2Khidden" }),
 		run(func(w *ProdAction) { w.Cmd = "ok ‮dorp" }),
 		run(func(w *ProdAction) { w.Cmd = "ok \xff" }),
+		run(func(w *ProdAction) { w.Cmd = "ok\u2028rm -rf /" }),
+		run(func(w *ProdAction) { w.Cmd = "ok\u00a0--apply" }),
+		run(func(w *ProdAction) { w.Repo = "core\nother" }),
 		{Action: "release", Repo: "dotfiles", Branch: "prod", Sha: testSha, Cmd: "x"},
 	} {
 		if _, err := ib.AskProd(AskInput{Task: "736", SessionID: "s1"}, p); code(err) != 2 {

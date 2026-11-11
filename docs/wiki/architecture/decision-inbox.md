@@ -134,8 +134,8 @@ action, repo and branch match; else 1 with the reason (`not used`, `answered Hol
 `zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"` (#736) files an
 approval for a script or migration run against prod. It binds the repo (the main
 checkout folder name) and the command string, no branch or sha; `--cmd` must be one
-line of printable UTF-8 (no control or format characters), so the panel shows exactly
-what runs. The question is `run in <repo>: <cmd>?` and the y/N confirm prints the
+line of printable UTF-8 (no control, format or line-separator characters, no space but
+ASCII space), as must `--repo`, so the panel shows exactly what runs. The question is `run in <repo>: <cmd>?` and the y/N confirm prints the
 whole command, wrapped. `approval use|check <id> --action run --repo R --cmd C`
 (or `--match`) consumes it only when the command matches byte for byte, once.
 `--cmd` with any other action, or `--branch`/`--sha` with `run`, is exit 2.

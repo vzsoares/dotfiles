@@ -416,15 +416,16 @@ func (m *Model) viewConfirm() frame {
 	if d.Prod != nil {
 		p = *d.Prod
 	}
+	run := p.Action == inbox.RunAction
 	fields := [][2]string{{"action", p.Action}, {"repo", p.Repo}}
-	if p.Action != inbox.RunAction {
+	if !run {
 		fields = append(fields, [2]string{"branch", p.Branch})
 	}
 	var body []string
 	for _, kv := range fields {
 		body = append(body, view.WrapRest(fmt.Sprintf("%-7s%s", kv[0], kv[1]), m.w, "", "       ")...)
 	}
-	if p.Action == inbox.RunAction {
+	if run {
 		body = append(body, "command")
 		body = append(body, view.Wrap(p.Cmd, m.w, "")...)
 	} else {

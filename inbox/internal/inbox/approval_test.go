@@ -96,7 +96,7 @@ func TestApprovalReasons(t *testing.T) {
 		{"text", func(ib *Inbox, id string) { _, _ = ib.Answer(id, nil, p("Approve"), "", nil) }, want, "free text"},
 		{"withdrawn", func(ib *Inbox, id string) { _, _ = ib.Withdraw(id, "s1", false) }, want, "withdrawn"},
 		{"action", approve, other(func(w *ProdAction) { w.Action = "deploy" }), "action mismatch"},
-		{"repo", approve, other(func(w *ProdAction) { w.Repo = "core" }), "repo mismatch: approved dotfiles, releasing core"},
+		{"repo", approve, other(func(w *ProdAction) { w.Repo = "core" }), "repo mismatch: approved dotfiles, requested core"},
 		{"branch", approve, other(func(w *ProdAction) { w.Branch = "main" }), "branch mismatch"},
 		{"sha", approve, other(func(w *ProdAction) { w.Sha = strings.Repeat("f", 40) }),
 			"sha mismatch: approved " + testSha + ", releasing " + strings.Repeat("f", 40)},

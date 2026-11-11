@@ -64,13 +64,17 @@ func checkRun(p ProdAction) error {
 		return errf(2, "--prod run needs --repo and --cmd")
 	case p.Branch != "" || p.Sha != "":
 		return errf(2, "--prod run binds --cmd, not --branch or --sha")
-	case !utf8.ValidString(p.Cmd) || strings.ContainsFunc(p.Cmd, hidden):
-		return errf(2, "--cmd must be one line of printable UTF-8")
+	case !printable(p.Repo) || !printable(p.Cmd):
+		return errf(2, "--repo and --cmd must be one line of printable UTF-8")
 	}
 	return nil
 }
 
-func hidden(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }
+// printable rejects line and paragraph separators and every space but ASCII
+// space, which the confirm screen would break on or show as a plain space.
+func printable(s string) bool {
+	return utf8.ValidString(s) && !strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsPrint(r) })
+}
 
 // CheckTarget validates action, repo and branch.
 func CheckTarget(p ProdAction) error {
@@ -149,7 +153,7 @@ func mismatch(p, want ProdAction) string {
 	case p.Action != want.Action:
 		return fmt.Sprintf("action mismatch: approved %s, requested %s", p.Action, want.Action)
 	case p.Repo != want.Repo:
-		return fmt.Sprintf("repo mismatch: approved %s, releasing %s", p.Repo, want.Repo)
+		return fmt.Sprintf("repo mismatch: approved %s, requested %s", p.Repo, want.Repo)
 	case p.Cmd != want.Cmd:
 		return fmt.Sprintf("command mismatch: approved %s, requested %s", pyfmt.Repr(p.Cmd), pyfmt.Repr(want.Cmd))
 	case p.Branch != want.Branch:
