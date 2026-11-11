@@ -15,10 +15,8 @@ import (
 // EnvVars mark a process started by agent-manager or Claude Code.
 var EnvVars = []string{"AGENT_MANAGER_SESSION_ID", "AGENT_MANAGER_AGENT_PID", "CLAUDECODE"}
 
-// Agents are the path segments that name an agent CLI: a binary
-// (claude, codex), a native install dir (claude/versions/<ver>) or an
-// npm package (@anthropic-ai/claude-code).
-var Agents = []string{"claude", "claude-code", "codex"}
+// Binaries are the executable names of an agent CLI.
+var Binaries = []string{"claude", "codex"}
 
 // runtimes execute a script whose path names the agent.
 var runtimes = []string{"node", "bun", "deno"}
@@ -58,7 +56,7 @@ func walk(parent Parent, pid int) (bool, string) {
 }
 
 // agentIn returns the agent named by a command line's executable path, or
-// by any argument of a runtime (node --require x cli.js, bun run cli.js); segments must equal a name, not contain it.
+// by any argument of a runtime (node --require x cli.js, bun run cli.js).
 // Limit: an executable path containing spaces is split at the space and
 // missed; read /proc or use ps -o comm= as well if that install shows up.
 func agentIn(args string) string {
@@ -81,10 +79,23 @@ func agentIn(args string) string {
 	return ""
 }
 
+// agentSegment names the agent a path points at: an executable called
+// claude or codex, the native install (claude/versions/<ver>) or an npm
+// package (@anthropic-ai/claude-code, @openai/codex). A directory that merely
+// contains the name (~/code/claude/tools/x) does not match.
 func agentSegment(path string) string {
-	for _, seg := range strings.Split(path, "/") {
-		if slices.Contains(Agents, seg) {
-			return seg
+	segs := strings.Split(path, "/")
+	if base := segs[len(segs)-1]; slices.Contains(Binaries, base) {
+		return base
+	}
+	for i := 0; i+1 < len(segs); i++ {
+		switch {
+		case segs[i] == "claude" && segs[i+1] == "versions":
+			return "claude"
+		case segs[i] == "@anthropic-ai" && segs[i+1] == "claude-code":
+			return "claude-code"
+		case segs[i] == "@openai" && segs[i+1] == "codex":
+			return "codex"
 		}
 	}
 	return ""

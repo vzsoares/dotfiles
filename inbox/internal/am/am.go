@@ -46,6 +46,8 @@ type Client interface {
 	Chief(message string) (messageID, errText string)
 	// ChiefStatus is agent-manager's status for a message Chief queued.
 	ChiefStatus(messageID string) (status, errText string)
+	// MessageStatus is agent-manager's status for a message id.
+	MessageStatus(messageID string) (status, errText string)
 	// Followup runs after a successful Send and returns "", Submitted or StillStuck.
 	Followup(sessionID string) string
 }
@@ -240,6 +242,28 @@ func (Exec) ChiefStatus(messageID string) (string, string) {
 	data, errText := zenChief("--status", messageID)
 	if errText != "" {
 		return "", errText
+	}
+	return pyfmt.Str(data["status"]), ""
+}
+
+func (Exec) MessageStatus(messageID string) (string, string) {
+	r, err := run([]string{"agent-manager", "message-status", messageID, "--json"})
+	switch {
+	case errors.Is(err, errTimeout):
+		return "", "agent-manager message-status timed out"
+	case err != nil:
+		return "", "agent-manager not found"
+	case r.code != 0:
+		text := pyfmt.Strip(r.stderr)
+		if text == "" {
+			text = fmt.Sprintf("agent-manager message-status exited %d", r.code)
+		}
+		return "", text
+	}
+	v, err := decode(r.stdout)
+	data, ok := v.(map[string]any)
+	if err != nil || !ok || !pyfmt.Truthy(data["status"]) {
+		return "", "message-status printed no status"
 	}
 	return pyfmt.Str(data["status"]), ""
 }

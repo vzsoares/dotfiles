@@ -20,14 +20,25 @@ type fakeAM struct {
 	// followup is what Followup reports, and followed counts its calls.
 	followup string
 	followed int
+	// sessions is what Sessions lists; nil means agent-manager is unreachable.
+	sessions am.Sessions
+	// statuses maps a message id to what MessageStatus reports.
+	statuses map[string]string
 }
 
-func (f *fakeAM) Sessions() am.Sessions               { return nil }
+func (f *fakeAM) Sessions() am.Sessions               { return f.sessions }
 func (f *fakeAM) Popup(string) bool                   { return true }
 func (f *fakeAM) Bell(string)                         {}
 func (f *fakeAM) Notify(_, _ string)                  {}
 func (f *fakeAM) Chief(string) (string, string)       { return "", "" }
 func (f *fakeAM) ChiefStatus(string) (string, string) { return "", "" }
+
+func (f *fakeAM) MessageStatus(id string) (string, string) {
+	if st, ok := f.statuses[id]; ok {
+		return st, ""
+	}
+	return "", "not found"
+}
 
 func (f *fakeAM) Followup(string) string {
 	f.mu.Lock()

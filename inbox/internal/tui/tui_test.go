@@ -92,7 +92,8 @@ func (f *fakeAM) ChiefStatus(string) (string, string) {
 	return f.chiefStatus, ""
 }
 
-func (f *fakeAM) Followup(string) string { return "" }
+func (f *fakeAM) MessageStatus(string) (string, string) { return "", "" }
+func (f *fakeAM) Followup(string) string                { return "" }
 
 func sess(id string) am.Session {
 	return am.Session{"id": id, "name": "spec-" + id, "status": "idle", "running": true}

@@ -526,7 +526,7 @@ func (a *App) retry() *cobra.Command {
 			defer ib.Close()
 			res, err := ib.Retry(args[0])
 			var ie *inbox.Error
-			noAnswers := errors.As(err, &ie) && ie.Code == 1
+			noAnswers := errors.As(err, &ie) && ie.Empty
 			if err != nil && !noAnswers {
 				return err
 			}

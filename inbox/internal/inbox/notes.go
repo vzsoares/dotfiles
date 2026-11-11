@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
@@ -297,31 +298,88 @@ func (d NoteDelivery) Describe() string {
 	return "reply " + d.Note.Label() + " failed: " + d.Error + "; zen-inbox retry " + d.Note.SessionID
 }
 
-// sendReply sends a claimed reply; success also marks the note read.
-func (ib *Inbox) sendReply(n Note) (NoteDelivery, error) {
-	ok, mid, errText := ib.AM.Send(n.SessionID, ReplyMessage(n, n.Reply))
-	state, read := "failed", n.ReadAt
-	if ok {
-		state = "sent"
-		if read == "" {
-			read = stamp()
+// replyTarget is the session a reply goes to: the one live session with the
+// note sender's name, else the stored id while that session is alive.
+func (ib *Inbox) replyTarget(n Note) (string, error) {
+	sessions := ib.AM.Sessions()
+	if sessions == nil {
+		return n.SessionID, nil
+	}
+	var live []string
+	for _, s := range sessions {
+		id, _ := s["id"].(string)
+		if name, _ := s["name"].(string); name == n.SessionName && id != "" && am.Status(s) != "gone" {
+			live = append(live, id)
 		}
 	}
+	switch {
+	case len(live) == 1:
+		return live[0], nil
+	case am.Status(am.Find(sessions, n.SessionID)) != "gone":
+		return n.SessionID, nil
+	case len(live) == 0:
+		return "", errf(1, "no live session named %s", n.SessionName)
+	}
+	return "", errf(1, "%d live sessions named %s: %s", len(live), n.SessionName, strings.Join(live, ", "))
+}
+
+// accepted reports whether agent-manager still holds an earlier send of n, so
+// a retry after a failed write does not send the reply twice.
+func (ib *Inbox) accepted(n Note) bool {
+	if n.MessageID == "" {
+		return false
+	}
+	status, errText := ib.AM.MessageStatus(n.MessageID)
+	return errText == "" && status != "" && status != "dropped"
+}
+
+func (ib *Inbox) markReply(n Note, state, mid, errText string) (Note, error) {
+	read := n.ReadAt
+	if state == "sent" && read == "" {
+		read = stamp()
+	}
 	ib.mu.Lock()
+	defer ib.mu.Unlock()
 	err := ib.immediate(func() error {
 		return ib.exec("UPDATE notes SET delivery = ?, message_id = ?, delivery_error = ?, read_at = ?"+
 			" WHERE id = ?", state, mid, errText, read, n.ID)
 	})
-	ib.mu.Unlock()
+	n.Delivery, n.MessageID, n.DeliveryError, n.ReadAt = state, mid, errText, read
+	return n, err
+}
+
+// sendReply sends a claimed reply; success also marks the note read. The
+// message id is stored before the note is marked sent.
+func (ib *Inbox) sendReply(n Note) (NoteDelivery, error) {
+	if ib.accepted(n) {
+		n, err := ib.markReply(n, "sent", n.MessageID, "")
+		return NoteDelivery{Note: n, OK: err == nil}, err
+	}
+	target, err := ib.replyTarget(n)
+	if err != nil {
+		n, werr := ib.markReply(n, "failed", "", err.Error())
+		return NoteDelivery{Note: n, Error: err.Error()}, werr
+	}
+	ok, mid, errText := ib.AM.Send(target, ReplyMessage(n, n.Reply))
+	if !ok {
+		n, err := ib.markReply(n, "failed", "", errText)
+		return NoteDelivery{Note: n, Error: errText}, err
+	}
+	if mid != "" {
+		ib.mu.Lock()
+		err := ib.immediate(func() error {
+			return ib.exec("UPDATE notes SET message_id = ? WHERE id = ?", mid, n.ID)
+		})
+		ib.mu.Unlock()
+		if err != nil {
+			return NoteDelivery{}, err
+		}
+	}
+	n, err = ib.markReply(n, "sent", mid, "")
 	if err != nil {
 		return NoteDelivery{}, err
 	}
-	n.Delivery, n.MessageID, n.DeliveryError, n.ReadAt = state, mid, errText, read
-	res := NoteDelivery{Note: n, OK: ok, Error: errText}
-	if ok {
-		res.Followup = ib.AM.Followup(n.SessionID)
-	}
-	return res, nil
+	return NoteDelivery{Note: n, OK: true, Followup: ib.AM.Followup(target)}, nil
 }
 
 // Reply sends text as id's one reply to the note's sender.

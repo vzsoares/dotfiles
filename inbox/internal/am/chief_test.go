@@ -78,3 +78,16 @@ func TestChiefStatusReportsAgentManagersState(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestMessageStatusAsksAgentManagerDirectly(t *testing.T) {
+	data := fakes(t, chiefs)
+	if got, errText := (Exec{}).MessageStatus("42"); got != "queued" || errText != "" {
+		t.Fatalf("%q %q", got, errText)
+	}
+	if err := os.WriteFile(filepath.Join(data, "msg_status"), []byte("dropped"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := (Exec{}).MessageStatus("42"); got != "dropped" {
+		t.Fatal(got)
+	}
+}

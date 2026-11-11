@@ -7,11 +7,15 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 )
 
 func (d *drv) addNote(task, title, body string) inbox.Note {
 	d.t.Helper()
+	if am.Find(d.am.sessions, "c1") == nil {
+		d.am.sessions = append(d.am.sessions, am.Session{"id": "c1", "name": inbox.NoteSender, "status": "idle", "running": true})
+	}
 	n, err := d.other.AddNote(inbox.NoteInput{Task: task, Title: title, Body: body, SessionID: "c1",
 		Name: inbox.NoteSender})
 	if err != nil {

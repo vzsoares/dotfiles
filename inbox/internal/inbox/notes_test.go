@@ -2,12 +2,15 @@ package inbox
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 )
 
 func at(t *testing.T, stamp string) { t.Setenv("ZEN_INBOX_NOW", stamp) }
@@ -484,5 +487,93 @@ func TestV6ClaimThroughRepliedAtIsNotStale(t *testing.T) {
 	}
 	if failed, _ := ib.FailedNotes(); len(failed) != 0 {
 		t.Fatalf("a v6 claim in flight is not stale: %+v", failed)
+	}
+}
+
+func session(id, name, status string) am.Session {
+	return am.Session{"id": id, "name": name, "status": status, "running": true}
+}
+
+func TestReplyGoesToTheLiveSessionByName(t *testing.T) {
+	ib, fake, _ := open(t)
+	addNote(t, ib, "", "a")
+	fake.sessions = am.Sessions{session("c1", "chief", "dead"), session("c2", "chief", "idle")}
+	res, err := ib.Reply(1, "hi")
+	if err != nil || !res.OK || fake.sends[0][0] != "c2" {
+		t.Fatalf("%+v %v %q", res, err, fake.sends)
+	}
+}
+
+func TestReplyFallsBackToTheStoredIDOnlyWhileAlive(t *testing.T) {
+	ib, fake, _ := open(t)
+	addNote(t, ib, "", "a")
+	addNote(t, ib, "", "b")
+	fake.sessions = am.Sessions{session("c1", "renamed", "idle")}
+	if res, err := ib.Reply(1, "hi"); err != nil || !res.OK || fake.sends[0][0] != "c1" {
+		t.Fatalf("%+v %v %q", res, err, fake.sends)
+	}
+	fake.sessions = am.Sessions{session("c1", "renamed", "dead")}
+	res, err := ib.Reply(2, "hi")
+	if err != nil || res.OK || !strings.Contains(res.Error, "no live session named chief") || len(fake.sends) != 1 {
+		t.Fatalf("%+v %v %q", res, err, fake.sends)
+	}
+	if n, _ := ib.Note(2); n.Delivery != "failed" {
+		t.Fatalf("%+v", n)
+	}
+}
+
+func TestReplyRefusesSeveralLiveSessions(t *testing.T) {
+	ib, fake, _ := open(t)
+	addNote(t, ib, "", "a")
+	fake.sessions = am.Sessions{session("c2", "chief", "idle"), session("c3", "chief", "idle")}
+	res, err := ib.Reply(1, "hi")
+	if err != nil || res.OK || !strings.Contains(res.Error, "2 live sessions") || len(fake.sends) != 0 {
+		t.Fatalf("%+v %v %q", res, err, fake.sends)
+	}
+}
+
+func TestRetryAfterWriteFailureDoesNotResend(t *testing.T) {
+	ib, fake, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "a")
+	// The send landed and its id was stored, but the sent mark never was.
+	if err := ib.Exec("UPDATE notes SET reply = 'x', delivery = 'sending', claimed_at = ?,"+
+		" message_id = '42' WHERE id = 1", "2025-12-31T23:58:00+00:00"); err != nil {
+		t.Fatal(err)
+	}
+	fake.statuses = map[string]string{"42": "queued"}
+	out, err := ib.RetryNotes("c1")
+	if err != nil || len(out) != 1 || !out[0].OK || len(fake.sends) != 0 {
+		t.Fatalf("%+v %v %q", out, err, fake.sends)
+	}
+	if n, _ := ib.Note(1); n.Delivery != "sent" || n.Unread() {
+		t.Fatalf("%+v", n)
+	}
+}
+
+func TestRetryResendsADroppedMessage(t *testing.T) {
+	ib, fake, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "a")
+	if err := ib.Exec("UPDATE notes SET reply = 'x', delivery = 'sending', claimed_at = ?,"+
+		" message_id = '42' WHERE id = 1", "2025-12-31T23:58:00+00:00"); err != nil {
+		t.Fatal(err)
+	}
+	fake.statuses = map[string]string{"42": "dropped"}
+	out, err := ib.RetryNotes("c1")
+	if err != nil || len(out) != 1 || !out[0].OK || len(fake.sends) != 1 {
+		t.Fatalf("%+v %v %q", out, err, fake.sends)
+	}
+}
+
+func TestRetryWithNothingFailedIsMarkedEmpty(t *testing.T) {
+	ib, _, _ := open(t)
+	_, err := ib.Retry("c1")
+	var ie *Error
+	if !errors.As(err, &ie) || ie.Code != 1 || !ie.Empty {
+		t.Fatalf("%v", err)
+	}
+	if _, err := ib.Get("nope"); !errors.As(err, &ie) || ie.Empty {
+		t.Fatalf("a missing decision is not an empty retry: %v", err)
 	}
 }

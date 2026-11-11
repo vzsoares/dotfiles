@@ -113,7 +113,10 @@ message.
   named `chief` and queues the message with `agent-manager send --from zenha`. The
   status row then shows `✉ chief · message <id> queued`, polled with `zen-chief
   --status` until `delivered` (or `dropped`/`answered`), and clears 6 s later. A send
-  error (no chief, several) stays in the box with the draft.
+  error (no chief, several) stays in the box with the draft. `message-status` is
+  scoped to the sender: if agent-manager cannot report a message sent with `--from
+  zenha` (not verifiable from inside an agent session, which refuses `--from`), the
+  third empty poll shows `sent` rather than `delivered`.
 - **`r` retry.** On the list, `r` retries the first failed delivery; `enter` on a
   `retry <session>: n answer(s)` row retries that one. It runs `zen-inbox retry`'s
   path, including the delivery check.
@@ -226,7 +229,11 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
   30 s timeout and the stuck-paste follow-up) as `[zen-inbox] Reply to your note n12
   (#707 <title>):` plus the text, cut at a UTF-8 boundary under the send limit. The
   `none → sending` claim runs in one `BEGIN IMMEDIATE`, so two panels never send
-  twice. Success marks the note read; a failure keeps the reply and its error, shows
+  twice. The target is the one live session named like the sender (as `zen-chief`
+  does), falling back to the stored id only while that session is alive; none or
+  several live fail the reply. The send stores `message_id` first, then marks `sent`; a
+  retry that finds a `message_id` asks `agent-manager message-status` and marks `sent`
+  without resending unless the status is missing or `dropped`. Success marks the note read; a failure keeps the reply and its error, shows
   a `retry reply n12` row and the `✕ delivery failed` status, and `r` / `zen-inbox
   retry <session>` resend it (answers first; a `sending` claim whose `claimed_at` is older than 60 s counts).
 - **Header and bell.** Unread notes count in the header (`✉ k unread`). Notes never

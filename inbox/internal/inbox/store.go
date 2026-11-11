@@ -98,6 +98,8 @@ type Error struct {
 	Msg     string
 	Code    int
 	Amended bool
+	// Empty marks a retry that found nothing to resend.
+	Empty bool
 }
 
 func (e *Error) Error() string { return e.Msg }

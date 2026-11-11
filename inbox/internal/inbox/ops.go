@@ -518,7 +518,9 @@ func (ib *Inbox) Retry(session string) (*Delivery, error) {
 			return err
 		}
 		if len(rows) == 0 {
-			return errf(1, "no failed delivery for session %s", session)
+			e := errf(1, "no failed delivery for session %s", session)
+			e.Empty = true
+			return e
 		}
 		sid = rows[0].SessionID
 		for _, d := range rows {
