@@ -15,5 +15,6 @@ Rules
 5. Heavy renders and browser runs go under `zen-lock core-heavy -- <cmd>`.
 6. Match the product's language and tone.
 7. Settle small decisions with defaults and record them. A decision that changes the work is escalated to the orchestrator as `failing · tried · cause · needs` with send_session, not asked of the user.
+8. Before preship, pass the work through `~/.claude/agents/designer-checks.md`: the bar, first screen, one system, readability, motion. The repo's `DESIGN.md` and design memory win where they differ.
 
 When you implement, the worker-rules preset applies in full: `zen-commit --all --task <id>`, no `as` or `any`, no merges or pushes, one `/code-review medium --fix` round, `zen-gate`, and end with `WORKER_DONE <id>`.
