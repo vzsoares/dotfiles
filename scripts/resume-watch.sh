@@ -60,7 +60,7 @@ for s in rows:
 }
 
 limit_cleared() {
-	claude -p --model haiku 'Reply with the single word OK.' 2>&1 | grep -q 'OK'
+	claude -p --model haiku 'Reply with the single word OK.' 2>&1 | grep -qxE 'OK\.?'
 }
 
 revive_chief() {
@@ -92,7 +92,10 @@ scan_limits() {
 		return 0
 	fi
 	echo "$(stamp) limit confirmed for ${limited[*]}; probing every ${PROBE_WAIT}s"
-	until limit_cleared; do sleep "$PROBE_WAIT"; done
+	until limit_cleared; do
+		sleep "$PROBE_WAIT"
+		revive_chief
+	done
 	echo "$(stamp) limit cleared"
 	for id in "${limited[@]}"; do
 		if agent-manager send "$id" "The Claude usage limit has reset. Continue exactly where you left off." >/dev/null 2>&1; then
