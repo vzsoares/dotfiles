@@ -186,7 +186,7 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
 - **chief** reads the board, gets the user's approval, spawns a spec-writer per task
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
   (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
-  decisions (see Decision inbox), keeps the `cockpit` watcher running, records answers
+  decisions (see Decision inbox), keeps the `cockpit` and `resume-watch` terminals running, records answers
   the user gives in chat with `zen-inbox answer` (never a `--prod` ask: the user
   approves those in the panel), runs each Human Approval step the user approves (or hands
   it to the orchestrator; if auto mode blocks it, it asks for `go #<id>`), re-tags a step
@@ -291,11 +291,14 @@ listed until `zen-inbox retry <session>`.
   which reaches chief as `[zen-inbox] Reply to your note n12 (…)` and is treated like
   a chat message. When the user says in chat they read one, chief runs `zen-inbox read
   <id>`. Anything the user must choose stays a `zen-inbox ask`.
-- Chief keeps the watcher up: `agent-manager terminal list --json` shows a running
-  `cockpit` terminal in `chief`, else `agent-manager terminal create --name cockpit
-  --group chief --nest=false --json` and `tmux -L agentmgr send-keys -t am_<terminal id>
-  'zen-inbox watch' Enter` (agent-manager refuses `terminal send` to an un-nested
-  terminal from inside a session).
+- Chief keeps two un-nested terminals running in group `chief`: `cockpit`
+  (`zen-inbox watch`) and `resume-watch` (`zen-resume-watch`: revives a dead chief,
+  resumes sessions a usage limit stopped). It checks `agent-manager terminal list --json`
+  at start and after an agent-manager restart. For a terminal that is missing or idle at
+  a shell prompt it runs `agent-manager terminal create --name <name> --group chief
+  --nest=false --json`, then `tmux -L agentmgr send-keys -t am_<terminal id> '<cmd>'
+  Enter` (agent-manager refuses `terminal send` to an un-nested terminal from inside a
+  session). `resume-watch` must be un-nested so it outlives chief.
 
 The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
 orchestrator:

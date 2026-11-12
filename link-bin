@@ -21,6 +21,7 @@ LINKS=(
     "zen-merge:scripts/merge.py"
     "zen-sweep:scripts/sweep.py"
     "zen-lock:scripts/lock.sh"
+    "zen-resume-watch:scripts/resume-watch.sh"
     "zen-inbox:inbox/zen-inbox"
     "zen-board:scripts/board.py"
     "zen-pgp:scripts/pgp.py"
