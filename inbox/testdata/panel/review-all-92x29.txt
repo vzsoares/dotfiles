@@ -1,0 +1,29 @@
+cockpit · 3 open · 1 prod                                                          quota n/a
+Review all · spec-s1 · 3 open
+› 7.1  Which way?
+  a) left
+  b) right
+
+  7.2  Which store?
+  │ Both work.
+  │ Files are simpler.
+  a) sqlite
+  b) files  ← rec
+
+  680.1  release dotfiles prod@0123456789ab?
+    action release
+    repo   dotfiles
+    branch prod
+    sha
+    0123456789abcdef0123456789abcdef01234567
+  a) Approve  ← rec
+  b) Hold
+
+
+
+
+
+
+
+
+↑↓ move · enter walk · t talk · esc back · ? help

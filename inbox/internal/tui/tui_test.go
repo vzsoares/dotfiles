@@ -593,8 +593,12 @@ func TestTalkResolvesOnlyChosen(t *testing.T) {
 	}
 	d.poll()
 	d.keys("enter", "t")
-	if d.m.scr != scTalkPick || !slices.Equal(d.am.popups, []string{"s1"}) {
+	if d.m.scr != scTalkWho || len(d.am.popups) != 0 {
 		t.Fatalf("screen %d popups %v", d.m.scr, d.am.popups)
+	}
+	d.keys("enter")
+	if d.m.scr != scTalkPick || !slices.Equal(d.am.popups, []string{"s1"}) || len(d.m.marked) != 0 {
+		t.Fatalf("screen %d popups %v marked %v", d.m.scr, d.am.popups, d.m.marked)
 	}
 	d.keys(" ", "down", "down", " ", "enter")
 	if d.m.scr != scTalkNote {
@@ -610,8 +614,8 @@ func TestTalkResolvesOnlyChosen(t *testing.T) {
 		}
 	}
 	d.poll()
-	d.keys("enter", "t", "esc")
-	if d.m.flash != "all left open" || d.get("7.2").Status != "open" || len(d.am.sends) != 0 {
+	d.keys("enter", "t", "enter", "esc")
+	if d.m.flash != "all left open" || d.get("7.2").Status != "open" || len(d.am.sends) != 2 {
 		t.Fatalf("flash %q", d.m.flash)
 	}
 }
@@ -621,12 +625,12 @@ func TestTalkFromWalkResolvesCurrent(t *testing.T) {
 	d.ask("7", "s1", "First?", "x", "y")
 	d.ask("7", "s1", "Second?", "x", "y")
 	d.openWalk()
-	d.keys("t", " ", "enter", "esc")
+	d.keys("t", "enter", " ", "enter", "esc")
 	if d.m.scr != scWalk || d.m.p.cur != "7.2" || !strings.Contains(d.view(), "resolved 7.1") {
 		t.Fatalf("screen %d cur %q\n%s", d.m.scr, d.m.p.cur, d.view())
 	}
 	d.keys("b", "enter")
-	if len(d.am.sends) != 1 || strings.Contains(d.am.sends[0][1], "7.1") {
+	if len(d.am.sends) != 2 || strings.Contains(d.am.sends[1][1], "7.1") {
 		t.Fatalf("sends %v", d.am.sends)
 	}
 }
@@ -636,7 +640,7 @@ func TestTalkUnavailablePrintsAttach(t *testing.T) {
 	d.am.noPopup = true
 	d.ask("7", "s1", "Which way?", "left", "right")
 	d.poll()
-	d.keys("enter", "t")
+	d.keys("enter", "t", "enter")
 	if d.m.flash != "talk unavailable; attach with: tmux -L agentmgr attach -t am_s1" {
 		t.Fatalf("flash %q", d.m.flash)
 	}

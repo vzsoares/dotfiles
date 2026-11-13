@@ -101,7 +101,7 @@ func TestProdLockedInAgentSession(t *testing.T) {
 		if d.m.scr != scWalk || d.m.p.cur != id || len(d.m.p.staged) != 0 {
 			t.Fatalf("%v: locked ask answered: screen %d\n%s", sz, d.m.scr, d.view())
 		}
-		d.keys("t")
+		d.keys("t", "enter")
 		if d.m.scr == scTalkPick {
 			t.Fatalf("%v: talk offers to resolve the locked ask:\n%s", sz, d.view())
 		}
@@ -111,7 +111,7 @@ func TestProdLockedInAgentSession(t *testing.T) {
 		d.keys("esc")
 		d.poll()
 		d.keys("down", "enter", "enter", "b", "enter")
-		if dec := d.get(plain); dec.Status != "answered" || dec.AnswerOption != "b" || len(d.am.sends) != 1 {
+		if dec := d.get(plain); dec.Status != "answered" || dec.AnswerOption != "b" || len(d.am.sends) != 2 {
 			t.Fatalf("%v: %+v sends %v\n%s", sz, dec, d.am.sends, d.view())
 		}
 	}

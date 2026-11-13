@@ -225,6 +225,10 @@ func (m *Model) frame() frame {
 		return m.viewReview()
 	case scJump:
 		return m.viewJump()
+	case scAll:
+		return m.viewAll()
+	case scTalkWho:
+		return m.viewTalkWho()
 	case scTalkPick:
 		return m.viewTalkPick()
 	case scConfirm:
@@ -518,22 +522,7 @@ func (m *Model) viewConfirm() frame {
 	if d.Prod != nil {
 		p = *d.Prod
 	}
-	run := p.Action == inbox.RunAction
-	fields := [][2]string{{"action", p.Action}, {"repo", p.Repo}}
-	if !run {
-		fields = append(fields, [2]string{"branch", p.Branch})
-	}
-	var body []string
-	for _, kv := range fields {
-		body = append(body, view.WrapRest(fmt.Sprintf("%-7s%s", kv[0], kv[1]), m.w, "", "       ")...)
-	}
-	if run {
-		body = append(body, "command")
-		body = append(body, wrapCmd(p.Cmd, max(m.w, view.MinWidth))...)
-	} else {
-		body = append(body, "sha", p.Sha)
-	}
-	body = append(body, "", "Approve? y/N")
+	body := append(prodLines(p, m.w), "", "Approve? y/N")
 	return frame{s: scConfirm, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  prod approval", m.w)}, style: &bannerStyle}},
 		body: []section{{lines: body}}, cur: -1, help: true}
 }
@@ -580,14 +569,79 @@ func (m *Model) viewJump() frame {
 
 func (m *Model) viewTalkPick() frame {
 	head := view.Wrap("Which did the talk settle? (space marks, none leaves all open)", m.w, "")
+	return frame{s: scTalkPick, top: []section{{lines: head}},
+		body: m.markMenu(m.talkOpen), cur: m.cursor}
+}
+
+// markMenu is a [ ]/[x] menu of decisions, checked from m.marked.
+func (m *Model) markMenu(ds []inbox.Decision) []section {
 	var items []item
-	for _, d := range m.talkOpen {
+	for _, d := range ds {
 		box := "[ ] "
 		if m.marked[d.ID] {
 			box = "[x] "
 		}
 		items = append(items, item{box + d.ID + "  " + d.Question, d.ID})
 	}
-	return frame{s: scTalkPick, top: []section{{lines: head}},
-		body: menuSection(items, m.cursor, len(items), m.w), cur: m.cursor}
+	return menuSection(items, m.cursor, len(items), m.w)
+}
+
+// prodLines is a prod ask's action; the sha and a run's command get lines of
+// their own so all of them fit a narrow pane.
+func prodLines(p inbox.ProdAction, width int) []string {
+	run := p.Action == inbox.RunAction
+	fields := [][2]string{{"action", p.Action}, {"repo", p.Repo}}
+	if !run {
+		fields = append(fields, [2]string{"branch", p.Branch})
+	}
+	var out []string
+	for _, kv := range fields {
+		out = append(out, view.WrapRest(fmt.Sprintf("%-7s%s", kv[0], kv[1]), width, "", "       ")...)
+	}
+	if run {
+		out = append(out, "command")
+		return append(out, wrapCmd(p.Cmd, max(width, view.MinWidth))...)
+	}
+	return append(out, "sha", p.Sha)
+}
+
+// viewAll is every open decision of the session on one scrolling screen, the
+// highlighted one marked with ›.
+func (m *Model) viewAll() frame {
+	open := m.sessionOpen()
+	w := max(m.w-2, view.MinWidth)
+	var body []string
+	cur := -1
+	for i, d := range open {
+		if i > 0 {
+			body = append(body, "")
+		}
+		lines := view.PanelQuestionLines(d, w, m.paint)
+		if d.Prod != nil {
+			for _, l := range prodLines(*d.Prod, w-2) {
+				lines = append(lines, "  "+l)
+			}
+		}
+		lines = append(lines, view.PanelContextLines(d, w, m.paint)...)
+		lines = append(lines, view.PanelOptionLines(d, w, m.paint)...)
+		if i == m.cursor {
+			cur = len(body)
+		}
+		for j, l := range lines {
+			lead := "  "
+			if i == m.cursor && j == 0 {
+				lead = cursorStyle.Render("›") + " "
+			}
+			body = append(body, lead+l)
+		}
+	}
+	head := pyfmt.Clip("Review all · "+m.sname+" · "+strconv.Itoa(len(open))+" open", m.w)
+	return frame{s: scAll, top: []section{{lines: []string{head}, style: &headerStyle}},
+		body: []section{{lines: body}}, cur: cur, help: true}
+}
+
+func (m *Model) viewTalkWho() frame {
+	head := view.Wrap("Talk about which? (space marks, none means all)", m.w, "")
+	return frame{s: scTalkWho, top: []section{{lines: head}},
+		body: m.markMenu(m.sessionOpen()), cur: m.cursor}
 }

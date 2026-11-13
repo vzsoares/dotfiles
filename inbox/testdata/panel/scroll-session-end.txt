@@ -1,6 +1,5 @@
 cockpit · 1 open                                                                   quota n/a
-↑ 22 more
-│ context line 19
+↑ 23 more
 │ context line 20
 │ context line 21
 │ context line 22
@@ -25,6 +24,7 @@ cockpit · 1 open                                                               
 a) yes
 b) no
 › Answer
+  Review all
   Talk
   Back
-↑↓ · enter · t talk · esc back · ? help · ^u/^d scroll
+↑↓ · enter · r review · t talk · esc back · ? help · ^u/^d scroll

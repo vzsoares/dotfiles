@@ -44,6 +44,8 @@ const (
 	scFull
 	scReview
 	scJump
+	scAll
+	scTalkWho
 	scTalkPick
 	scTalkNote
 	scConfirm
@@ -88,6 +90,8 @@ type sentMsg struct {
 type talkMsg struct {
 	ok   bool
 	open []inbox.Decision
+	// told is why the agent got no talk message; the popup still opens.
+	told string
 	snap snapshot
 }
 type resolvedMsg struct {
@@ -196,8 +200,11 @@ type Model struct {
 	md *md.Renderer
 
 	talkFrom screen
-	talkOpen []inbox.Decision
-	marked   map[string]bool
+	// talkCursor is the cursor of the screen the talk started from.
+	talkCursor int
+	talkTold   string
+	talkOpen   []inbox.Decision
+	marked     map[string]bool
 
 	// prodBlock is why prod-action asks are locked here; it applies only
 	// while ib.User is false.
@@ -375,7 +382,7 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	// message reconciles the screen instead.
 	switch {
 	case m.busy != "":
-	case m.scr == scSession:
+	case m.p == nil && (m.scr == scSession || m.scr == scAll || m.scr == scTalkWho):
 		m.liveSession()
 	case m.p != nil:
 		m.livePass()
@@ -836,21 +843,70 @@ func (m *Model) onSent(msg sentMsg) tea.Cmd {
 
 // ------------------------------------------------------------------- talk --
 
-func (m *Model) startTalk(from screen) tea.Cmd {
-	m.talkFrom, m.busy = from, "Talking to "+m.sname+"…"
+// startTalk opens the pick of decisions to talk about.
+func (m *Model) startTalk(from screen) {
+	if len(m.sessionOpen()) == 0 {
+		m.toList("nothing open")
+		return
+	}
+	m.talkFrom, m.talkCursor, m.marked = from, m.cursor, map[string]bool{}
+	m.scr, m.cursor = scTalkWho, 0
+}
+
+// leaveTalkWho goes back to the screen the talk started from.
+func (m *Model) leaveTalkWho() {
+	switch {
+	case m.talkFrom == scWalk && m.p != nil && !m.p.gone[m.p.cur]:
+		m.show(m.p.cur)
+	case m.talkFrom == scWalk && m.p != nil:
+		m.advance()
+	default:
+		m.scr, m.cursor = m.talkFrom, m.talkCursor
+	}
+}
+
+// talkMessage tells the agent which decisions the user is about to talk about.
+func talkMessage(picked []inbox.Decision) string {
+	lines := []string{"zen-inbox: the user is opening a talk with you about " +
+		strconv.Itoa(len(picked)) + " open decision(s). Nothing is answered yet:"}
+	for _, d := range picked {
+		lines = append(lines, "- "+d.ID+": "+pyfmt.Clip(strings.Join(strings.Fields(d.Question), " "), 200))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// talkPicked is the marked decisions, or the whole set when none is.
+func (m *Model) talkPicked() []inbox.Decision {
+	open := m.sessionOpen()
+	ids := m.chosen(open)
+	if len(ids) == 0 {
+		return open
+	}
+	return slices.DeleteFunc(slices.Clone(open), func(d inbox.Decision) bool { return !slices.Contains(ids, d.ID) })
+}
+
+// talkCmd tells the agent, then opens the popup on its pane.
+func (m *Model) talkCmd() tea.Cmd {
+	msg := talkMessage(m.talkPicked())
+	m.busy = "Talking to " + m.sname + "…"
 	ib, client, sid, watched, sessions := m.ib, m.am, m.sid, m.watchedIDs(), m.snap.sessions
 	return func() tea.Msg {
+		_, _, told := client.Send(sid, msg)
 		if !client.Popup(sid) {
-			return talkMsg{snap: load(ib, client, watched, sessions, false)}
+			return talkMsg{told: told, snap: load(ib, client, watched, sessions, false)}
 		}
 		open, _ := ib.SessionOpen(sid)
-		return talkMsg{ok: true, open: open, snap: load(ib, client, watched, sessions, false)}
+		return talkMsg{ok: true, open: open, told: told, snap: load(ib, client, watched, sessions, false)}
 	}
 }
 
 func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 	m.busy = ""
 	m.snap = msg.snap
+	m.talkTold = ""
+	if msg.told != "" {
+		m.talkTold = "agent not told: " + msg.told
+	}
 	msg.open = slices.DeleteFunc(msg.open, m.locked)
 	switch {
 	case !msg.ok:
@@ -875,9 +931,9 @@ func (m *Model) notice(d inbox.Decision) string {
 	return "prod approvals only from the cockpit terminal (" + m.prodBlock + ")"
 }
 
-func (m *Model) chosen() []string {
+func (m *Model) chosen(from []inbox.Decision) []string {
 	var out []string
-	for _, d := range m.talkOpen {
+	for _, d := range from {
 		if m.marked[d.ID] {
 			out = append(out, d.ID)
 		}
@@ -887,7 +943,7 @@ func (m *Model) chosen() []string {
 
 func (m *Model) resolveCmd(note string) tea.Cmd {
 	m.busy = "Resolving…"
-	ib, client, sid, name, ids := m.ib, m.am, m.sid, m.sname, m.chosen()
+	ib, client, sid, name, ids := m.ib, m.am, m.sid, m.sname, m.chosen(m.talkOpen)
 	watched, sessions := m.watchedIDs(), m.snap.sessions
 	return func() tea.Msg {
 		var resolved, notes []string
@@ -919,7 +975,11 @@ func (m *Model) resolveCmd(note string) tea.Cmd {
 
 func (m *Model) finishTalk(resolved []string, flash string) {
 	m.talkOpen = nil
-	if m.talkFrom == scSession || m.p == nil {
+	if m.talkTold != "" {
+		flash = strings.TrimPrefix(m.talkTold+"; "+flash, "; ")
+		m.talkTold = ""
+	}
+	if m.talkFrom != scWalk || m.p == nil {
 		m.toList(flash)
 		return
 	}
@@ -949,7 +1009,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case m.scr == scr:
 	case scr == scWalk:
 		m.walkScroll, m.scroll = m.scroll, 0
-	case m.scr == scWalk && (scr == scFull || scr == scFree || scr == scConfirm):
+	case m.scr == scWalk && (scr == scFull || scr == scFree || scr == scConfirm || scr == scTalkWho):
 		m.scroll = m.walkScroll
 	default:
 		m.scroll = 0
@@ -1044,13 +1104,15 @@ func (m *Model) menuLen() int {
 		return len(reviewMenu)
 	case scJump:
 		return len(m.jumpItems())
+	case scAll, scTalkWho:
+		return len(m.sessionOpen())
 	case scTalkPick:
 		return len(m.talkOpen)
 	}
 	return 0
 }
 
-var sessionMenu = []item{{"Answer", "answer"}, {"Talk", "talk"}, {"Back", "back"}}
+var sessionMenu = []item{{"Answer", "answer"}, {"Review all", "all"}, {"Talk", "talk"}, {"Back", "back"}}
 var reviewMenu = []item{{"Send", "send"}, {"Change one", "change"}, {"Cancel", "cancel"}}
 
 func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -1106,6 +1168,10 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyReview(k)
 	case scJump:
 		return m.keyJump(k)
+	case scAll:
+		return m.keyAll(k)
+	case scTalkWho:
+		return m.keyTalkWho(k)
 	case scTalkPick:
 		return m.keyTalkPick(k)
 	case scNote:
@@ -1322,6 +1388,8 @@ func (m *Model) keySession(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "enter":
 		choice = sessionMenu[min(m.cursor, len(sessionMenu)-1)].value
+	case "r":
+		choice = "all"
 	case "t":
 		choice = "talk"
 	case "esc":
@@ -1330,8 +1398,10 @@ func (m *Model) keySession(k string) (tea.Model, tea.Cmd) {
 	switch choice {
 	case "answer":
 		m.startPass()
+	case "all":
+		m.scr, m.cursor = scAll, 0
 	case "talk":
-		return m, m.startTalk(scSession)
+		m.startTalk(scSession)
 	case "back":
 		m.toList("")
 	}
@@ -1393,7 +1463,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	case "full":
 		m.scr = scFull
 	case "talk":
-		return m, m.startTalk(scWalk)
+		m.startTalk(scWalk)
 	default:
 		switch {
 		case m.locked(d) || d.OptionText(choice) == "":
@@ -1544,6 +1614,41 @@ func (m *Model) keyJump(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) keyAll(k string) (tea.Model, tea.Cmd) {
+	open := m.sessionOpen()
+	switch k {
+	case "enter":
+		if m.cursor < len(open) {
+			id := open[m.cursor].ID
+			m.startPass()
+			if m.p != nil && slices.Contains(m.p.order, id) && !m.p.gone[id] {
+				m.show(id)
+			}
+		}
+	case "t":
+		m.startTalk(scAll)
+	case "esc":
+		m.scr, m.cursor = scSession, 1
+	}
+	return m, nil
+}
+
+func (m *Model) keyTalkWho(k string) (tea.Model, tea.Cmd) {
+	open := m.sessionOpen()
+	switch k {
+	case " ", "space":
+		if m.cursor < len(open) {
+			id := open[m.cursor].ID
+			m.marked[id] = !m.marked[id]
+		}
+	case "enter":
+		return m, m.talkCmd()
+	case "esc":
+		m.leaveTalkWho()
+	}
+	return m, nil
+}
+
 func (m *Model) keyTalkPick(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case " ", "space":
@@ -1552,7 +1657,7 @@ func (m *Model) keyTalkPick(k string) (tea.Model, tea.Cmd) {
 			m.marked[id] = !m.marked[id]
 		}
 	case "enter":
-		if len(m.chosen()) == 0 {
+		if len(m.chosen(m.talkOpen)) == 0 {
 			m.finishTalk(nil, "all left open")
 			return m, nil
 		}

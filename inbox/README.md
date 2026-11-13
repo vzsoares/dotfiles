@@ -28,7 +28,7 @@ internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (t
 internal/view       text for list rows, context blocks and question screens
 internal/md         glamour markdown for the panel: ANSI-16 style, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
-internal/tui        the watch panel (list, session, walk, review, talk, notes)
+internal/tui        the watch panel (list, session, review all, walk, review, talk, notes)
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
 testdata/xver       v1 and v2 dbs written by inbox.py, and a v4 db written by the

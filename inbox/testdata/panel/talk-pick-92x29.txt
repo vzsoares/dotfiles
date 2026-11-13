@@ -1,0 +1,29 @@
+cockpit · 3 open · 1 prod                                                          quota n/a
+Talk about which? (space marks, none means all)
+› [ ] 7.1  Which way?
+  [ ] 7.2  Which store?
+  [ ] 680.1  release dotfiles prod@0123456789ab?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · space mark · enter talk · esc back

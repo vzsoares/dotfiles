@@ -22,9 +22,9 @@ asked by spec-s1 · idle · 0s
 │ context line 17
 │ context line 18
 │ context line 19
-│ context line 20
-↓ 22 more
+↓ 23 more
 › Answer
+  Review all
   Talk
   Back
-↑↓ · enter · t talk · esc back · ? help · ^u/^d scroll
+↑↓ · enter · r review · t talk · esc back · ? help · ^u/^d scroll

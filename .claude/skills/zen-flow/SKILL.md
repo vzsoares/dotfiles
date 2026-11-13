@@ -278,6 +278,11 @@ session (zen-bell rings once per session per poll). Opening one shows the task c
 its questions; the user walks them (pick, free text, skip) and sends them from a
 review screen, or talks (a tmux popup on `tmux -L agentmgr attach -t am_<session>`,
 then a pick of which decisions it settled; those close and send nothing).
+`r` (Review all) shows every open decision of the session on one scrolling screen,
+prod asks with action, repo and command or sha; enter there walks from the marked one.
+`t` first picks the decisions to talk about (none marked means all), sends the agent
+one `agent-manager send ... --from zen-inbox` message naming them, then opens the popup;
+the talk closes nothing by itself.
 Answers are held until the asking session has no open decision, then go out as one
 `agent-manager send <session> ... --from zen-inbox` message. A failed delivery stays
 listed until `zen-inbox retry <session>`.
