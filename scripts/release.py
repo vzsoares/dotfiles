@@ -426,11 +426,19 @@ def gum_confirm(prompt: str, default: bool = True) -> bool:
     return result.returncode == 0
 
 
-def run(cmd: list[str], *, title: str = "") -> subprocess.CompletedProcess[str]:
-    """Run a command, optionally under `gum spin`. Honors --dry-run."""
+def run(
+    cmd: list[str], *, title: str = "", live: bool = False
+) -> subprocess.CompletedProcess[str]:
+    """Run a command under `gum spin` (title), on the terminal (live), or captured.
+
+    Honors --dry-run. A live run streams output and prompts; nothing captures it.
+    """
     if DRY_RUN:
         info(f"[dry-run] {' '.join(cmd)}")
         return subprocess.CompletedProcess(cmd, 0, "", "")
+    if live:
+        done = subprocess.run(cmd, check=False)
+        return subprocess.CompletedProcess(cmd, done.returncode, "", "")
     if title:
         spin = subprocess.run(
             ["gum", "spin", "--show-error", "--title", title, "--", *cmd],
@@ -1468,12 +1476,14 @@ def phase_push(state: State) -> None:
     if not gum_confirm(f"Push {target} and tags to origin?"):
         info("Skipped push. Don't forget to push later.")
         return
-    # The global pre-push hook lets one push through on the used approval and
-    # records it in the inbox; it may also ask on the tty, so no spinner.
-    result = run(
-        ["git", "push", "origin", target, "--follow-tags"],
-        title=f"Pushing {target}..." if state.dev else "",
-    )
+    cmd = ["git", "push", "origin", target, "--follow-tags"]
+    if state.dev:
+        result = run(cmd, title=f"Pushing {target}...")
+    else:
+        # Live, not captured: the pre-push hook scans, may confirm on the tty
+        # and consumes the approval, and all of it must stay visible.
+        info(f"Pushing {target} (pre-push hook output follows)...")
+        result = run(cmd, live=True)
     if result.returncode != 0:
         if result.stderr:
             info(result.stderr.strip())

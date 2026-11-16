@@ -167,7 +167,7 @@ def offline_gum(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(release, "gum_style", lambda *a, **k: None)
 
     def plain_run(
-        cmd: list[str], *, title: str = ""
+        cmd: list[str], *, title: str = "", live: bool = False
     ) -> subprocess.CompletedProcess[str]:
         if release.DRY_RUN:
             return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -1035,7 +1035,9 @@ def test_dev_release_refused_on_prod_branches(
         _git("switch", "-q", "-c", branch)
     head = _git("rev-parse", "HEAD")
     cmds: list[list[str]] = []
-    monkeypatch.setattr(release, "run", lambda cmd, *, title="": cmds.append(cmd))
+    monkeypatch.setattr(
+        release, "run", lambda cmd, *, title="", live=False: cmds.append(cmd)
+    )
     messages: list[str] = []
     monkeypatch.setattr(release, "fail", messages.append)
 
@@ -1268,7 +1270,7 @@ def test_secret_scan_uses_remote_range(
 
     calls: list[list[str]] = []
 
-    def _mock_run(cmd, *, title=""):
+    def _mock_run(cmd, *, title="", live=False):
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
@@ -1299,7 +1301,7 @@ def test_secret_scan_falls_back_to_head_when_no_remote(
 
     calls: list[list[str]] = []
 
-    def _mock_run(cmd, *, title=""):
+    def _mock_run(cmd, *, title="", live=False):
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
@@ -1910,16 +1912,16 @@ def test_dry_run_checks_but_never_consumes(dev_prod: Path) -> None:
 
 
 class _PushRecorder:
-    """Records each push's spinner title."""
+    """Records each push's spinner title, or "live" for a terminal run."""
 
     def __init__(self, code: int = 0) -> None:
         self.code = code
         self.titles: list[str] = []
 
     def __call__(
-        self, cmd: list[str], *, title: str = ""
+        self, cmd: list[str], *, title: str = "", live: bool = False
     ) -> subprocess.CompletedProcess[str]:
-        self.titles.append(title)
+        self.titles.append("live" if live else title)
         return subprocess.CompletedProcess(cmd, self.code, "", "")
 
 
@@ -1942,8 +1944,8 @@ def test_phase_push_writes_nothing_to_the_repo(push_recorder: _PushRecorder) -> 
     release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
     release.phase_push(release.State(target_branch="dev", dev=True, approval_id="x"))
     assert sorted(p.name for p in common.iterdir()) == before
-    # The hook may prompt on the tty, so no prod push runs under a spinner.
-    assert push_recorder.titles == ["", "Pushing dev..."]
+    # The hook may prompt on the tty, so a prod push runs live, never captured.
+    assert push_recorder.titles == ["live", "Pushing dev..."]
 
 
 def test_phase_push_failure_hints_resume(
@@ -1956,6 +1958,7 @@ def test_phase_push_failure_hints_resume(
     with pytest.raises(typer.Exit):
         release.phase_push(release.State(target_branch="prod", approval_id="680.1"))
     assert hints == [
+        "Pushing prod (pre-push hook output follows)...",
         "  or push it yourself: git push origin prod --follow-tags",
         "  The approval's one push may be spent; a retry may need a --prod push ask.",
     ]
