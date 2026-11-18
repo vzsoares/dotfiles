@@ -204,3 +204,11 @@ func TestRenderFailureFallsBackToRawText(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestSentinelRunesInTextDoNotOpenABox(t *testing.T) {
+	got := plain().Lines("icon "+fenceOpen+" here\n\nafter "+fenceClose, 30)
+	want := []string{"icon � here", "", "after �"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%q", got)
+	}
+}

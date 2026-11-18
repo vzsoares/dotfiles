@@ -72,8 +72,9 @@ func (r *Renderer) Cached(k Key, text string) []string {
 func (r *Renderer) Lines(text string, width int) []string {
 	r.sync()
 	width = max(width, 1)
-	// Cells are counted per rune, so a tab would overrun the width.
-	text = strings.ReplaceAll(text, "\t", "    ")
+	// Cells are counted per rune, so a tab would overrun the width; the fence
+	// sentinels (Nerd Font glyphs too) would open a box mid-text.
+	text = inputFix.Replace(text)
 	out, err := r.render(text, width)
 	if err != nil {
 		out = text
@@ -140,6 +141,8 @@ const (
 	fenceOpen  = "\ue000"
 	fenceClose = "\ue001"
 )
+
+var inputFix = strings.NewReplacer("\t", "    ", fenceOpen, "\ufffd", fenceClose, "\ufffd")
 
 // box frames code lines in a rounded border at lead's indent, sized to the
 // widest line; too narrow a pane gets the lines unframed.

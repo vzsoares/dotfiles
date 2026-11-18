@@ -99,4 +99,9 @@ func TestReviewAnswerJoinsTheQuestionOnlyWhenItFits(t *testing.T) {
 	if len(got) < 2 || !strings.HasPrefix(got[len(got)-1], "  → a: Keep glamour") {
 		t.Fatalf("long line not split under the question: %q", got)
 	}
+	d.Question = "Which?\n\n```\nx\n```"
+	got = PanelReviewLines(d, pick, 92, plain)
+	if last := got[len(got)-1]; !strings.HasPrefix(last, "  → a:") {
+		t.Fatalf("answer joined a multi-line question: %q", got)
+	}
 }

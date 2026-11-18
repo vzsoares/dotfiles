@@ -515,15 +515,14 @@ type Staged struct {
 }
 
 // PanelReviewLines is d's question then " → " and its staged answer, which
-// goes under the question when it does not fit on its last line.
+// goes under the question unless both fit on one line.
 func PanelReviewLines(d inbox.Decision, s *Staged, width int, p Painter) []string {
 	out := PanelQuestionLines(d, width, p)
 	k := md.Key{ID: d.ID, Rev: d.Rev, Field: "staged"}
 	text := StagedText(d, s)
-	last := len(out) - 1
-	if a := Painted(p, k, text, width, "", ""); len(a) == 1 &&
-		lipgloss.Width(out[last])+3+lipgloss.Width(a[0]) <= max(width, MinWidth) {
-		out[last] += " → " + a[0]
+	if a := Painted(p, k, text, width, "", ""); len(out) == 1 && len(a) == 1 &&
+		lipgloss.Width(out[0])+3+lipgloss.Width(a[0]) <= max(width, MinWidth) {
+		out[0] += " → " + a[0]
 		return out
 	}
 	return append(out, Painted(p, k, text, width, "  → ", "    ")...)
