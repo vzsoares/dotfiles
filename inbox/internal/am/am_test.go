@@ -154,3 +154,9 @@ func TestDirName(t *testing.T) {
 		}
 	}
 }
+
+func TestCanPopupNeedsTmuxServer(t *testing.T) {
+	if (Exec{}).CanPopup("ab12") {
+		t.Fatal("popup without a tmux server")
+	}
+}

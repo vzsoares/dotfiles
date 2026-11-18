@@ -37,6 +37,9 @@ type Sessions []Session
 type Client interface {
 	Sessions() Sessions
 	Send(sessionID, message string) (ok bool, messageID, errText string)
+	// CanPopup reports whether Popup can open for the session, so the agent is
+	// not told about a talk that cannot start.
+	CanPopup(sessionID string) bool
 	Popup(sessionID string) bool
 	Bell(message string)
 	// Notify posts one banner.
@@ -302,6 +305,13 @@ func PopupArgv(sessionID, tmuxEnv string) []string {
 		"tmux", "-S", socket, "display-popup", "-E", "-w", "90%", "-h", "90%",
 		"env -u TMUX " + AttachCommand(sessionID),
 	}
+}
+
+func (e Exec) CanPopup(sessionID string) bool {
+	if PopupArgv(sessionID, e.TmuxEnv) == nil {
+		return false
+	}
+	return exec.Command("tmux", "-L", Socket, "has-session", "-t", "am_"+sessionID).Run() == nil
 }
 
 func (e Exec) Popup(sessionID string) bool {

@@ -43,7 +43,8 @@ message.
    its end. At Send the `rev` check stays the backstop: one closed elsewhere is
    reported and skipped, one amended is shown again. Talk opens `tmux display-popup`
    on the agent's session, then a multi-select resolves the decisions it settled (as
-   `talk`, optional note); the rest stay open.
+   `talk`, optional note); the rest stay open. A talk returns to where it started
+   (the walk, the session menu, or Review all); the popup is checked before the agent is told.
 5. **flush** — when the session's last open decision closes (answer, resolve or
    withdraw), its held answers are sent as one message:
 

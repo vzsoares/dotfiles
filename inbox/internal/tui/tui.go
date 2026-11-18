@@ -885,12 +885,15 @@ func (m *Model) talkPicked() []inbox.Decision {
 	return slices.DeleteFunc(slices.Clone(open), func(d inbox.Decision) bool { return !slices.Contains(ids, d.ID) })
 }
 
-// talkCmd tells the agent, then opens the popup on its pane.
+// talkCmd checks the popup can open, tells the agent, then opens the popup on its pane.
 func (m *Model) talkCmd() tea.Cmd {
 	msg := talkMessage(m.talkPicked())
 	m.busy = "Talking to " + m.sname + "…"
 	ib, client, sid, watched, sessions := m.ib, m.am, m.sid, m.watchedIDs(), m.snap.sessions
 	return func() tea.Msg {
+		if !client.CanPopup(sid) {
+			return talkMsg{snap: load(ib, client, watched, sessions, false)}
+		}
 		_, _, told := client.Send(sid, msg)
 		if !client.Popup(sid) {
 			return talkMsg{told: told, snap: load(ib, client, watched, sessions, false)}
@@ -978,6 +981,14 @@ func (m *Model) finishTalk(resolved []string, flash string) {
 	if m.talkTold != "" {
 		flash = strings.TrimPrefix(m.talkTold+"; "+flash, "; ")
 		m.talkTold = ""
+	}
+	if m.talkFrom == scAll {
+		if open := m.sessionOpen(); len(open) > 0 {
+			m.scr, m.p, m.flash, m.scroll = scAll, nil, flash, 0
+			m.cursor = min(m.talkCursor, len(open)-1)
+			m.flashOK, m.flashAt = false, m.now()
+			return
+		}
 	}
 	if m.talkFrom != scWalk || m.p == nil {
 		m.toList(flash)

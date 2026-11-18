@@ -38,6 +38,7 @@ type fakeAM struct {
 	chiefErr    string
 	chiefStatus string
 	noPopup     bool
+	noCanPopup  bool
 	fail        string
 }
 
@@ -56,6 +57,8 @@ func (f *fakeAM) Send(sid, msg string) (bool, string, string) {
 	}
 	return true, "42", ""
 }
+
+func (f *fakeAM) CanPopup(string) bool { return !f.noCanPopup && !f.noPopup }
 
 func (f *fakeAM) Popup(sid string) bool {
 	f.mu.Lock()
@@ -643,6 +646,39 @@ func TestTalkUnavailablePrintsAttach(t *testing.T) {
 	d.keys("enter", "t", "enter")
 	if d.m.flash != "talk unavailable; attach with: tmux -L agentmgr attach -t am_s1" {
 		t.Fatalf("flash %q", d.m.flash)
+	}
+	if len(d.am.sends) != 0 || len(d.am.popups) != 0 {
+		t.Fatalf("sends %v popups %v", d.am.sends, d.am.popups)
+	}
+}
+
+func TestTalkFromReviewAllReturnsThere(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	for range 3 {
+		d.ask("7", "s1", "Which way?", "left", "right")
+	}
+	d.poll()
+	d.keys("enter", "r", "down", "t", "enter", " ", "enter", "done", "enter")
+	if d.m.scr != scAll || d.m.cursor != 1 || !strings.HasPrefix(d.m.flash, "resolved ") {
+		t.Fatalf("screen %d cursor %d flash %q", d.m.scr, d.m.cursor, d.m.flash)
+	}
+	d.keys("down", "t", "enter", "esc")
+	if d.m.scr != scAll || d.m.cursor != 1 || d.m.flash != "all left open" {
+		t.Fatalf("screen %d cursor %d flash %q", d.m.scr, d.m.cursor, d.m.flash)
+	}
+}
+
+func TestTalkFromReviewAllUnavailableReturnsThere(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.am.noCanPopup = true
+	for range 3 {
+		d.ask("7", "s1", "Which way?", "left", "right")
+	}
+	d.poll()
+	d.keys("enter", "r", "down", "down", "t", "enter")
+	want := "talk unavailable; attach with: tmux -L agentmgr attach -t am_s1"
+	if d.m.scr != scAll || d.m.cursor != 2 || d.m.flash != want || len(d.am.sends) != 0 {
+		t.Fatalf("screen %d cursor %d flash %q sends %v", d.m.scr, d.m.cursor, d.m.flash, d.am.sends)
 	}
 }
 
