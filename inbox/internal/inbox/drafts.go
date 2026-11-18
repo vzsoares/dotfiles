@@ -1,7 +1,8 @@
 package inbox
 
 // Draft is an answer staged in the panel but not sent: a pick, free text or
-// a skip. Rev is the decision's rev when it was staged.
+// a skip. Rev is the decision's rev when it was staged; an amend leaves the
+// draft behind that rev, so the panel shows it as changed until re-confirmed.
 type Draft struct {
 	ID, Kind, Option, Text string
 	Rev                    int64
@@ -65,14 +66,14 @@ func (ib *Inbox) ClearDrafts(sid string) error {
 		" (SELECT id FROM decisions WHERE session_id = ?)", sid))
 }
 
-// Drafts is every draft whose decision is still open at the rev it was
-// staged against.
+// Drafts is every draft whose decision is still open, including those
+// staged against an older rev.
 func (ib *Inbox) Drafts() (map[string]Draft, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	rows, err := ib.conn.QueryContext(ctx, "SELECT r.decision_id, r.kind, r.option, r.text, r.rev"+
 		" FROM decision_drafts r JOIN decisions d ON d.id = r.decision_id"+
-		" WHERE d.status = 'open' AND d.rev = r.rev")
+		" WHERE d.status = 'open'")
 	if err != nil {
 		return nil, dbErr(err)
 	}

@@ -1,7 +1,7 @@
 ---
 title: Decision Inbox — zen-inbox
 category: architecture
-updated: 2026-11-11
+updated: 2026-11-17
 related: [overview, release-tooling]
 ---
 
@@ -34,7 +34,7 @@ message.
    then the questions in ID order.
 4. **answer** — Answer walks the open questions one screen each: `a`-`d` pick, `f`
    free text (a textarea, `ctrl+d` sends, `esc` keeps the text as a draft), `s` skip, `t` talk, `v` view full, `esc`
-   back; `?` toggles help and the footer always lists the screen's keys. Answers are
+   the session's decision list; `?` toggles help and the footer always lists the screen's keys. Answers are
    staged with the decision's `rev` and kept as drafts (see Drafts under Panel); a
    review screen offers Send / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
    its new text, a staged answer to it goes stale and is asked again before the
@@ -67,21 +67,31 @@ message.
   order; `m.drafts` mirrors the table, and a poll that started before a local change
   (`draftGen`) never overwrites it. Answer resumes at the first question with no
   draft, or the review when all have one. The store drops a draft when its decision
-  closes or is amended (`closeOne`, `Amend`), `Drafts()` loads only those at the
-  current `rev`, and a send clears the session's drafts. An `Approve` on a `--prod`
+  closes (`closeOne`); an amend keeps it behind the decision's `rev`, and the panel
+  shows it as `changed: review` and asks that question again before the review, so
+  it is never sent unconfirmed (#838). A send clears the session's drafts. An `Approve` on a `--prod`
   ask is never written (store and panel both refuse), so after a restart it is asked
   again with its y/N confirm. Cancel and esc keep drafts. Esc on free text keeps
   non-blank typed text as that question's draft (blank stages nothing). `q`, esc on
   the list and `ctrl+c` quit only after the queued writes land; a second `ctrl+c`
   quits at once.
+- **Decision list (#838).** Esc in the walk (and `l`) opens the session's decision
+  list, `<name> · decisions · k/n drafted`: every open question with `○` none, `●`
+  pick or free text, `–` skipped, and `· changed: review` on a draft amended since.
+  Decisions a pass showed that closed since (withdrawn, answered elsewhere, talk) sit
+  below, dimmed, `× id  question · state`; that memory is per cockpit run, not kept
+  across a restart. `enter` opens a question on its draft (cursor on the pick, free
+  text prefilled, `draft: …` under the question); esc there returns to the list with
+  the cursor on it; esc on the list goes to the cockpit list (from the review's Change
+  one, back to the review). Each session row shows `k/n drafted` after `n open`, and
+  Review all shows each draft.
 - **Moving in the walk.** `←` or `shift+tab` shows the previous question of the pass
   (from the review, the last one) with the cursor on its drafted option, and free
   text reopens with its text; `→` goes forward without changing anything (on the
-  last question it opens the review once every question has a draft, else stays). `l` (and
-  Change one) opens a jump list of every open question with its draft or `—`; enter
-  shows it, esc returns. After answering, the walk goes on at the first question
-  with no draft. The walk footer drops `t talk · v full` (still menu items) when it
-  would take more than two rows.
+  last question it opens the review once every question has a draft, else stays).
+  After answering, the walk goes on at the first question with no draft. The walk
+  footer drops `t talk · v full` (still menu items) when it would take more than two
+  rows.
 - **Busy loader.** A send, retry, resolve or talk runs in a `tea.Cmd`; while it runs
   the panel shows a spinner screen (`m.busy`, MiniDot spinner) instead of freezing,
   and polls keep running.

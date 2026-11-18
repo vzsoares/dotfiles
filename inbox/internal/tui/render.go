@@ -561,10 +561,18 @@ func wrapCmd(cmd string, width int) []string {
 	return out
 }
 
+// viewJump is the session's decision list: open ones in a menu with their
+// draft markers, then those closed meanwhile, dimmed.
 func (m *Model) viewJump() frame {
 	items := m.jumpItems()
-	return frame{s: scJump, top: []section{{lines: []string{"Jump to which question?"}}},
-		body: menuSection(items, m.cursor, len(items), m.w), cur: m.cursor}
+	k, n := m.progress(m.sid)
+	head := pyfmt.Clip(m.sname+" · decisions · "+strconv.Itoa(k)+"/"+strconv.Itoa(n)+" drafted", m.w)
+	body := menuSection(items, m.cursor, len(items), m.w)
+	if closed := m.closedItems(); len(closed) > 0 {
+		body = append(body, section{lines: append([]string{""}, closed...), style: &footerStyle})
+	}
+	return frame{s: scJump, top: []section{{lines: []string{head}, style: &headerStyle}, {lines: m.banner(), style: &bannerStyle}},
+		body: body, cur: m.cursor, help: true}
 }
 
 func (m *Model) viewTalkPick() frame {
@@ -624,6 +632,9 @@ func (m *Model) viewAll() frame {
 		}
 		lines = append(lines, view.PanelContextLines(d, w, m.paint)...)
 		lines = append(lines, view.PanelOptionLines(d, w, m.paint)...)
+		if mark, text := m.draftText(d); text != "" {
+			lines = append(lines, view.WrapRest(mark+" draft: "+text, w, "", "  ")...)
+		}
 		if i == m.cursor {
 			cur = len(body)
 		}

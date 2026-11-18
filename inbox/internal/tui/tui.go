@@ -179,6 +179,9 @@ type Model struct {
 	sid, sname string
 	known      map[string]bool
 	markers    []string
+	// visited is every decision a pass showed, per session, so its list
+	// still names those closed while the user was away.
+	visited map[string][]string
 
 	p *pass
 	// drafts mirrors the db's drafts; draftGen counts local changes so a
@@ -239,7 +242,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()),
-		prodBlock: "guard not run", drafts: map[string]view.Staged{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
+		prodBlock: "guard not run", drafts: map[string]view.Staged{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -498,8 +501,8 @@ func (m *Model) livePass() {
 			continue
 		}
 		if s, ok := p.staged[id]; ok && s.Rev != d.Rev {
-			m.unstage(id)
-			p.notes = append(p.notes, id+" amended; asked again")
+			delete(p.staged, id)
+			p.notes = append(p.notes, id+" changed: review your draft")
 		}
 	}
 	for _, d := range m.sessionOpen() {
@@ -508,6 +511,7 @@ func (m *Model) livePass() {
 			p.notes = append(p.notes, d.ID+" asked; added to the walk")
 		}
 	}
+	m.visited[m.sid] = slices.Clone(p.order)
 	switch m.scr {
 	case scWalk, scFree, scFull, scConfirm:
 		if curGone {
@@ -550,15 +554,73 @@ func (m *Model) enterSession(sid string) {
 }
 
 // startPass resumes from the session's drafts at the first undrafted question.
+// Decisions an earlier pass showed that have closed since stay in the order,
+// gone, so the list shows them dimmed.
 func (m *Model) startPass() {
 	m.p = &pass{staged: map[string]view.Staged{}, gone: map[string]bool{}}
+	open := map[string]bool{}
 	for _, d := range m.sessionOpen() {
+		open[d.ID] = true
 		m.p.order = append(m.p.order, d.ID)
 		if s, ok := m.drafts[d.ID]; ok && s.Rev == d.Rev {
 			m.p.staged[d.ID] = s
 		}
 	}
+	for _, id := range m.visited[m.sid] {
+		if !open[id] {
+			m.p.order = append(m.p.order, id)
+			m.p.gone[id] = true
+		}
+	}
+	inbox.SortIDs(m.p.order)
+	m.visited[m.sid] = slices.Clone(m.p.order)
 	m.advance()
+}
+
+// draft is d's draft: the pass's staged answer, else the stored one; stale
+// when d was amended after it was staged.
+func (m *Model) draft(d inbox.Decision) (s view.Staged, ok, stale bool) {
+	if m.p != nil {
+		if s, ok := m.p.staged[d.ID]; ok {
+			return s, true, false
+		}
+	}
+	s, ok = m.drafts[d.ID]
+	return s, ok, ok && s.Rev != d.Rev
+}
+
+// draftText is d's marker and draft for the list and Review all; an amend
+// since staging adds "changed: review".
+func (m *Model) draftText(d inbox.Decision) (string, string) {
+	s, ok, stale := m.draft(d)
+	switch {
+	case !ok:
+		return "○", ""
+	case s.Kind == "skip":
+		return "–", tagStale("skipped", stale)
+	}
+	return "●", tagStale(view.StagedText(d, &s), stale)
+}
+
+func tagStale(text string, stale bool) string {
+	if stale {
+		return text + " · changed: review"
+	}
+	return text
+}
+
+// progress is how many of sid's open decisions have a current draft.
+func (m *Model) progress(sid string) (drafted, open int) {
+	for _, d := range m.snap.open {
+		if d.SessionID != sid {
+			continue
+		}
+		open++
+		if s, ok := m.drafts[d.ID]; ok && s.Rev == d.Rev {
+			drafted++
+		}
+	}
+	return drafted, open
 }
 
 // next is the first open question of the pass with nothing staged, or "".
@@ -607,8 +669,11 @@ func (m *Model) show(id string) {
 	m.p.cur = id
 	m.scr, m.cursor, m.scroll = scWalk, 0, 0
 	d, ok := m.decision(id)
-	s, staged := m.p.staged[id]
-	if !ok || !staged {
+	if !ok {
+		return
+	}
+	s, staged, _ := m.draft(d)
+	if !staged {
 		return
 	}
 	want := s.Option
@@ -926,12 +991,16 @@ func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 // locked is a prod-action ask this panel may not answer.
 func (m *Model) locked(d inbox.Decision) bool { return d.Prod != nil && !m.ib.User }
 
-// notice is the locked prod ask's line on its question screen.
+// notice is the line under the question: why a prod ask is locked, else
+// its draft.
 func (m *Model) notice(d inbox.Decision) string {
-	if !m.locked(d) {
-		return ""
+	if m.locked(d) {
+		return "prod approvals only from the cockpit terminal (" + m.prodBlock + ")"
 	}
-	return "prod approvals only from the cockpit terminal (" + m.prodBlock + ")"
+	if _, text := m.draftText(d); text != "" {
+		return "draft: " + text
+	}
+	return ""
 }
 
 func (m *Model) chosen(from []inbox.Decision) []string {
@@ -1241,6 +1310,10 @@ func (m *Model) listItems() []item {
 	rows, prod := m.askRows()
 	for _, r := range rows {
 		label := view.RowLabel(r, at)
+		if k, n := m.progress(r.SessionID); k > 0 {
+			open := " · " + strconv.Itoa(n) + " open · "
+			label = strings.Replace(label, open, open+strconv.Itoa(k)+"/"+strconv.Itoa(n)+" drafted · ", 1)
+		}
 		if prod[r.SessionID] {
 			label = "PROD · " + label
 		}
@@ -1409,6 +1482,8 @@ func (m *Model) keySession(k string) (tea.Model, tea.Cmd) {
 	switch choice {
 	case "answer":
 		m.startPass()
+		// Decisions closed since an earlier pass are not in the snapshot yet.
+		return m, m.loadCmd(false)
 	case "all":
 		m.scr, m.cursor = scAll, 0
 	case "talk":
@@ -1453,7 +1528,7 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	switch choice {
 	case "":
 	case "back":
-		m.toList(m.p.stopped("back", m.drafts))
+		m.openJump()
 	case "skip":
 		return m, m.stage(view.Staged{Kind: "skip", Rev: d.Rev})
 	case "free":
@@ -1464,9 +1539,11 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		m.ta.Placeholder = freePlaceholder
 		m.replyFor = 0
 		m.freeID, m.freeRev = d.ID, d.Rev
-		if s, ok := m.p.staged[d.ID]; ok && s.Kind == "text" {
+		if s, ok, stale := m.draft(d); ok && s.Kind == "text" {
 			m.ta.SetValue(s.Text)
-			m.freeRev = s.Rev
+			if !stale {
+				m.freeRev = s.Rev
+			}
 		}
 		m.flash = ""
 		m.scr = scFree
@@ -1578,7 +1655,8 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// jumpItems is every open question of the pass with its draft, then Back.
+// jumpItems is the session's decision list: every open question of the
+// pass with its draft marker, then Back.
 func (m *Model) jumpItems() []item {
 	var out []item
 	for _, id := range m.p.order {
@@ -1586,18 +1664,40 @@ func (m *Model) jumpItems() []item {
 		if !ok || d.Status != "open" || m.p.gone[id] {
 			continue
 		}
-		answer := "—"
-		if s, ok := m.p.staged[id]; ok {
-			var staged *view.Staged
-			if s.Kind != "skip" {
-				staged = &s
-			}
-			answer = view.StagedText(d, staged)
+		mark, answer := m.draftText(d)
+		label := mark + " " + id + "  " + pyfmt.Clip(d.Question, max(m.w/3, 10))
+		if answer != "" {
+			label += " → " + answer
 		}
-		q := pyfmt.Clip(d.Question, max(m.w/3, 10))
-		out = append(out, item{id + "  " + q + " → " + answer, id})
+		out = append(out, item{label, id})
 	}
 	return append(out, item{"Back", ""})
+}
+
+// closedItems are the pass's decisions that closed while it ran or since an
+// earlier pass, with how they closed.
+func (m *Model) closedItems() []string {
+	var out []string
+	for _, id := range m.p.order {
+		d, ok := m.decision(id)
+		if !ok || d.Status == "open" {
+			continue
+		}
+		out = append(out, "  × "+id+"  "+pyfmt.Clip(d.Question, max(m.w/3, 10))+" · "+closedState(d))
+	}
+	return out
+}
+
+func closedState(d inbox.Decision) string {
+	switch {
+	case d.Status == "withdrawn":
+		return "withdrawn"
+	case d.AnswerKind == "talk":
+		return "resolved in talk"
+	case d.AnswerKind == "pick":
+		return "answered: " + d.AnswerOption
+	}
+	return "answered: text"
 }
 
 func (m *Model) openJump() {
@@ -1613,12 +1713,10 @@ func (m *Model) keyJump(k string) (tea.Model, tea.Cmd) {
 	items := m.jumpItems()
 	back := k == "esc" || (k == "enter" && items[min(m.cursor, len(items)-1)].value == "")
 	switch {
-	case back && m.jumpFrom == scWalk && m.p.cur != "" && !m.p.gone[m.p.cur]:
-		m.show(m.p.cur)
-	case back && m.jumpFrom == scWalk:
-		m.advance()
-	case back:
+	case back && m.jumpFrom == scReview:
 		m.scr, m.cursor = scReview, 0
+	case back:
+		m.toList(m.p.stopped("back", m.drafts))
 	case k == "enter":
 		m.show(items[m.cursor].value)
 	}

@@ -51,6 +51,10 @@ func TestEscThenAnswerResumesAtFirstUndrafted(t *testing.T) {
 	d.asks(3)
 	d.openWalk()
 	d.keys("b", "s", "esc")
+	if d.m.scr != scJump {
+		t.Fatalf("esc in the walk should open the list, got %d", d.m.scr)
+	}
+	d.keys("esc")
 	if d.m.scr != scList || !strings.Contains(d.m.flash, "drafts kept") {
 		t.Fatalf("flash %q", d.m.flash)
 	}
@@ -110,7 +114,7 @@ func TestJumpListEditsThenReturnsToFirstUndrafted(t *testing.T) {
 		t.Fatalf("screen %d cursor %d", d.m.scr, d.m.cursor)
 	}
 	v := d.view()
-	for _, want := range []string{"7.1  Which way? → a: left", "7.3  Which way? → skipped", "7.4  Which way? → —"} {
+	for _, want := range []string{"● 7.1  Which way? → a: left", "– 7.3  Which way? → skipped", "› ○ 7.4  Which way?"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("%q missing:\n%s", want, v)
 		}
@@ -123,7 +127,7 @@ func TestJumpListEditsThenReturnsToFirstUndrafted(t *testing.T) {
 	if d.staged("7.2").Option != "b" {
 		t.Fatalf("%v", d.m.p.staged)
 	}
-	d.keys("l", "esc")
+	d.keys("l", "enter")
 	d.at("7.4")
 	d.keys("l")
 	d.poll()
@@ -134,9 +138,12 @@ func TestJumpListEditsThenReturnsToFirstUndrafted(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.poll()
+	if !strings.Contains(d.view(), "× 7.4  Which way? · answered: a") {
+		t.Fatalf("closed 7.4 not dimmed in the list:\n%s", d.view())
+	}
 	d.keys("esc")
-	if d.m.scr != scReview {
-		t.Fatalf("esc after the current question closed: screen %d cur %q", d.m.scr, d.m.p.cur)
+	if d.m.scr != scList {
+		t.Fatalf("esc on the list: screen %d", d.m.scr)
 	}
 }
 
@@ -290,5 +297,134 @@ func TestFreeTextNeverSavesOntoAnotherQuestion(t *testing.T) {
 	}
 	if len(d.m.p.staged) != 0 {
 		t.Fatalf("staged onto the wrong question: %v", d.m.p.staged)
+	}
+}
+
+func (d *drv) listed(wants ...string) {
+	d.t.Helper()
+	if d.m.scr != scJump {
+		d.t.Fatalf("want the decision list, got screen %d:\n%s", d.m.scr, d.view())
+	}
+	v := d.view()
+	for _, w := range wants {
+		if !strings.Contains(v, w) {
+			d.t.Fatalf("%q missing:\n%s", w, v)
+		}
+	}
+}
+
+func TestDecisionListBackEnterBackKeepsCursor(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(4)
+	d.openWalk()
+	d.keys("a", "s", "f", "txt", "ctrl+d")
+	d.at("7.4")
+	d.keys("esc")
+	d.listed("spec-s1 · decisions · 3/4 drafted", "● 7.1  Which way? → a: left", "– 7.2  Which way? → skipped",
+		"● 7.3  Which way? → free text: txt", "› ○ 7.4  Which way?", "enter open · esc back")
+	d.fits()
+	d.keys("up", "up", "enter")
+	d.at("7.2")
+	if v := d.view(); !strings.Contains(v, "draft: skipped") || !strings.Contains(v, "› Skip") {
+		t.Fatalf("7.2 not opened on its draft:\n%s", v)
+	}
+	d.keys("esc")
+	d.listed("› – 7.2")
+	d.keys("up", "enter")
+	d.at("7.1")
+	if !strings.Contains(d.view(), "› a") || !strings.Contains(d.view(), "draft: a: left") {
+		t.Fatalf("7.1 not opened on its draft:\n%s", d.view())
+	}
+	d.keys("esc", "esc")
+	if d.m.scr != scList || !strings.Contains(d.view(), "4 open · 3/4 drafted") {
+		t.Fatalf("main list:\n%s", d.view())
+	}
+}
+
+func TestDecisionListMarksChangedAndClosedAway(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(4)
+	d.openWalk()
+	d.keys("a", "b", "s", "esc", "esc")
+	q := "Which road?"
+	if _, err := d.other.Amend("7.1", "s1", false, inbox.AmendInput{Question: &q}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.other.Withdraw("7.2", "s1", false); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	if !strings.Contains(d.view(), "3 open · 1/3 drafted") {
+		t.Fatalf("main list:\n%s", d.view())
+	}
+	d.keys("enter", "enter")
+	d.at("7.1")
+	if !strings.Contains(d.view(), "draft: a: left · changed: review") || !strings.Contains(d.view(), "› a") {
+		t.Fatalf("changed draft not shown:\n%s", d.view())
+	}
+	d.keys("esc")
+	d.poll()
+	d.listed("● 7.1  Which road? → a: left · changed: review", "– 7.3  Which way? → skipped", "○ 7.4",
+		"× 7.2  Which way? · withdrawn", "1/3 drafted")
+	d.fits()
+}
+
+func TestChangedDraftBlocksSendUntilReconfirmed(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(2)
+	d.openWalk()
+	d.keys("a", "b")
+	if d.m.scr != scReview {
+		t.Fatalf("want review:\n%s", d.view())
+	}
+	q := "Which road?"
+	if _, err := d.other.Amend("7.1", "s1", false, inbox.AmendInput{Question: &q}); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	d.at("7.1")
+	d.keys("right", "right")
+	d.at("7.2")
+	if len(d.am.sends) != 0 || d.get("7.1").Status != "open" {
+		t.Fatal("sent with a changed draft")
+	}
+	d.restart()
+	d.openWalk()
+	d.at("7.1")
+	d.keys("enter")
+	if d.m.scr != scReview {
+		t.Fatalf("re-confirm did not reach review:\n%s", d.view())
+	}
+	d.keys("enter")
+	if got := d.get("7.1"); got.AnswerOption != "a" || got.Question != q {
+		t.Fatalf("7.1 = %+v", got)
+	}
+	if got, err := d.ib.Drafts(); err != nil || len(got) != 0 {
+		t.Fatalf("drafts after send: %v %v", got, err)
+	}
+}
+
+func TestDecisionListRebuiltFromStoreAfterRestart(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(3)
+	d.openWalk()
+	d.keys("b", "s")
+	d.restart()
+	if !strings.Contains(d.view(), "3 open · 2/3 drafted") {
+		t.Fatalf("main list after restart:\n%s", d.view())
+	}
+	d.openWalk()
+	d.at("7.3")
+	d.keys("esc")
+	d.listed("● 7.1  Which way? → b: right", "– 7.2  Which way? → skipped", "› ○ 7.3")
+}
+
+func TestReviewAllShowsDrafts(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.asks(2)
+	d.openWalk()
+	d.keys("a", "esc", "esc", "enter", "r")
+	if d.m.scr != scAll || !strings.Contains(d.view(), "● draft: a: left") {
+		t.Fatalf("Review all:\n%s", d.view())
 	}
 }

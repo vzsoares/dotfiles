@@ -157,9 +157,9 @@ var spare = map[string]bool{"t talk": true, "v full": true}
 // ? adds the longer explanation. The list builds its own from the cursor.
 var footers = map[screen][]key{
 	scSession:   {{"↑↓", ""}, {"enter", ""}, {"r", "review"}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
-	scWalk:      {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
+	scWalk:      {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
 	scReview:    {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
-	scJump:      {{"↑↓", ""}, {"enter", "jump"}, {"esc", "back"}},
+	scJump:      {{"↑↓", ""}, {"enter", "open"}, {"esc", "back"}, {"?", "help"}},
 	scFree:      {{"ctrl+d", "send"}, {"esc", "keep"}},
 	scFreeBlank: {{"ctrl+d", "send"}, {"esc", "back"}},
 	scFull:      {{"↑↓", "scroll"}, {"esc", "back"}},
@@ -171,7 +171,7 @@ var footers = map[screen][]key{
 	scNote:      {{"↑↓", ""}, {"enter", "read · back"}, {"m", "mark"}, {"f", "reply"}, {"esc", "back"}, {"?", "help"}},
 	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
 	scChief:     {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
-	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"l", "list"}, {"esc", "back"}, {"?", "help"}},
+	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
@@ -180,7 +180,9 @@ var helps = map[screen]string{
 		" m marks a note read or unread, M marks them all read, r retries a failed delivery, c writes to chief.",
 	scSession: "Answer walks the questions one by one; Review all shows every open decision on one screen; Talk opens the agent in a popup.",
 	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn scroll; enter walks from the marked one, t talks to the agent about picked ones.",
-	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything. ← or shift+tab goes back a question, → forward, l lists them all. Answers are kept as drafts, even across esc and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
+	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything. ← or shift+tab goes back a question, → forward, esc or l lists them all. Answers are kept as drafts, even across leaving and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
+	scJump: "Every decision of this session: ○ open, ● drafted, – skipped; changed: review means it was amended after you drafted it, so it is asked again before Send." +
+		" Dimmed ones closed meanwhile. enter opens one on its draft; esc goes back to the cockpit list.",
 	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",

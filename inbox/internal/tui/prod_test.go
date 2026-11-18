@@ -108,7 +108,7 @@ func TestProdLockedInAgentSession(t *testing.T) {
 		if dec := d.get(id); dec.Status != "open" {
 			t.Fatalf("%v: %+v", sz, dec)
 		}
-		d.keys("esc")
+		d.keys("esc", "esc")
 		d.poll()
 		d.keys("down", "enter", "enter", "b", "enter")
 		if dec := d.get(plain); dec.Status != "answered" || dec.AnswerOption != "b" || len(d.am.sends) != 2 {

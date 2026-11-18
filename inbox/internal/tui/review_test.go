@@ -63,7 +63,7 @@ func TestReviewAllEnterWalksFromHighlighted(t *testing.T) {
 	if d.m.scr != scWalk || d.m.p.cur != b {
 		t.Fatalf("screen %d cur %q\n%s", d.m.scr, d.m.p.cur, d.view())
 	}
-	d.keys("esc")
+	d.keys("esc", "esc")
 	d.keys("enter", "r", "esc")
 	if d.m.scr != scSession || d.m.cursor != 1 {
 		t.Fatalf("esc: screen %d cursor %d", d.m.scr, d.m.cursor)

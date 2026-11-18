@@ -80,7 +80,7 @@ func TestDraftsClearedOnSend(t *testing.T) {
 	}
 }
 
-func TestDraftDroppedOnCloseAndAmend(t *testing.T) {
+func TestDraftDroppedOnCloseKeptOnAmend(t *testing.T) {
 	ib, _, _ := open(t)
 	w, r, am := ask(t, ib, "7", "s1", false, "W?"), ask(t, ib, "7", "s1", false, "R?"), ask(t, ib, "7", "s1", false, "Am?")
 	keep := ask(t, ib, "7", "s1", false, "Keep?")
@@ -96,30 +96,20 @@ func TestDraftDroppedOnCloseAndAmend(t *testing.T) {
 	if _, err := ib.Amend(am, "s1", false, AmendInput{Question: p("Amended?")}); err != nil {
 		t.Fatal(err)
 	}
-	if got := drafts(t, ib); len(got) != 1 || got[keep].Option != "a" {
+	got := drafts(t, ib)
+	if len(got) != 2 || got[keep].Option != "a" || got[am].Option != "a" {
 		t.Fatalf("%v", got)
 	}
+	if d, err := ib.Get(am); err != nil || got[am].Rev == d.Rev {
+		t.Fatalf("amended draft rev %d not behind the decision's: %v", got[am].Rev, err)
+	}
 	var n int
-	if err := ib.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM decision_drafts").Scan(&n); err != nil || n != 1 {
+	if err := ib.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM decision_drafts").Scan(&n); err != nil || n != 2 {
 		t.Fatalf("rows left %d %v", n, err)
 	}
 	save(t, ib, Draft{ID: w, Kind: "skip"})
 	if _, ok := drafts(t, ib)[w]; ok {
 		t.Fatal("draft saved on a closed decision")
-	}
-}
-
-// A draft staged against an older rev never loads, even if a write path
-// missed dropping it.
-func TestDraftAtStaleRevNotLoaded(t *testing.T) {
-	ib, _, _ := open(t)
-	id := ask(t, ib, "7", "s1", false, "A?")
-	save(t, ib, Draft{ID: id, Kind: "pick", Option: "a", Rev: 0})
-	if err := ib.Exec("UPDATE decisions SET rev = 3 WHERE id = ?", id); err != nil {
-		t.Fatal(err)
-	}
-	if got := drafts(t, ib); len(got) != 0 {
-		t.Fatalf("%v", got)
 	}
 }
 

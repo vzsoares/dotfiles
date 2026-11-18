@@ -254,9 +254,6 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 			question, context, rec, stamp(), id); err != nil {
 			return err
 		}
-		if err := ib.deleteDraft(id); err != nil {
-			return err
-		}
 		if in.Options != nil {
 			if err := ib.exec("DELETE FROM decision_options WHERE decision_id = ?", id); err != nil {
 				return err

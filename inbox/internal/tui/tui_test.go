@@ -449,7 +449,7 @@ func dump(d *drv) []inbox.Decision {
 }
 
 func TestCancelAndBackRecordNothing(t *testing.T) {
-	for _, script := range [][]string{{"a", "s", "esc"}, {"a", "esc"}, {"a", "a", "down", "down", "enter"}} {
+	for _, script := range [][]string{{"a", "s", "esc", "esc"}, {"a", "esc", "esc"}, {"a", "a", "down", "down", "enter"}} {
 		d := newDrv(t, 92, 29)
 		d.ask("7", "s1", "Which way?", "left", "right")
 		d.ask("7", "s1", "Which way?", "left", "right")
@@ -525,7 +525,7 @@ func TestAmendedShowsNewTextAndStaleStagedIsAskedAgain(t *testing.T) {
 	}
 	d.keys("a")
 	amend("Which path?", "north", "south")
-	if !strings.Contains(d.view(), "7.1 amended; asked again") {
+	if !strings.Contains(d.view(), "7.1 changed: review your draft") {
 		t.Fatalf("no stale marker:\n%s", d.view())
 	}
 	d.keys("x")
@@ -794,7 +794,7 @@ func TestKeysAndFooterPerScreen(t *testing.T) {
 		t.Fatal("esc did not go back")
 	}
 	d.keys("enter", "enter")
-	footer("a-d pick", "f free", "s skip", "t talk", "v full", "esc back")
+	footer("a-d pick", "f free", "s skip", "t talk", "v full", "esc list")
 	d.keys("c")
 	if d.m.scr != scWalk {
 		t.Fatal("c picked a missing option")
