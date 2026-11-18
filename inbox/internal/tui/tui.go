@@ -487,11 +487,16 @@ func (m *Model) refocus(row string) {
 		return
 	}
 	items := m.listItems()
+	// Several Inbox rows can share a session's key: stay on the nearest.
+	best := -1
 	for i, it := range items {
-		if it.value == row {
-			m.cursor = i
-			return
+		if it.value == row && (best < 0 || abs(i-m.cursor) < abs(best-m.cursor)) {
+			best = i
 		}
+	}
+	if best >= 0 {
+		m.cursor = best
+		return
 	}
 	if t, ok := m.threadOf(row); ok {
 		for i, it := range items {
@@ -1951,4 +1956,11 @@ func (m *Model) keyNote(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.ti, cmd = m.ti.Update(msg)
 	return m, cmd
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
