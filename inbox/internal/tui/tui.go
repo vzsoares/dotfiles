@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -241,7 +242,12 @@ type Model struct {
 	stateFile   string
 	notesFolded bool
 	threadsOpen map[string]bool
-	loc         *time.Location
+	// chiefMu serialises chat sends and the delivery pass; passing marks a
+	// pass in flight and chatMisses counts its empty status polls per chat.
+	chiefMu    *sync.Mutex
+	passing    bool
+	chatMisses map[int64]int
+	loc        *time.Location
 
 	thread threadView
 	// passFrom, noteFrom and chiefFrom are where leaving a walk, a note or
@@ -264,7 +270,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()), clip: copyText,
-		prodBlock: "guard not run", drafts: map[string]view.Staged{}, threadsOpen: map[string]bool{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
+		prodBlock: "guard not run", drafts: map[string]view.Staged{}, threadsOpen: map[string]bool{}, chiefMu: &sync.Mutex{}, chatMisses: map[int64]int{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -426,6 +432,10 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	if c := m.chiefPoll(); c != nil {
 		cmds = append(cmds, c)
 	}
+	if c := m.chiefPass(); c != nil {
+		cmds = append(cmds, c)
+	}
+	m.pruneThreadsOpen()
 	// A send or talk in flight changes the db under the pass; its own reply
 	// message reconciles the screen instead.
 	switch {
@@ -1236,6 +1246,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resolvedMsg:
 		m.busy, m.snap = "", msg.snap
 		m.finishTalk(msg.resolved, msg.flash)
+		return m, nil
+	case chiefPassMsg:
+		m.passing = false
 		return m, nil
 	case chiefSentMsg:
 		return m, m.onChiefSent(msg)

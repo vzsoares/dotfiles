@@ -1,6 +1,9 @@
 package inbox
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // schemaV10 stores the panel's messages to chief so a thread can show them.
 // No existing table changes, so a v9 reader still works.
@@ -54,6 +57,19 @@ func (ib *Inbox) UpdateChat(id int64, messageID, status, errText string) error {
 		return ib.exec("UPDATE chats SET message_id = CASE WHEN ? = '' THEN message_id ELSE ? END,"+
 			" status = ?, error = ? WHERE id = ?", messageID, messageID, status, errText, id)
 	})
+}
+
+// PendingChats are the chats whose status is not in done, oldest first.
+func (ib *Inbox) PendingChats(done []string) ([]Chat, error) {
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(done)), ",")
+	args := make([]any, len(done))
+	for i, s := range done {
+		args[i] = s
+	}
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	cs, err := ib.selChats("status NOT IN ("+marks+")", args...)
+	return cs, dbErr(err)
 }
 
 func (ib *Inbox) selChats(where string, args ...any) ([]Chat, error) {

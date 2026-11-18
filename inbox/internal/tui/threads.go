@@ -243,6 +243,34 @@ func (m *Model) saveState() {
 	}
 }
 
+// pruneThreadsOpen forgets expanded threads whose task has no open ask,
+// visible note or thread left, so the saved state does not grow forever.
+func (m *Model) pruneThreadsOpen() {
+	if len(m.threadsOpen) == 0 {
+		return
+	}
+	live := map[string]bool{}
+	for _, d := range m.snap.open {
+		live[d.Task] = true
+	}
+	for _, n := range m.snap.notes {
+		live[n.Task] = true
+	}
+	for _, t := range m.threads() {
+		live[t.task] = true
+	}
+	pruned := false
+	for task := range m.threadsOpen {
+		if !live[task] {
+			delete(m.threadsOpen, task)
+			pruned = true
+		}
+	}
+	if pruned {
+		m.saveState()
+	}
+}
+
 // foldThread expands or collapses task's thread with the cursor on its header.
 func (m *Model) foldThread(task string, open bool) {
 	if m.threadsOpen[task] == open {

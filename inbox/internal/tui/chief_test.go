@@ -107,3 +107,44 @@ func TestChiefEnterAddsALineAndCtrlDSends(t *testing.T) {
 		t.Fatalf("ctrl+d sent %q", d.am.chiefs)
 	}
 }
+
+func TestQueuedChatsAreAllDeliveredInOrder(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.am.chiefStatus = "queued"
+	d.keys("c", "one", "ctrl+d")
+	d.keys("c", "two", "ctrl+d")
+	d.am.chiefStatus = "delivered"
+	d.poll()
+	d.poll()
+	for id := int64(1); id <= 2; id++ {
+		if c, _ := d.ib.Chat(id); c.Status != "delivered" {
+			t.Fatalf("chat %d is %q", id, c.Status)
+		}
+	}
+}
+
+func TestChatWithoutMessageIDIsSentOnNextPoll(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	for _, text := range []string{"one", "two"} {
+		if _, err := d.ib.AddChat("", text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.am.chiefErr = "chief is gone"
+	d.poll()
+	if len(d.am.chiefs) != 0 {
+		t.Fatalf("sent %q", d.am.chiefs)
+	}
+	d.am.chiefErr = ""
+	d.am.chiefStatus = "delivered"
+	d.poll()
+	d.poll()
+	if len(d.am.chiefs) != 2 || d.am.chiefs[0] != "one" || d.am.chiefs[1] != "two" {
+		t.Fatalf("sent %q", d.am.chiefs)
+	}
+	for id := int64(1); id <= 2; id++ {
+		if c, _ := d.ib.Chat(id); c.Status != "delivered" || c.MessageID != "42" {
+			t.Fatalf("chat %d: %+v", id, c)
+		}
+	}
+}

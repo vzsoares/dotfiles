@@ -202,16 +202,20 @@ func TestThreadFoldKeysAndPersist(t *testing.T) {
 		t.Fatalf("← on a child did not collapse onto the header:\n%s", d.view())
 	}
 	d.keys("z")
-	again := newDrvWith(t, 92, 29, func(n *drv) { n.m.stateFile = d.m.stateFile })
-	again.fixture843()
+	again := newDrvWith(t, 92, 29, func(n *drv) {
+		n.m.stateFile = d.m.stateFile
+		n.fixture843()
+	})
 	again.poll()
 	if !again.m.threadsOpen["843"] || !strings.Contains(again.view(), "▾ #843") {
 		t.Fatalf("expanded state not restored:\n%s", again.view())
 	}
 	again.cursorTo("#843")
 	again.keys("left")
-	third := newDrvWith(t, 92, 29, func(n *drv) { n.m.stateFile = d.m.stateFile })
-	third.fixture843()
+	third := newDrvWith(t, 92, 29, func(n *drv) {
+		n.m.stateFile = d.m.stateFile
+		n.fixture843()
+	})
 	third.poll()
 	if strings.Contains(third.view(), "▾ #843") {
 		t.Fatalf("collapse not saved:\n%s", third.view())
@@ -530,5 +534,18 @@ func TestWalkFromThreadEndsOnTheThread(t *testing.T) {
 				t.Fatalf("screen %d:\n%s", d.m.scr, d.view())
 			}
 		})
+	}
+}
+
+func TestPollPrunesThreadsOpenOfGoneThreads(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.fixture843()
+	d.m.threadsOpen["843"], d.m.threadsOpen["999"] = true, true
+	d.poll()
+	if d.m.threadsOpen["999"] || !d.m.threadsOpen["843"] {
+		t.Fatalf("threadsOpen = %v", d.m.threadsOpen)
+	}
+	if st := readState(d.m.stateFile); len(st.ThreadsOpen) != 1 || st.ThreadsOpen[0] != "843" {
+		t.Fatalf("saved %v", st.ThreadsOpen)
 	}
 }

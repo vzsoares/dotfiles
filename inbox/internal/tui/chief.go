@@ -69,9 +69,11 @@ func chiefText(task, title, text string) string {
 // chiefSendCmd stores the chat, sends it, then records the message id or the error.
 func (m *Model) chiefSendCmd(text string) tea.Cmd {
 	m.busy = "Sending to chief…"
-	ib, client, task := m.ib, m.am, m.chiefTask
+	ib, client, task, mu := m.ib, m.am, m.chiefTask, m.chiefMu
 	msg := chiefText(task, m.snap.titles[task], text)
 	return func() tea.Msg {
+		mu.Lock()
+		defer mu.Unlock()
 		c, err := ib.AddChat(task, text)
 		if err != nil {
 			return chiefSentMsg{err: err.Error()}
@@ -195,4 +197,61 @@ func (m *Model) viewChief() frame {
 // chiefStatusLine is the header's text while a message is tracked.
 func (m *Model) chiefStatusLine() string {
 	return "✉ chief · message " + m.chief.id + " " + m.chief.status
+}
+
+// chatDone are the statuses a stored chat is not worked on any more.
+func chatDone() []string { return append([]string{"failed", statusUnknown}, finalStatuses...) }
+
+// maxChatMisses is how many empty status polls in a row end a chat's tracking.
+const maxChatMisses = maxPollFailures
+
+type chiefPassMsg struct{}
+
+// chiefPass works every stored chat but the header's tracked one, oldest
+// first: a chat that never got a message id is sent, the rest get a status
+// poll. A send that fails stops the pass so later chats stay in order.
+func (m *Model) chiefPass() tea.Cmd {
+	if m.passing {
+		return nil
+	}
+	m.passing = true
+	ib, client, mu, skip, misses := m.ib, m.am, m.chiefMu, m.chief.chat, m.chatMisses
+	return func() tea.Msg {
+		mu.Lock()
+		defer mu.Unlock()
+		chats, err := ib.PendingChats(chatDone())
+		if err != nil {
+			return chiefPassMsg{}
+		}
+		titles, _ := ib.TaskTitles()
+		for _, c := range chats {
+			if c.ID == skip {
+				continue
+			}
+			if c.MessageID == "" {
+				id, errText := client.Chief(chiefText(c.Task, titles[c.Task], c.Text))
+				if errText != "" {
+					return chiefPassMsg{}
+				}
+				if ib.UpdateChat(c.ID, id, "queued", "") != nil {
+					return chiefPassMsg{}
+				}
+				continue
+			}
+			status, errText := client.ChiefStatus(c.MessageID)
+			if errText != "" || status == "" {
+				if misses[c.ID]++; misses[c.ID] >= maxChatMisses {
+					status = statusUnknown
+					delete(misses, c.ID)
+					_ = ib.UpdateChat(c.ID, "", status, "")
+				}
+				continue
+			}
+			delete(misses, c.ID)
+			if status != c.Status {
+				_ = ib.UpdateChat(c.ID, "", status, "")
+			}
+		}
+		return chiefPassMsg{}
+	}
 }
