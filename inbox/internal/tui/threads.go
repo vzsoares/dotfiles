@@ -136,12 +136,8 @@ type listRow struct {
 
 // askLabel is a session's row: PROD, then its RowLabel with drafting progress.
 func (m *Model) askLabel(r view.Row, prod bool) string {
+	r.Drafted, _ = m.progress(r.SessionID)
 	label := view.RowLabel(r, m.now())
-	// shortcut: spliced after RowLabel's "n open" part since view is out of #838's scope; move into RowLabel if it changes.
-	if k, n := m.progress(r.SessionID); k > 0 {
-		open := " · " + strconv.Itoa(n) + " open · "
-		label = strings.Replace(label, open, open+strconv.Itoa(k)+"/"+strconv.Itoa(n)+" drafted · ", 1)
-	}
 	if prod {
 		label = "PROD · " + label
 	}

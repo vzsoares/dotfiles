@@ -333,6 +333,8 @@ type Row struct {
 	First string
 	// Newest is when the session's newest open decision was asked.
 	Newest string
+	// Drafted is how many open decisions the panel holds a current draft for.
+	Drafted int
 }
 
 // Rows is one row per asking session, oldest open decision first.
@@ -377,7 +379,7 @@ func Rows(open []inbox.Decision, sessions am.Sessions) []Row {
 			gate = gate || d.Gate
 		}
 		rows = append(rows, Row{sid, ds[0].SessionName, tasks, title, len(ds), ds[0].CreatedAt,
-			gate, am.Status(am.Find(sessions, sid)), ds[0].Task, ds[len(ds)-1].CreatedAt})
+			gate, am.Status(am.Find(sessions, sid)), ds[0].Task, ds[len(ds)-1].CreatedAt, 0})
 	}
 	return rows
 }
@@ -391,9 +393,11 @@ func RowLabel(r Row, at time.Time) string {
 		r.Name,
 		pyfmt.RStrip(strings.Join(tasks, ", ") + " " + md.Plain(r.Title)),
 		fmt.Sprintf("%d open", r.Count),
-		Age(r.Oldest, at),
-		"[" + r.Status + "]",
 	}
+	if r.Drafted > 0 {
+		parts = append(parts, fmt.Sprintf("%d/%d drafted", r.Drafted, r.Count))
+	}
+	parts = append(parts, Age(r.Oldest, at), "["+r.Status+"]")
 	if r.Gate {
 		parts = append(parts, "gate")
 	}
