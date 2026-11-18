@@ -111,6 +111,13 @@ message.
   last), never a cut word. Other screens wrap whole keys onto two rows. Keys are
   bold, labels plain. A success flash (`» sent …`) tops the list for a few seconds;
   polls clear it.
+- **Code blocks (#864).** Fenced blocks render on a tinted background with no
+  border characters beside the code (a drag-select copies only code; the context
+  `│ ` gutter is dropped on those lines). Each has a `[n] copy` header, numbered in
+  screen order on notes, the walk and View full. `y` then `1`-`9` copies that block's
+  raw source by OSC 52 (plus `pbcopy` on a local Mac) and toasts `copied n`; another
+  key cancels, an out-of-range number does nothing. No click-to-copy: the panel
+  already captures the mouse, and a click target would not survive a drag.
 - **Claude quota (#790).** Each poll reads `~/.cache/zen/claude-quota.json`, which
   the clawd-status statusline writes from Claude Code's `rate_limits`; the header
   shows it on the right: `5h 42% · resets 15:20  ·  week 63% · resets Fri` (local

@@ -21,4 +21,4 @@ b) files
 
 
 ↑↓ · enter · a-d pick · f free · s skip
-←→ move · esc list · ? help
+y copy · ←→ move · esc list · ? help

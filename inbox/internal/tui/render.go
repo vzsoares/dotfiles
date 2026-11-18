@@ -56,6 +56,9 @@ func (m *Model) rows() int {
 func (m *Model) paint(k md.Key, text string) []string { return m.md.Cached(k, text) }
 
 func (m *Model) banner() []string {
+	if m.copied != "" {
+		return []string{"» " + m.copied}
+	}
 	if m.p == nil || len(m.p.notes) == 0 {
 		return nil
 	}
@@ -158,10 +161,14 @@ func (m *Model) layout(follow bool) ([]string, int, int) {
 	f := m.frame()
 	top := m.lines(f.top)
 	body := m.lines(f.body)
+	menu := m.lines(f.menu)
+	m.blocks = nil
+	top, m.blocks = m.md.Number(top, m.blocks)
+	body, m.blocks = m.md.Number(body, m.blocks)
+	menu, m.blocks = m.md.Number(menu, m.blocks)
 	if f.help && m.showHelp {
 		body = append(body, m.lines([]section{{lines: helpLines(f.s, m.w), style: &footerStyle}})...)
 	}
-	menu := m.lines(f.menu)
 	foot := m.lines([]section{{lines: m.footer(f.s, false)}})
 	room := m.rows() - len(top) - len(menu) - len(foot)
 	if len(body) > room {
@@ -220,7 +227,11 @@ func (m *Model) frame() frame {
 		return m.viewFree()
 	case scFull:
 		d, _ := m.decision(m.p.cur)
-		return frame{s: scFull, body: []section{{lines: m.fullLines(d)}}, cur: -1, help: true}
+		var top []section
+		if m.copied != "" {
+			top = []section{{lines: view.WrapRest("» "+m.copied, m.w, "", "  "), style: &bannerStyle}}
+		}
+		return frame{s: scFull, top: top, body: []section{{lines: m.fullLines(d)}}, cur: -1, help: true}
 	case scReview:
 		return m.viewReview()
 	case scJump:

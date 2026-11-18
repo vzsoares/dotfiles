@@ -237,6 +237,12 @@ func Painted(p Painter, k md.Key, text string, width int, first, rest string) []
 		if i == 0 {
 			lead = first
 		}
+		if code, ok := strings.CutPrefix(l, md.CodeMark); ok {
+			l = code
+			if i > 0 {
+				lead = strings.Repeat(" ", lipgloss.Width(rest))
+			}
+		}
 		if l == "" {
 			lead = pyfmt.RStrip(lead)
 		}

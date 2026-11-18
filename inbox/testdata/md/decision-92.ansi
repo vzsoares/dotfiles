@@ -7,9 +7,8 @@
 │  glamour                                    │ none
 │  own                                        │ ~300 lines
 │
-│ [90m╭───────────────────────────────╮[0m
-│ [90m│[0m [36m[0m[36m[0m[36mlines[0m[36m [0m[36m:=[0m[36m [0m[36mr[0m[36m.[0m[36mLines[0m[36m([0m[36mtext[0m[36m,[0m[36m [0m[36mwidth[0m[36m)[0m [90m│[0m
-│ [90m╰───────────────────────────────╯[0m
+  [90m[1] copy[0m
+  [100m [36m[0m[100m[36m[0m[100m[36mlines[0m[100m[36m [0m[100m[36m:=[0m[100m[36m [0m[100m[36mr[0m[100m[36m.[0m[100m[36mLines[0m[100m[36m([0m[100m[36mtext[0m[100m[36m,[0m[100m[36m [0m[100m[36mwidth[0m[100m[36m)[0m[100m [0m
 │
 │ [3m[0m[3m[0m│ [3mcrush does the same; see [0m[34;4;1;3mcrush[0m[3m [0m[90;4;3mhttps://github.com/charmbracelet/crush[0m[3m.[0m
 │

@@ -16,5 +16,5 @@ do eiusmod lorem ipsum dolor sit amet con
 ## Part 29
 lorem ipsum dolor sit amet consectetur adipiscing elit sed
 do eiusmod lorem ipsum dolor sit amet con
-↑↓ · enter read · back · m mark · f reply · esc back
-? help · ^u/^d scroll
+↑↓ · enter read · back · m mark · f reply · y copy
+esc back · ? help · ^u/^d scroll

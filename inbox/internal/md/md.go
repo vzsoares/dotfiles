@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -13,6 +14,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	gtext "github.com/yuin/goldmark/text"
 )
 
 // Key names one rendered field: a decision's question, context or option at
@@ -40,10 +45,13 @@ type Renderer struct {
 	trs     map[int]*glamour.TermRenderer
 	cache   map[Key]entry
 	fail    error // set by tests to force the raw-text fallback
+	// srcs are the raw code blocks seen so far, by id; ids[src] dedups.
+	srcs []string
+	ids  map[string]int
 }
 
 func New(lr *lipgloss.Renderer) *Renderer {
-	return &Renderer{lr: lr, profile: lr.ColorProfile(), trs: map[int]*glamour.TermRenderer{}, cache: map[Key]entry{}}
+	return &Renderer{lr: lr, profile: lr.ColorProfile(), trs: map[int]*glamour.TermRenderer{}, cache: map[Key]entry{}, ids: map[string]int{}}
 }
 
 func (r *Renderer) sync() {
@@ -74,6 +82,7 @@ func (r *Renderer) Lines(text string, width int) []string {
 	width = max(width, 1)
 	// Cells are counted per rune, so a tab would overrun the width; the fence
 	// sentinels (Nerd Font glyphs too) would open a box mid-text.
+	srcs := rawBlocks(text)
 	text = inputFix.Replace(text)
 	out, err := r.render(text, width)
 	if err != nil {
@@ -81,6 +90,7 @@ func (r *Renderer) Lines(text string, width int) []string {
 	}
 	ascii := r.profile == termenv.Ascii
 	var lines []string
+	n := 0
 	raw := strings.Split(out, "\n")
 	for i := 0; i < len(raw); i++ {
 		if lead, _, ok := strings.Cut(raw[i], fenceOpen); ok {
@@ -94,7 +104,12 @@ func (r *Renderer) Lines(text string, width int) []string {
 					break
 				}
 			}
-			lines = append(lines, r.box(lead, code, width, ascii)...)
+			id := -1
+			if n < len(srcs) {
+				id = r.register(srcs[n])
+			}
+			n++
+			lines = append(lines, r.block(lead, code, width, ascii, id)...)
 			continue
 		}
 		lines = append(lines, wrap(raw[i], width, ascii)...)
@@ -142,49 +157,119 @@ const (
 	fenceClose = "\ue001"
 )
 
-var inputFix = strings.NewReplacer("\t", "    ", fenceOpen, "\ufffd", fenceClose, "\ufffd")
+var (
+	inputKeepTabs = strings.NewReplacer(fenceOpen, "\ufffd", fenceClose, "\ufffd")
+	inputFix      = strings.NewReplacer("\t", "    ", fenceOpen, "\ufffd", fenceClose, "\ufffd")
+)
 
-// box frames code lines in a rounded border at lead's indent, sized to the
-// widest line; too narrow a pane gets the lines unframed.
-func (r *Renderer) box(lead string, code []string, width int, ascii bool) []string {
+// CodeMark leads every line of a code block, header included, so a caller
+// can leave its own gutter off them; it is zero meaning, one cell wide.
+const CodeMark = "\ue004"
+
+const (
+	markOpen  = "\ue002"
+	markClose = "\ue003"
+	codeBG    = "\x1b[100m"
+)
+
+var marker = regexp.MustCompile(markOpen + `(\d+)` + markClose)
+
+func (r *Renderer) register(src string) int {
+	if id, ok := r.ids[src]; ok {
+		return id
+	}
+	if len(r.srcs) >= maxEntries*8 {
+		r.srcs, r.ids = nil, map[string]int{}
+	}
+	r.srcs = append(r.srcs, src)
+	r.ids[src] = len(r.srcs) - 1
+	return len(r.srcs) - 1
+}
+
+// rawBlocks are the code blocks of text in document order, source as
+// written, the same blocks glamour renders between the fence runes.
+func rawBlocks(text string) []string {
+	src := []byte(inputKeepTabs.Replace(text))
+	doc := goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser().Parse(gtext.NewReader(src))
+	var out []string
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch n.(type) {
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			var b strings.Builder
+			ls := n.Lines()
+			for i := range ls.Len() {
+				seg := ls.At(i)
+				b.Write(seg.Value(src))
+			}
+			out = append(out, strings.TrimSuffix(b.String(), "\n"))
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
+	return out
+}
+
+// Number labels each code block header in lines "[n] copy", n continuing
+// from len(blocks), and returns the lines with blocks plus their raw source.
+func (r *Renderer) Number(lines, blocks []string) ([]string, []string) {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = marker.ReplaceAllStringFunc(l, func(m string) string {
+			id, err := strconv.Atoi(marker.FindStringSubmatch(m)[1])
+			if err != nil || id >= len(r.srcs) {
+				return ""
+			}
+			blocks = append(blocks, r.srcs[id])
+			return "[" + strconv.Itoa(len(blocks)) + "] copy"
+		})
+	}
+	return out, blocks
+}
+
+// block lays code lines at lead's indent on a tinted background, padded to
+// the widest line, with a copy label above. No border characters sit beside
+// the code, so a drag-select copies only the code.
+func (r *Renderer) block(lead string, code []string, width int, ascii bool, id int) []string {
 	leadW := lipgloss.Width(lead)
-	inner := width - leadW - 4
+	inner := max(width-leadW-3, 1)
 	var body []string
 	for _, l := range code {
 		l = finish(ansi.TruncateLeft(l, leadW, ""), ascii)
-		if inner < minInner {
-			body = append(body, wrap(lead+l, width, ascii)...)
-			continue
-		}
 		body = append(body, wrap(l, inner, ascii)...)
 	}
 	for len(body) > 0 && strings.TrimSpace(ansi.Strip(body[len(body)-1])) == "" {
 		body = body[:len(body)-1]
 	}
-	if inner < minInner {
-		return body
-	}
 	cw := 0
 	for _, l := range body {
 		cw = max(cw, lipgloss.Width(l))
 	}
-	pad := finish(lead, ascii)
-	pad += strings.Repeat(" ", leadW-lipgloss.Width(pad))
-	edge := func(s string) string {
-		if ascii {
-			return s
+	pad := strings.Repeat(" ", leadW)
+	var out []string
+	if id >= 0 {
+		head := markOpen + strconv.Itoa(id) + markClose
+		if !ascii {
+			head = r.lr.NewStyle().Foreground(lipgloss.Color("8")).Render(head)
 		}
-		return r.lr.NewStyle().Foreground(lipgloss.Color("8")).Render(s)
+		out = append(out, CodeMark+pad+head)
 	}
-	out := []string{pad + edge("╭"+strings.Repeat("─", cw+2)+"╮")}
 	for _, l := range body {
-		out = append(out, pad+edge("│")+" "+l+strings.Repeat(" ", cw-lipgloss.Width(l))+" "+edge("│"))
+		line := " " + l + strings.Repeat(" ", cw-lipgloss.Width(l)) + " "
+		if !ascii {
+			line = codeBG + sgr.ReplaceAllStringFunc(line, func(m string) string {
+				if p := sgr.FindStringSubmatch(m)[1]; p == "" || p == "0" {
+					return m + codeBG
+				}
+				return m
+			}) + reset
+		}
+		out = append(out, CodeMark+pad+line)
 	}
-	return append(out, pad+edge("╰"+strings.Repeat("─", cw+2)+"╯"))
+	return out
 }
-
-// minInner is the narrowest code column worth a frame.
-const minInner = 8
 
 const reset = "\x1b[0m"
 

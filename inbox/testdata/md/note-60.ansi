@@ -6,9 +6,8 @@ Cache move
 [35m[0m[35m[0m[35m• [0m[36;100mzen-inbox watch[0m reads from [3mSQLite[0m now[0m
 [35m[0m[35m[0m[35m• [0mthe old [1mJSON[0m file is gone[0m
 
-[90m╭──────────────────────────────────────╮[0m
-[90m│[0m [36m[0m[36m[0m[36mzen-inbox list --json [0m[36m|[0m[36m jq [0m[32m'.[0].id'[0m [90m│[0m
-[90m╰──────────────────────────────────────╯[0m
+[90m[1] copy[0m
+[100m [36m[0m[100m[36m[0m[100m[36mzen-inbox list --json [0m[100m[36m|[0m[100m[36m jq [0m[100m[32m'.[0].id'[0m[100m [0m
 
  Store             │ Reads             │ Writes
 ───────────────────┼───────────────────┼──────────────────

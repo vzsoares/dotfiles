@@ -175,6 +175,12 @@ type Model struct {
 	flash   string
 	flashOK bool
 	flashAt time.Time
+	// blocks are the raw code blocks the last layout labelled, 1-based by
+	// position; yank is set after y until the number key.
+	blocks []string
+	yank   bool
+	copied string
+	clip   func(string)
 
 	sid, sname string
 	known      map[string]bool
@@ -241,7 +247,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ta.Cursor.SetMode(cursor.CursorStatic)
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
-		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()),
+		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()), clip: copyText,
 		prodBlock: "guard not run", drafts: map[string]view.Staged{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
@@ -1218,6 +1224,10 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.scr == scConfirm {
 		return m.keyConfirm(k)
+	}
+	m.copied = ""
+	if m.keyYank(k) {
+		return m, nil
 	}
 	if n := m.scrollBy(k); n != 0 {
 		m.scroll = max(m.scroll+n, 0)

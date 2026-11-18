@@ -19,6 +19,15 @@ func colour() *Renderer {
 	return New(lr)
 }
 
+// shown is what the panel prints for text: numbered, code marks dropped.
+func shown(r *Renderer, text string, width int) ([]string, []string) {
+	lines, blocks := r.Number(r.Lines(text, width), nil)
+	for i, l := range lines {
+		lines[i] = strings.TrimPrefix(l, CodeMark)
+	}
+	return lines, blocks
+}
+
 func plain() *Renderer { return New(lipgloss.NewRenderer(io.Discard)) }
 
 var sgrParams = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
@@ -76,13 +85,13 @@ func TestFencedGoGetsTokenColours(t *testing.T) {
 	}
 }
 
-func TestFenceWithoutKnownLanguageGetsOneColourInsideAGreyBox(t *testing.T) {
+func TestFenceWithoutKnownLanguageGetsOneColourOnATint(t *testing.T) {
 	for _, fence := range []string{"```", "```nosuchlang"} {
 		out := strings.Join(colour().Lines(fence+"\nplain block here\n```", 60), "\n")
 		if !strings.Contains(ansi.Strip(out), "plain block here") {
 			t.Fatalf("%s: %q", fence, out)
 		}
-		if got := colours(t, out); !slices.Equal(got, []string{"36", "90"}) {
+		if got := colours(t, out); !slices.Equal(got, []string{"100", "36", "90"}) {
 			t.Errorf("%s: colours %v in %q", fence, got, out)
 		}
 	}
@@ -155,41 +164,64 @@ func TestCacheKeysOnRevFieldAndWidth(t *testing.T) {
 	}
 }
 
-func TestFencedBlockIsBoxedToItsWidestLine(t *testing.T) {
+func TestFencedBlockHasNoBorderBesideTheCode(t *testing.T) {
 	text := "Run:\n\n```sh\nzen-inbox list\n\necho done\n```\n\nthen wait."
-	got := plain().Lines(text, 40)
+	got, blocks := shown(plain(), text, 40)
 	want := []string{
 		"Run:",
 		"",
-		"╭────────────────╮",
-		"│ zen-inbox list │",
-		"│                │",
-		"│ echo done      │",
-		"╰────────────────╯",
+		"[1] copy",
+		" zen-inbox list ",
+		"                ",
+		" echo done      ",
 		"",
 		"then wait.",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got\n%s", strings.Join(got, "\n"))
 	}
+	if !slices.Equal(blocks, []string{"zen-inbox list\n\necho done"}) {
+		t.Fatalf("blocks %q", blocks)
+	}
 	for _, l := range colour().Lines(text, 40) {
-		if strings.ContainsAny(ansi.Strip(l), fenceOpen+fenceClose) {
-			t.Fatalf("sentinel leaked: %q", l)
+		if strings.ContainsAny(ansi.Strip(l), fenceOpen+fenceClose+"│╭╰") {
+			t.Fatalf("sentinel or border leaked: %q", l)
 		}
 	}
 }
 
-func TestFencedBlockInAQuoteKeepsTheBar(t *testing.T) {
-	got := plain().Lines("> see\n>\n> ```\n> inside\n> ```", 30)
-	want := []string{"│ see", "│", "│ ╭────────╮", "│ │ inside │", "│ ╰────────╯"}
+func TestFencedBlockInAQuoteHasNoBarBesideTheCode(t *testing.T) {
+	got, _ := shown(plain(), "> see\n>\n> ```\n> inside\n> ```", 30)
+	want := []string{"│ see", "│", "  [1] copy", "   inside "}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got\n%s", strings.Join(got, "\n"))
 	}
 }
 
-func TestNarrowPaneLeavesCodeUnboxed(t *testing.T) {
-	got := plain().Lines("```\nabcdef\n```", 10)
-	if !slices.Equal(got, []string{"abcdef"}) {
+func TestBlocksKeepSourceExactly(t *testing.T) {
+	text := "```sh\n  sed -i 's/a/b/' f \\\n\t--flag \\\n```\n\ntext\n\n~~~\nsecond\n~~~\n\n    indented"
+	got, blocks := shown(plain(), text, 60)
+	want := []string{"  sed -i 's/a/b/' f \\\n\t--flag \\", "second", "indented"}
+	if !slices.Equal(blocks, want) {
+		t.Fatalf("blocks %q", blocks)
+	}
+	if n := strings.Count(strings.Join(got, "\n"), "copy"); n != 3 {
+		t.Fatalf("%d labels in %q", n, got)
+	}
+}
+
+func TestNumberContinuesAcrossFields(t *testing.T) {
+	r := plain()
+	a, blocks := r.Number(r.Lines("```\none\n```", 30), nil)
+	b, blocks := r.Number(r.Lines("```\ntwo\n```", 30), blocks)
+	if !strings.Contains(a[0], "[1] copy") || !strings.Contains(b[0], "[2] copy") || len(blocks) != 2 || blocks[1] != "two" {
+		t.Fatalf("%q %q %q", a, b, blocks)
+	}
+}
+
+func TestNarrowPaneStillHasNoBorder(t *testing.T) {
+	got, _ := shown(plain(), "```\nabcdef\n```", 10)
+	if !slices.Equal(got, []string{"[1] copy", " abcdef "}) {
 		t.Fatalf("%q", got)
 	}
 }

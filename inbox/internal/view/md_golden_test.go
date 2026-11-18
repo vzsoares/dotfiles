@@ -47,7 +47,11 @@ func sampleDecision() inbox.Decision {
 func colourPainter() Painter {
 	lr := lipgloss.NewRenderer(io.Discard)
 	lr.SetColorProfile(termenv.ANSI)
-	return md.New(lr).Cached
+	r := md.New(lr)
+	return func(k md.Key, text string) []string {
+		lines, _ := r.Number(r.Cached(k, text), nil)
+		return lines
+	}
 }
 
 func mdGolden(t *testing.T, name string, lines []string, width int) {

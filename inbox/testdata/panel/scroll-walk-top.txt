@@ -26,5 +26,5 @@ b) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem i
   Talk
   View full
   Back
-↑↓ · enter · a-d pick · f free · s skip · t talk · v full · ←→ move · esc list · ? help
-^u/^d scroll
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · y copy · ←→ move · esc list
+? help · ^u/^d scroll
