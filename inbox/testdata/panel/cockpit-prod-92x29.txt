@@ -1,4 +1,4 @@
-cockpit · 2 open · 1 prod                                                          quota n/a
+cockpit · 2 decisions · 1 prod                                                     quota n/a
 Threads · 2
 › PROD · spec-s2 · #680 · 1 open · 0s · [idle]
   spec-s1 · #7 · 1 open · 0s · [idle]

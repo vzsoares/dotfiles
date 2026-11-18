@@ -1,4 +1,4 @@
-cockpit · 1 open · 1 prod          quota n/a
+cockpit · 1 decision · 1 prod      quota n/a
 680.1  prod approval
 action release
 repo   dotfiles

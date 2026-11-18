@@ -1,4 +1,4 @@
-cockpit · 3 open · 1 prod                                                          quota n/a
+cockpit · 3 decisions · 1 prod                                                     quota n/a
 Talk about which? (space marks, none means all)
 › [ ] 7.1  Which way?
   [ ] 7.2  Which store?

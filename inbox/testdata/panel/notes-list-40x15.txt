@@ -1,4 +1,4 @@
-cockpit · 1 open · ✉ 1 unread  quota n/a
+cockpit · 1 decision · 1 note  quota n/a
 Threads · 2
 › spec-s1 · #7 · 1 open · 0s · [idle]
   ● Task 707 merged · chief · #707 · 0s

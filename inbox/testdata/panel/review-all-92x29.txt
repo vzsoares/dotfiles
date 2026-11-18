@@ -1,4 +1,4 @@
-cockpit · 3 open · 1 prod                                                          quota n/a
+cockpit · 3 decisions · 1 prod                                                     quota n/a
 Review all · spec-s1 · 3 open
 › 7.1  Which way?
   a) left

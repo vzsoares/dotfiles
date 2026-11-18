@@ -27,7 +27,7 @@ func TestCockpitGoldens(t *testing.T) {
 		{"cockpit-notes-92x29", func(d *drv) {
 			d.addNote("707", "Task 707 merged", "")
 			d.addNote("", "Session spec-s2 died", "")
-		}, []string{"cockpit · ✉ 2 unread", "Threads · 1", "No task · 1 unread", "m read", "f reply"}},
+		}, []string{"cockpit · 2 notes", "Threads · 1", "No task · 1 unread", "m read", "f reply"}},
 		{"cockpit-asks-held-92x29", func(d *drv) {
 			d.ask("7", "s1", "First?", "a", "b")
 			d.ask("7", "s1", "Second?", "a", "b")
@@ -35,11 +35,11 @@ func TestCockpitGoldens(t *testing.T) {
 			if _, err := d.other.Answer("7.1", ptr("a"), nil, "", nil); err != nil {
 				t.Fatal(err)
 			}
-		}, []string{"cockpit · 2 open · 1 held", "Threads · 2", "Held · ", "spec-s1: 7.1 held until 7.2", "a answer"}},
+		}, []string{"cockpit · 2 decisions · 1 held", "Threads · 2", "Held · ", "spec-s1: 7.1 held until 7.2", "a answer"}},
 		{"cockpit-prod-92x29", func(d *drv) {
 			d.ask("7", "s1", "First?", "a", "b")
 			d.askProd("s2")
-		}, []string{"cockpit · 2 open · 1 prod", "› PROD · spec-s2"}},
+		}, []string{"cockpit · 2 decisions · 1 prod", "› PROD · spec-s2"}},
 	}
 	for _, c := range cases {
 		d := newDrv(t, 92, 29)

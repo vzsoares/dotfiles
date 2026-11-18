@@ -56,7 +56,7 @@ func (d *drv) openThread843() {
 	d.t.Helper()
 	d.poll()
 	d.cursorTo("#843")
-	d.keys("enter")
+	d.keys("o")
 	if d.m.scr != scThread || !d.m.thread.loaded {
 		d.t.Fatalf("thread not open:\n%s", d.view())
 	}
@@ -81,7 +81,7 @@ func TestThreadGoldens(t *testing.T) {
 	d.poll()
 	d.fits()
 	d.has("Threads · 2", "› ▸ #843 · 1 open · 2 unread · 11 items · 1h · Phone cockpit setup", "  spec-s2 · #9",
-		"No task · 1 unread", "enter thread")
+		"No task · 1 unread", "enter expand")
 	if strings.Contains(d.view(), "Phone step") {
 		t.Fatalf("thread not collapsed:\n%s", d.view())
 	}
@@ -95,7 +95,7 @@ func TestThreadGoldens(t *testing.T) {
 	}
 	golden(t, "cockpit-threads-expanded-92x29", d.view())
 
-	d.keys("z", "enter")
+	d.keys("z", "o")
 	d.fits()
 	if d.threadCursor() != "n3" {
 		t.Fatalf("opened at %s, want the first unread n3:\n%s", d.threadCursor(), d.view())
@@ -149,7 +149,7 @@ func TestThreadOpenAskGolden(t *testing.T) {
 	d.ask("861", "s1", "Re-file with T?", "yes", "no")
 	d.poll()
 	d.cursorTo("#861")
-	d.keys("enter")
+	d.keys("o")
 	if d.threadCursor() != "861.1" {
 		t.Fatalf("opened at %q, want the open ask", d.threadCursor())
 	}
@@ -403,7 +403,7 @@ func TestRefileIntoAThreadAndBack(t *testing.T) {
 	if d.m.scr != scList || d.m.focusedRow() != "t:843" || !strings.Contains(d.view(), "» n11 → #843") {
 		t.Fatalf("list did not follow the note: %q\n%s", d.m.focusedRow(), d.view())
 	}
-	d.keys("enter", "G")
+	d.keys("o", "G")
 	for d.threadCursor() != "n11" {
 		d.keys("tab")
 	}
@@ -507,7 +507,7 @@ func TestThreadScreensFitSmallPanes(t *testing.T) {
 		d.cursorTo("#843")
 		d.keys("z")
 		d.fits()
-		d.keys("z", "enter")
+		d.keys("z", "o")
 		for _, k := range []string{"g", "tab", "tab", "pgdown", "?", "G", "?", "c"} {
 			d.keys(k)
 			d.fits()
@@ -547,5 +547,44 @@ func TestPollPrunesThreadsOpenOfGoneThreads(t *testing.T) {
 	}
 	if st := readState(d.m.stateFile); len(st.ThreadsOpen) != 1 || st.ThreadsOpen[0] != "843" {
 		t.Fatalf("saved %v", st.ThreadsOpen)
+	}
+}
+
+func TestEnterTogglesThreadRowAndOpensItemRow(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.fixture843()
+	d.poll()
+	d.cursorTo("#843")
+	d.keys("enter")
+	if d.m.scr != scList || !d.m.threadsOpen["843"] || d.m.focusedRow() != "t:843" {
+		t.Fatalf("enter did not expand:\n%s", d.view())
+	}
+	d.keys("enter")
+	if d.m.scr != scList || d.m.threadsOpen["843"] {
+		t.Fatalf("enter did not collapse:\n%s", d.view())
+	}
+	d.keys("enter")
+	d.cursorTo("Phone step 10")
+	d.keys("enter")
+	if d.m.scr != scNote || d.m.note.ID != 10 {
+		t.Fatalf("enter on an item row:\n%s", d.view())
+	}
+}
+
+func TestHeaderCountsRefreshOnPollAndFit(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.poll()
+	d.ask("7", "s1", "Q?", "a", "b")
+	d.addNote("707", "Task 707 merged", "")
+	d.poll()
+	if got := d.head(); got != "cockpit · 1 decision · 1 note" {
+		t.Fatalf("header %q", got)
+	}
+	d.ask("8", "s2", "Q?", "a", "b")
+	d.addNote("", "Session died", "")
+	d.poll()
+	d.fits()
+	if got := d.head(); got != "cockpit · 2 decisions · 2 notes" {
+		t.Fatalf("header %q", got)
 	}
 }

@@ -1,4 +1,4 @@
-cockpit · 2 open · ✉ 3 unread                                                      quota n/a
+cockpit · 2 decisions · 3 notes                                                    quota n/a
 Threads · 2
 › ▾ #843 · 1 open · 2 unread · 11 items · 1h · Phone cockpit setup
     spec-s1 · #843 Phone cockpit setup · 1 open · 1h · [idle]
@@ -26,4 +26,4 @@ No task · 1 unread
 
 
 
-↑↓ · enter thread · z fold · a answer · m read all · c chief · M all read · ? help · q quit
+↑↓ · enter fold · o thread · a answer · m read all · c chief · M all read · ? help · q quit

@@ -1,4 +1,4 @@
-cockpit · 2 open                   quota n/a
+cockpit · 2 decisions              quota n/a
 Review: Send records these answers.
 
 7.1  Which storage should the cache use?

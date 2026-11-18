@@ -1,4 +1,4 @@
-cockpit · 1 open                                                                   quota n/a
+cockpit · 1 decision                                                               quota n/a
 ↑ 23 more
 │ context line 20
 │ context line 21

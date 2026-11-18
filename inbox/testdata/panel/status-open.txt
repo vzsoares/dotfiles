@@ -1,4 +1,4 @@
-cockpit · 3 open                                   quota n/a
+cockpit · 3 decisions                              quota n/a
 Threads · 2
 › spec-s1 · #7 · 1 open · 0s · [idle]
   spec-s2 · #8 · 2 open · 0s · [idle]

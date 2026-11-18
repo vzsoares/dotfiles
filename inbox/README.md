@@ -34,7 +34,7 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
 
 The cockpit groups everything with one task ID into a collapsible `#task` thread:
 its asking sessions, visible notes (with replies), and in the thread screen
-(`enter`) the full timeline, closed decisions and your `c` chats to chief included.
+(`o` on its row; `enter` folds it) the full timeline, closed decisions and your `c` chats to chief included.
 Notes without a task sit in `No task`; `zen-inbox refile <note> <task|->` or `T` on
 a note moves one in or out. `c` on a thread binds the message as `[#task title] …`
 and stores it in the `chats` table (schema v10). Every poll sends a chat

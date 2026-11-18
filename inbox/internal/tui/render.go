@@ -304,7 +304,7 @@ func (m *Model) header() (string, lipgloss.Style) {
 	}
 	parts := []string{"cockpit"}
 	if n := len(m.snap.open); n > 0 {
-		parts = append(parts, strconv.Itoa(n)+" open")
+		parts = append(parts, plural(n, "decision"))
 	}
 	prod := 0
 	for _, d := range m.snap.open {
@@ -316,7 +316,7 @@ func (m *Model) header() (string, lipgloss.Style) {
 		parts = append(parts, strconv.Itoa(prod)+" prod")
 	}
 	if n := inbox.Unread(m.snap.notes); n > 0 {
-		parts = append(parts, "✉ "+strconv.Itoa(n)+" unread")
+		parts = append(parts, plural(n, "note"))
 	}
 	if n := len(m.snap.held); n > 0 {
 		parts = append(parts, strconv.Itoa(n)+" held")
@@ -656,4 +656,11 @@ func (m *Model) viewTalkWho() frame {
 	head := view.Wrap("Talk about which? (space marks, none means all)", m.w, "")
 	return frame{s: scTalkWho, top: []section{{lines: head}},
 		body: m.markMenu(m.sessionOpen()), cur: m.cursor}
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return strconv.Itoa(n) + " " + noun + "s"
 }

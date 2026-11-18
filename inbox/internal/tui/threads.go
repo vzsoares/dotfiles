@@ -311,12 +311,12 @@ func (m *Model) keyThreadRow(k string) (bool, tea.Cmd) {
 	}
 	header := row == "t:"+t.task
 	switch {
-	case k == "enter" && header:
-		return true, m.openThread(t.task)
-	case (k == "z" && header) || (k == "right" && header):
+	case (k == "z" && header) || (k == "enter" && header) || (k == "right" && header):
 		m.foldThread(t.task, k == "right" || !m.threadsOpen[t.task])
 	case k == "z" || k == "left":
 		m.foldThread(t.task, false)
+	case k == "o" && header:
+		return true, m.openThread(t.task)
 	case k == "a" && header:
 		m.answerThread(t.rows)
 	case k == "m" && header:

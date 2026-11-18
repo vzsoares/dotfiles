@@ -1460,7 +1460,7 @@ func (m *Model) listKeys() []ranked {
 		if m.threadsOpen[t.task] {
 			fold = "fold"
 		}
-		keys = append(keys, ranked{key{"enter", "thread"}, 0}, ranked{key{"z", fold}, 4})
+		keys = append(keys, ranked{key{"enter", fold}, 0}, ranked{key{"o", "thread"}, 4})
 		if t.open > 0 {
 			keys = append(keys, ranked{key{"a", "answer"}, 1})
 		}

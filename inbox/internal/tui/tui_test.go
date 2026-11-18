@@ -1015,11 +1015,11 @@ func TestStatusLineStates(t *testing.T) {
 	d.ask("8", "s2", "Q2?", "a", "b")
 	d.poll()
 	golden(t, "status-open", d.view())
-	if got := d.head(); got != "cockpit · 3 open" {
+	if got := d.head(); got != "cockpit · 3 decisions" {
 		t.Errorf("header %q", got)
 	}
 	d.send(tea.WindowSizeMsg{Width: 14, Height: 10})
-	if got := d.head(); got != "cockpit · 3 o…" {
+	if got := d.head(); got != "cockpit · 3 d…" {
 		t.Errorf("header wrapped or overflowed: %q", got)
 	}
 	if got := d.last(); got != "enter open" {

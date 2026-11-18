@@ -1,4 +1,4 @@
-cockpit · 1 open                             5h 42% · resets 15:20  ·  week 63% · resets Fri
+cockpit · 1 decision                         5h 42% · resets 15:20  ·  week 63% · resets Fri
 Threads · 1
 › spec-s1 · #7 · 1 open · 0s · [idle]
 
