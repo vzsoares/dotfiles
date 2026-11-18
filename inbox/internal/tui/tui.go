@@ -1364,9 +1364,17 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	n := m.menuLen()
 	switch k {
 	case "up", "k":
+		if m.wraps() && n > 0 && m.cursor <= 0 {
+			m.cursor = n - 1
+			return m, nil
+		}
 		m.cursor = max(m.cursor-1, 0)
 		return m, nil
 	case "down", "j":
+		if m.wraps() && n > 0 && m.cursor >= n-1 {
+			m.cursor = 0
+			return m, nil
+		}
 		m.cursor = min(m.cursor+1, max(n-1, 0))
 		return m, nil
 	case "?":
@@ -1964,3 +1972,6 @@ func abs(n int) int {
 	}
 	return n
 }
+
+// wraps is whether up and down wrap around: only in the Inbox list.
+func (m *Model) wraps() bool { return m.scr == scList && m.inboxOpen }
