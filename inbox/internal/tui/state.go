@@ -10,6 +10,8 @@ import (
 // quota cache rather than in the inbox db so it needs no migration.
 type panelState struct {
 	NotesFolded bool `json:"notes_folded"`
+	// ThreadsOpen are the tasks whose threads are expanded.
+	ThreadsOpen []string `json:"threads_open"`
 }
 
 func statePath() string {

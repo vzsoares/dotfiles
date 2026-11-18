@@ -18,7 +18,9 @@ var finalStatuses = []string{"delivered", "dropped", "answered"}
 // chiefMsg is the last message sent to chief and where it stands.
 type chiefMsg struct {
 	id, status string
-	checking   bool
+	// chat is the stored row the status is mirrored into.
+	chat     int64
+	checking bool
 	// failed counts consecutive status polls that gave nothing.
 	failed int
 	// doneAt is when the status turned final.
@@ -35,7 +37,10 @@ const statusUnknown = "sent"
 // maxPollFailures is how many empty polls in a row end tracking.
 const maxPollFailures = 3
 
-type chiefSentMsg struct{ id, err string }
+type chiefSentMsg struct {
+	id, err string
+	chat    int64
+}
 type chiefStatusMsg struct{ id, status, err string }
 
 func newChiefBox() textarea.Model {
@@ -46,30 +51,67 @@ func newChiefBox() textarea.Model {
 	return ta
 }
 
-func (m *Model) openChief() tea.Cmd {
-	m.scr, m.flash = scChief, ""
+// openChief opens the compose box bound to task ("" for none); esc and a
+// send go back to from.
+func (m *Model) openChief(task string, from screen) tea.Cmd {
+	m.scr, m.flash, m.chiefTask, m.chiefFrom = scChief, "", task, from
 	return m.chiefTA.Focus()
 }
 
+// chiefText is what chief receives: a thread's message leads with its task and title.
+func chiefText(task, title, text string) string {
+	if task == "" {
+		return text
+	}
+	return "[" + pyfmt.RStrip("#"+task+" "+title) + "] " + text
+}
+
+// chiefSendCmd stores the chat, sends it, then records the message id or the error.
 func (m *Model) chiefSendCmd(text string) tea.Cmd {
 	m.busy = "Sending to chief…"
-	client := m.am
+	ib, client, task := m.ib, m.am, m.chiefTask
+	msg := chiefText(task, m.snap.titles[task], text)
 	return func() tea.Msg {
-		id, errText := client.Chief(text)
-		return chiefSentMsg{id, errText}
+		c, err := ib.AddChat(task, text)
+		if err != nil {
+			return chiefSentMsg{err: err.Error()}
+		}
+		id, errText := client.Chief(msg)
+		status := "queued"
+		if errText != "" {
+			status = "failed"
+		}
+		if err := ib.UpdateChat(c.ID, id, status, errText); err != nil && errText == "" {
+			errText = "sent as " + id + ", not recorded: " + err.Error()
+		}
+		return chiefSentMsg{id, errText, c.ID}
 	}
+}
+
+// leaveChief goes back to the screen c was pressed on.
+func (m *Model) leaveChief(flash string, ok bool) tea.Cmd {
+	if m.chiefFrom == scThread {
+		cmd := m.backToThread(flash)
+		m.flashOK = ok
+		return cmd
+	}
+	m.scr, m.flash, m.flashOK, m.flashAt = scList, flash, ok, m.now()
+	return nil
 }
 
 func (m *Model) onChiefSent(msg chiefSentMsg) tea.Cmd {
 	m.busy = ""
-	if msg.err != "" {
+	if msg.err != "" && msg.id == "" {
 		m.scr, m.flash, m.flashOK = scChief, msg.err, false
 		return m.chiefTA.Focus()
 	}
 	m.chiefTA.Reset()
-	m.chief = chiefMsg{id: msg.id, status: "queued"}
-	m.scr, m.flash, m.flashOK, m.flashAt = scList, "message "+msg.id+" queued for chief", true, m.now()
-	return m.chiefPoll()
+	m.chief = chiefMsg{id: msg.id, status: "queued", chat: msg.chat}
+	flash, ok := "message "+msg.id+" queued for chief", true
+	if msg.err != "" {
+		flash, ok = msg.err, false
+	}
+	return tea.Batch(m.leaveChief(flash, ok), m.chiefPoll())
 }
 
 // chiefPoll asks for the status of the tracked message unless one ask is out.
@@ -85,11 +127,13 @@ func (m *Model) chiefPoll() tea.Cmd {
 	}
 }
 
-func (m *Model) onChiefStatus(msg chiefStatusMsg) {
+// onChiefStatus tracks the status and mirrors a change into the stored chat.
+func (m *Model) onChiefStatus(msg chiefStatusMsg) tea.Cmd {
 	if msg.id != m.chief.id {
-		return
+		return nil
 	}
 	m.chief.checking = false
+	was := m.chief.status
 	if msg.err != "" || msg.status == "" {
 		if m.chief.failed++; m.chief.failed >= maxPollFailures {
 			m.chief.status = statusUnknown
@@ -99,6 +143,16 @@ func (m *Model) onChiefStatus(msg chiefStatusMsg) {
 	}
 	if m.chief.final() {
 		m.chief.doneAt = m.now()
+	}
+	if m.chief.status == was || m.chief.chat == 0 {
+		return nil
+	}
+	ib, chat, status := m.ib, m.chief.chat, m.chief.status
+	return func() tea.Msg {
+		if err := ib.UpdateChat(chat, "", status, ""); err != nil {
+			return chiefStatusMsg{err: "chat status not recorded: " + err.Error()}
+		}
+		return nil
 	}
 }
 
@@ -112,8 +166,7 @@ func (m *Model) expireChief() {
 func (m *Model) keyChief(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.scr, m.flash = scList, ""
-		return m, nil
+		return m, m.leaveChief("", false)
 	case "ctrl+d":
 		text := m.chiefTA.Value()
 		if pyfmt.Blank(text) {
@@ -127,7 +180,11 @@ func (m *Model) keyChief(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) viewChief() frame {
-	top := []section{{lines: []string{"message chief"}}}
+	head := "message chief"
+	if m.chiefTask != "" {
+		head = pyfmt.Clip(chiefText(m.chiefTask, m.snap.titles[m.chiefTask], "")+"· message chief", m.w)
+	}
+	top := []section{{lines: []string{head}}}
 	if m.flash != "" {
 		top = append(top, section{lines: view.WrapRest("» "+m.flash, m.w, "", "  "), style: &bannerStyle})
 	}

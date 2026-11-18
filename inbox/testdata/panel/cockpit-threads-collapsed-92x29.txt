@@ -1,0 +1,29 @@
+cockpit · 2 open · ✉ 3 unread                                                      quota n/a
+Threads · 2
+› ▸ #843 · 1 open · 2 unread · 11 items · 1h · Phone cockpit setup
+  spec-s2 · #9 · 1 open · 0s · [idle]
+
+No task · 1 unread
+  ● Swept 6 finished agents; kept 5 · chief · 0s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+enter thread · z expand · a answer · m read all · c chief · M all read · ? help · q quit

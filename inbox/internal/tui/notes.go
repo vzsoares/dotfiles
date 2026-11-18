@@ -30,41 +30,26 @@ type noteSentMsg struct {
 
 func noteValue(n inbox.Note) string { return strconv.FormatInt(n.ID, 10) }
 
-// notesHead is the Notes group's header text; folded, it says all read
+// notesHead is the No task group's header text; folded, it says all read
 // instead of counting zero.
 func (m *Model) notesHead() string {
-	n := inbox.Unread(m.snap.notes)
+	n := inbox.Unread(m.looseNotes())
 	if n == 0 && m.notesFolded {
-		return "Notes · all read"
+		return "No task · all read"
 	}
-	return "Notes · " + strconv.Itoa(n) + " unread"
+	return "No task · " + strconv.Itoa(n) + " unread"
 }
 
-// foldNotes collapses or expands the Notes group, keeps the cursor on it
+// foldNotes collapses or expands the No task group, keeps the cursor on it
 // and saves the choice.
 func (m *Model) foldNotes(fold bool) {
 	m.notesFolded = fold
 	row := "nh:"
-	if !fold && len(m.snap.notes) > 0 {
-		row = "n:" + noteValue(m.snap.notes[0])
+	if loose := m.looseNotes(); !fold && len(loose) > 0 {
+		row = "n:" + noteValue(loose[0])
 	}
 	m.refocus(row)
-	if err := writeState(m.stateFile, panelState{NotesFolded: fold}); err != nil {
-		m.flash, m.flashOK = "could not save fold state: "+err.Error(), false
-	}
-}
-
-// noteItems are the list's note rows, after every decision and retry row;
-// folded, the one header row stands for them.
-func (m *Model) noteItems(room int) []item {
-	if m.notesFolded && len(m.snap.notes) > 0 {
-		return []item{{pyfmt.Clip(m.notesHead(), room), "nh:"}}
-	}
-	out := make([]item, len(m.snap.notes))
-	for i, n := range m.snap.notes {
-		out[i] = item{pyfmt.Clip(view.NoteLabel(n, m.now()), room), "n:" + noteValue(n)}
-	}
-	return out
+	m.saveState()
 }
 
 // cursorNote is the note under the list cursor.
@@ -100,14 +85,26 @@ func (m *Model) refreshNote() {
 func (m *Model) openNote(id string) {
 	for _, n := range m.snap.notes {
 		if noteValue(n) == id {
-			m.note, m.scr, m.flash = n, scNote, ""
+			m.note, m.scr, m.flash, m.noteFrom = n, scNote, "", scList
 			return
 		}
 	}
 }
 
+// leaveNote goes back to the list or the thread the note was opened from.
+func (m *Model) leaveNote(flash string, ok bool) tea.Cmd {
+	if m.noteFrom == scThread {
+		cmd := m.backToThread(flash)
+		m.flashOK = ok
+		return cmd
+	}
+	m.scr, m.flash, m.flashOK, m.flashAt = scList, flash, ok, m.now()
+	m.refocus("n:" + noteValue(m.note))
+	return nil
+}
+
 func (m *Model) markCmd(id int64, all, read bool) tea.Cmd {
-	ib, client, watched, sessions := m.ib, m.am, m.watchedIDs(), m.snap.sessions
+	ib, client, w, sessions := m.ib, m.am, m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		var err error
 		if all {
@@ -115,7 +112,7 @@ func (m *Model) markCmd(id int64, all, read bool) tea.Cmd {
 		} else {
 			err = ib.MarkNotes([]int64{id}, read)
 		}
-		return notesMsg{err, load(ib, client, watched, sessions, false)}
+		return notesMsg{err, load(ib, client, w, sessions, false)}
 	}
 }
 
@@ -123,6 +120,7 @@ func (m *Model) onNotes(msg notesMsg) {
 	focused := m.focusedRow()
 	m.snap = msg.snap
 	m.refreshNote()
+	m.refreshThread()
 	m.refocus(focused)
 	if msg.err != nil {
 		m.flash, m.flashOK = msg.err.Error(), false
@@ -134,19 +132,19 @@ func (m *Model) onNotes(msg notesMsg) {
 
 func (m *Model) replyCmd(n inbox.Note, text string) tea.Cmd {
 	m.busy = "Sending reply to " + n.SessionName + "…"
-	ib, client, watched, sessions := m.ib, m.am, m.watchedIDs(), m.snap.sessions
+	ib, client, w, sessions := m.ib, m.am, m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		res, err := ib.Reply(n.ID, text)
-		return noteSentMsg{res, err, load(ib, client, watched, sessions, false)}
+		return noteSentMsg{res, err, load(ib, client, w, sessions, false)}
 	}
 }
 
-func (m *Model) onNoteSent(msg noteSentMsg) {
+func (m *Model) onNoteSent(msg noteSentMsg) tea.Cmd {
 	m.busy, m.snap = "", msg.snap
 	m.refreshNote()
 	if msg.err != nil {
 		m.scr, m.flash, m.flashOK = scNote, msg.err.Error(), false
-		return
+		return nil
 	}
 	m.ta.Reset()
 	m.replyFor = 0
@@ -154,13 +152,10 @@ func (m *Model) onNoteSent(msg noteSentMsg) {
 	if msg.res.OK {
 		flash = "reply sent to " + m.note.SessionName + inbox.FollowupText(msg.res.Followup, m.note.SessionID)
 	}
-	m.scr, m.flash, m.flashOK, m.flashAt = scList, flash, msg.res.OK, m.now()
-	m.cursor = min(m.cursor, max(m.menuLen()-1, 0))
-	for i, it := range m.listItems() {
-		if it.value == "n:"+noteValue(m.note) {
-			m.cursor = i
-		}
+	if m.noteFrom != scThread {
+		m.cursor = min(m.cursor, max(len(m.listItems())-1, 0))
 	}
+	return m.leaveNote(flash, msg.res.OK)
 }
 
 func (m *Model) retryNoteCmd(id int64) tea.Cmd {
@@ -172,7 +167,7 @@ func (m *Model) retryNoteCmd(id int64) tea.Cmd {
 		if err != nil {
 			flash = err.Error()
 		}
-		return retriedMsg{flash, err == nil && res.OK, load(ib, client, nil, sessions, false)}
+		return retriedMsg{flash, err == nil && res.OK, load(ib, client, watch{}, sessions, false)}
 	}
 }
 
@@ -205,13 +200,16 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 		m.ta.Placeholder = "reply (empty cancels)"
 		m.scr, m.flash = scReply, ""
 		return m, m.ta.Focus()
+	case "T":
+		return m, m.openRefile(n, scNote)
 	case "enter":
-		m.scr, m.flash = scList, ""
+		cmd := m.leaveNote("", false)
 		if n.Unread() {
-			return m, m.markCmd(n.ID, false, true)
+			return m, tea.Batch(cmd, m.markCmd(n.ID, false, true))
 		}
+		return m, cmd
 	case "esc", "q":
-		m.scr, m.flash = scList, ""
+		return m, m.leaveNote("", false)
 	}
 	return m, nil
 }

@@ -1,0 +1,24 @@
+cockpit · 1 open · ✉ 3 unread      quota n/a
+#843 Phone …  1 open · 2 unread · 11 entries
+  Reach the cockpit from the phone over SSH.
+↑ 14 more
+› n3 · chief · 1h
+  Phone step 3
+
+  Set up step 3.
+
+  ↩ 57m: ok 3
+
+  n4 · chief · 1h
+  Phone step 4
+
+  Set up step 4.
+
+  ↩ 56m: ok 4
+
+  843.1 · spec-s1 · 1h
+  Which phone app?
+↓ 41 more
+↑↓ · tab next · enter open · f reply
+a answer · m read · esc back · ? help
+^u/^d scroll

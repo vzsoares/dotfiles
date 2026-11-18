@@ -1,7 +1,5 @@
 cockpit · 40 open                                                                  quota n/a
-↑ 18 more
-  spec-t27 · #717 · 1 open · 0s · [gone]
-  spec-t28 · #718 · 1 open · 0s · [gone]
+↑ 20 more
   spec-t29 · #719 · 1 open · 0s · [gone]
   spec-t30 · #720 · 1 open · 0s · [gone]
   spec-t31 · #721 · 1 open · 0s · [gone]
@@ -23,8 +21,10 @@ cockpit · 40 open                                                              
   spec-t47 · #737 · 1 open · 0s · [gone]
   spec-t48 · #738 · 1 open · 0s · [gone]
   spec-t49 · #739 · 1 open · 0s · [gone]
-Failed deliveries, asks (prod first), notes from chief and held answers, most urgent first.
-enter opens the row under the cursor, a answers a session's asks, f replies to a note, m
-marks a note read or unread, M marks them all read, r retries a failed delivery, c writes to
-chief.
+Failed deliveries, one thread per task (prod first) holding its asks and notes, notes
+without a task, then held answers, most urgent first. enter opens the row under the cursor
+(a thread opens its timeline), z or →← folds a thread, a answers a session's asks, f replies
+to a note, m marks a note read or unread (a thread: all its notes read), M marks them all
+read, T moves a note to another task, r retries a failed delivery, c writes to chief (about
+the thread under the cursor).
 ↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d scroll

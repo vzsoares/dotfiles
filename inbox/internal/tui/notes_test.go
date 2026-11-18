@@ -75,7 +75,7 @@ func TestNotesListGoldens(t *testing.T) {
 		d := newDrv(t, sz[0], sz[1])
 		d.notesFixture()
 		v := d.view()
-		if !strings.Contains(v, "Notes · 1 unread") || !strings.Contains(v, "● Task 707 merged") ||
+		if !strings.Contains(v, "No task · 0 unread") || !strings.Contains(v, "● Task 707 merged") ||
 			!strings.Contains(v, "○ Session spec-s2") {
 			t.Fatalf("no notes section:\n%s", v)
 		}
@@ -289,7 +289,7 @@ func TestNoteScreensFit(t *testing.T) {
 	for _, sz := range [][2]int{{92, 30}, {60, 20}, {40, 15}} {
 		d := newDrv(t, sz[0], sz[1])
 		d.notesFixture()
-		d.addNote("707", strings.Repeat("t", inbox.TitleMax), "# Report\n\n"+words(3000))
+		d.addNote("", strings.Repeat("t", inbox.TitleMax), "# Report\n\n"+words(3000))
 		d.poll()
 		d.fits()
 		d.cursorTo("ttt")
@@ -378,7 +378,7 @@ func TestEnterOnUnreadNoteMarksReadAndGoesBack(t *testing.T) {
 	if d.m.scr != scList || d.m.focusedRow() != row {
 		t.Fatalf("scr %v row %q, want the list on %q:\n%s", d.m.scr, d.m.focusedRow(), row, d.view())
 	}
-	if !strings.Contains(d.view(), "Notes · 0 unread") || !strings.Contains(d.view(), "○ Task 707") {
+	if !strings.Contains(d.view(), "Threads · 2") || !strings.Contains(d.view(), "○ Task 707") {
 		t.Fatalf("list not refreshed:\n%s", d.view())
 	}
 }

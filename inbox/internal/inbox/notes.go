@@ -306,6 +306,28 @@ func (ib *Inbox) MarkAllNotes(read bool) error {
 		Stamp(Now().Add(-VisibleFor))))
 }
 
+// Refile moves note id into task's thread; "-" or "" clears its task.
+func (ib *Inbox) Refile(id int64, task string) (Note, error) {
+	if task == "-" {
+		task = ""
+	}
+	if task != "" && !digits(task) {
+		return Note{}, errf(2, "bad task %s: digits, or - to clear", pyfmt.Repr(task))
+	}
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	var n Note
+	err := ib.immediate(func() error {
+		var err error
+		if n, err = ib.note(id); err != nil {
+			return err
+		}
+		n.Task = task
+		return ib.exec("UPDATE notes SET task = ? WHERE id = ?", task, id)
+	})
+	return n, err
+}
+
 // ReplyHeader starts a reply's message.
 func ReplyHeader(n Note) string {
 	about := n.Title

@@ -30,22 +30,31 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
 - An ask: a one-sentence question, then short options that each carry their
   consequence (`-o "Keep glamour: no new code"`).
 
+## Threads
+
+The cockpit groups everything with one task ID into a collapsible `#task` thread:
+its asking sessions, visible notes (with replies), and in the thread screen
+(`enter`) the full timeline, closed decisions and your `c` chats to chief included.
+Notes without a task sit in `No task`; `zen-inbox refile <note> <task|->` or `T` on
+a note moves one in or out. `c` on a thread binds the message as `[#task title] …`
+and stores it in the `chats` table (schema v10).
+
 ## Layout
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v8, IDs, guarded transitions, flush, message,
-                    prod-action approvals, chief's notes
+internal/inbox      store: schema v10, IDs, guarded transitions, flush, message,
+                    prod-action approvals, chief's notes, threads, chats
 internal/guard      refuses prod answers from inside an agent session (env, ps walk)
 internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell)
 internal/view       text for list rows, context blocks and question screens
 internal/md         glamour markdown for the panel: ANSI-16 style, boxed code, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
-internal/tui        the watch panel (list, session, review all, walk, review, talk, notes)
+internal/tui        the watch panel (list, threads, session, review all, walk, review, talk, notes)
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
-testdata/xver       v1 and v2 dbs written by inbox.py, and a v4 db written by the
-                    v4 binary (v4.sql), as SQL dumps
+testdata/xver       v1 and v2 dbs written by inbox.py, and v4 and v9 dbs written by
+                    those binaries (v4.sql, v9.sql), as SQL dumps
 testdata/fakes      fake agent-manager, tmux, zen-bell, terminal-notifier, osascript for tests
 ```
 

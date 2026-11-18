@@ -158,6 +158,7 @@ zen-inbox retry <session>                    # resend a failed delivery or note 
 zen-inbox note [<task>] --title "<one line>" [--body "<md>" | --body -]  # chief only; prints n12
 zen-inbox notes [--all] [--json]                        # visible notes, newest first
 zen-inbox read <id>... | --all [--unread]               # mark notes read (n12 or 12)
+zen-inbox refile <id> <task|->                          # move a note into a task's thread; - clears
 zen-inbox watch                  # one row per session; outside agents, y/N Approve
 ```
 SQLite at `<vault>/config/zen-flow.db` (`ZEN_FLOW_DB` overrides). Answers are held

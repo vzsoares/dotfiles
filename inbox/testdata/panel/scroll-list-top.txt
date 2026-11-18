@@ -1,5 +1,5 @@
 cockpit · 40 open                                                                  quota n/a
-Asks · 40 open
+Threads · 40
 › spec-t10 · #700 · 1 open · 0s · [gone]
   spec-t11 · #701 · 1 open · 0s · [gone]
   spec-t12 · #702 · 1 open · 0s · [gone]

@@ -27,7 +27,7 @@ func TestCockpitGoldens(t *testing.T) {
 		{"cockpit-notes-92x29", func(d *drv) {
 			d.addNote("707", "Task 707 merged", "")
 			d.addNote("", "Session spec-s2 died", "")
-		}, []string{"cockpit · ✉ 2 unread", "Notes · 2 unread", "m read", "f reply"}},
+		}, []string{"cockpit · ✉ 2 unread", "Threads · 1", "No task · 1 unread", "m read", "f reply"}},
 		{"cockpit-asks-held-92x29", func(d *drv) {
 			d.ask("7", "s1", "First?", "a", "b")
 			d.ask("7", "s1", "Second?", "a", "b")
@@ -35,7 +35,7 @@ func TestCockpitGoldens(t *testing.T) {
 			if _, err := d.other.Answer("7.1", ptr("a"), nil, "", nil); err != nil {
 				t.Fatal(err)
 			}
-		}, []string{"cockpit · 2 open · 1 held", "Asks · 2 open", "Held · ", "spec-s1: 7.1 held until 7.2", "a answer"}},
+		}, []string{"cockpit · 2 open · 1 held", "Threads · 2", "Held · ", "spec-s1: 7.1 held until 7.2", "a answer"}},
 		{"cockpit-prod-92x29", func(d *drv) {
 			d.ask("7", "s1", "First?", "a", "b")
 			d.askProd("s2")
@@ -125,7 +125,7 @@ func TestCockpitFailedGroupComesFirst(t *testing.T) {
 	}
 	d.poll()
 	v := d.view()
-	if f, a := strings.Index(v, "Failed delivery"), strings.Index(v, "Asks · "); f < 0 || a < 0 || f > a {
+	if f, a := strings.Index(v, "Failed delivery"), strings.Index(v, "Threads · "); f < 0 || a < 0 || f > a {
 		t.Fatalf("failed group not above asks:\n%s", v)
 	}
 	if !strings.Contains(d.last(), "enter retry") {
@@ -154,21 +154,21 @@ func TestCockpitNotesFold(t *testing.T) {
 		not   []string
 	}{
 		{"cockpit-notes-folded-unread-92x29", func(d *drv) {
-			d.addNote("707", "Task 707 merged", "")
+			d.addNote("", "Task 707 merged", "")
 			d.addNote("", "Session spec-s2 died", "")
 			if err := writeState(d.m.stateFile, panelState{NotesFolded: true}); err != nil {
 				t.Fatal(err)
 			}
-		}, []string{"› Notes · 2 unread", "enter expand"}, []string{"Task 707 merged"}},
+		}, []string{"› No task · 2 unread", "enter expand"}, []string{"Task 707 merged"}},
 		{"cockpit-notes-folded-read-92x29", func(d *drv) {
-			d.addNote("707", "Task 707 merged", "")
+			d.addNote("", "Task 707 merged", "")
 			if err := d.other.MarkAllNotes(true); err != nil {
 				t.Fatal(err)
 			}
 			if err := writeState(d.m.stateFile, panelState{NotesFolded: true}); err != nil {
 				t.Fatal(err)
 			}
-		}, []string{"› Notes · all read"}, []string{"Task 707 merged", "unread"}},
+		}, []string{"› No task · all read"}, []string{"Task 707 merged", "unread"}},
 	}
 	for _, c := range cases {
 		d := newDrvWith(t, 92, 29, c.setup)
@@ -191,28 +191,28 @@ func TestCockpitNotesFold(t *testing.T) {
 
 func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 	d := newDrv(t, 92, 29)
-	d.addNote("707", "Task 707 merged", "")
+	d.addNote("", "Task 707 merged", "")
 	d.poll()
 	d.keys("z")
-	if v := d.view(); !strings.Contains(v, "› Notes · 1 unread") || strings.Contains(v, "Task 707 merged") {
+	if v := d.view(); !strings.Contains(v, "› No task · 1 unread") || strings.Contains(v, "Task 707 merged") {
 		t.Fatalf("z did not fold:\n%s", v)
 	}
 	// A note arriving while folded is counted in the header, not hidden away.
 	d.addNote("", "Session spec-s2 died", "")
 	d.poll()
-	if v := d.view(); !strings.Contains(v, "› Notes · 2 unread") {
+	if v := d.view(); !strings.Contains(v, "› No task · 2 unread") {
 		t.Fatalf("header missed the new note:\n%s", v)
 	}
 	// m on the folded header marks nothing.
 	d.keys("m")
-	if got := d.view(); !strings.Contains(got, "Notes · 2 unread") {
+	if got := d.view(); !strings.Contains(got, "No task · 2 unread") {
 		t.Fatalf("m acted on the header:\n%s", got)
 	}
 
 	again := newDrvWith(t, 92, 29, func(n *drv) { n.m.stateFile = d.m.stateFile })
-	again.addNote("707", "Task 707 merged", "")
+	again.addNote("", "Task 707 merged", "")
 	again.poll()
-	if v := again.view(); !strings.Contains(v, "› Notes · ") || strings.Contains(v, "Task 707 merged") {
+	if v := again.view(); !strings.Contains(v, "› No task · ") || strings.Contains(v, "Task 707 merged") {
 		t.Fatalf("fold not restored:\n%s", v)
 	}
 	again.keys("enter")
@@ -220,7 +220,7 @@ func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 		t.Fatalf("enter did not expand onto the first note:\n%s", v)
 	}
 	third := newDrvWith(t, 92, 29, func(n *drv) { n.m.stateFile = d.m.stateFile })
-	third.addNote("707", "Task 707 merged", "")
+	third.addNote("", "Task 707 merged", "")
 	third.poll()
 	if v := third.view(); !strings.Contains(v, "Task 707 merged") {
 		t.Fatalf("expanded state not saved:\n%s", v)
@@ -234,7 +234,7 @@ func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 
 func TestCockpitNotesExpandKeepsCursorAndFlash(t *testing.T) {
 	d := newDrv(t, 92, 29)
-	d.addNote("707", "Task 707 merged", "")
+	d.addNote("", "Task 707 merged", "")
 	d.addNote("", "Session spec-s2 died", "")
 	d.poll()
 	d.keys("z")

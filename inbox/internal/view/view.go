@@ -329,6 +329,10 @@ type Row struct {
 	Oldest    string
 	Gate      bool
 	Status    string
+	// First is the task of the oldest open decision: the row's thread.
+	First string
+	// Newest is when the session's newest open decision was asked.
+	Newest string
 }
 
 // Rows is one row per asking session, oldest open decision first.
@@ -373,7 +377,7 @@ func Rows(open []inbox.Decision, sessions am.Sessions) []Row {
 			gate = gate || d.Gate
 		}
 		rows = append(rows, Row{sid, ds[0].SessionName, tasks, title, len(ds), ds[0].CreatedAt,
-			gate, am.Status(am.Find(sessions, sid))})
+			gate, am.Status(am.Find(sessions, sid)), ds[0].Task, ds[len(ds)-1].CreatedAt})
 	}
 	return rows
 }
@@ -588,6 +592,131 @@ func PanelNoteLines(n inbox.Note, width int, at time.Time, p Painter) []string {
 		lead += Age(r.RepliedAt, at) + ": "
 		key := md.Key{ID: n.Label(), Field: "reply" + strconv.Itoa(i+1)}
 		out = append(append(out, ""), Painted(p, key, r.Text, width, lead, "  ")...)
+	}
+	return out
+}
+
+// ThreadNoteLabel is NoteLabel without the task, for a row under its thread.
+func ThreadNoteLabel(n inbox.Note, at time.Time) string {
+	n.Task = ""
+	return NoteLabel(n, at)
+}
+
+// ThreadHead is a thread's list header: what it holds and how fresh it is.
+type ThreadHead struct {
+	Task, Title         string
+	Expanded, Prod      bool
+	Open, Unread, Items int
+	Newest              string
+}
+
+// ThreadLabel is ▸/▾ #task, PROD, the counts, the age of the newest item and
+// the title; only the title is cut to fit room.
+func ThreadLabel(h ThreadHead, at time.Time, room int) string {
+	arrow := "▸ "
+	if h.Expanded {
+		arrow = "▾ "
+	}
+	parts := []string{arrow + "#" + h.Task}
+	if h.Prod {
+		parts = append(parts, "PROD")
+	}
+	if h.Open > 0 {
+		parts = append(parts, strconv.Itoa(h.Open)+" open")
+	}
+	if h.Unread > 0 {
+		parts = append(parts, strconv.Itoa(h.Unread)+" unread")
+	}
+	parts = append(parts, strconv.Itoa(h.Items)+" items", Age(h.Newest, at))
+	label := strings.Join(parts, " · ")
+	title := md.Plain(h.Title)
+	if left := room - lipgloss.Width(label) - 3; title != "" && left > 1 {
+		label += " · " + pyfmt.Clip(title, left)
+	}
+	return label
+}
+
+var (
+	boldText  = lipgloss.NewStyle().Bold(true)
+	faintText = lipgloss.NewStyle().Faint(true)
+)
+
+func faint(lines []string) []string {
+	for i := range lines {
+		lines[i] = faintText.Render(lines[i])
+	}
+	return lines
+}
+
+// DecisionState is a decision's outcome on one line: open, withdrawn, talk,
+// the picked option or the free text, with held when it waits to be sent.
+func DecisionState(d inbox.Decision) string {
+	state := ""
+	switch {
+	case d.Status == "open":
+		return "open"
+	case d.Status == "withdrawn":
+		return "withdrawn"
+	case d.AnswerKind == "talk":
+		state = "talk"
+	case d.AnswerKind == "pick":
+		state = "→ " + d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
+	default:
+		state = "free text: " + d.AnswerText
+	}
+	if d.Delivery == "held" {
+		state = "held · " + state
+	}
+	return state
+}
+
+// PanelThreadEntry is one timeline entry: a head line naming the item, then
+// its text through md.
+func PanelThreadEntry(it inbox.ThreadItem, width int, at time.Time, p Painter) []string {
+	switch {
+	case it.Note != nil:
+		n := *it.Note
+		head := faint(WrapRest(n.Label()+" · "+n.SessionName+" · "+Age(n.CreatedAt, at), width, "", "  "))
+		lines := PanelNoteLines(n, width, at, p)
+		title := len(Wrap(n.Title, width, ""))
+		if n.Unread() {
+			for i := range title {
+				lines[i] = boldText.Render(lines[i])
+			}
+		}
+		return append(head, lines...)
+	case it.Decision != nil:
+		d := *it.Decision
+		head := d.ID + QuestionTags(d) + " · " + d.SessionName + " · " + Age(d.CreatedAt, at)
+		if d.Prod != nil {
+			head += " · PROD"
+		}
+		out := faint(WrapRest(head, width, "", "  "))
+		out = append(out, Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "question"}, d.Question, width, "", "")...)
+		state := WrapRest(DecisionState(d), width, "", "  ")
+		if d.Status == "withdrawn" {
+			state = faint(state)
+		}
+		out = append(out, state...)
+		if !pyfmt.Blank(d.Note) {
+			out = append(out, WrapRest("Note: "+d.Note, width, "", "  ")...)
+		}
+		return out
+	}
+	c := *it.Chat
+	head := "✉ you → chief · " + Age(c.SentAt, at) + " · " + c.Status
+	if c.Error != "" {
+		head += " · " + c.Error
+	}
+	out := faint(WrapRest(head, width, "", "  "))
+	return append(out, Painted(p, md.Key{ID: c.Label(), Field: "chat"}, c.Text, width, "", "")...)
+}
+
+// PanelThreadLines is every entry of a thread, oldest first.
+func PanelThreadLines(th inbox.Thread, width int, at time.Time, p Painter) [][]string {
+	out := make([][]string, len(th.Items))
+	for i, it := range th.Items {
+		out[i] = PanelThreadEntry(it, width, at, p)
 	}
 	return out
 }

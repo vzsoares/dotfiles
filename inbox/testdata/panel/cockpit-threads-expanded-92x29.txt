@@ -1,0 +1,29 @@
+cockpit · 2 open · ✉ 3 unread                                                      quota n/a
+Threads · 2
+› ▾ #843 · 1 open · 2 unread · 11 items · 1h · Phone cockpit setup
+    spec-s1 · #843 Phone cockpit setup · 1 open · 1h · [idle]
+    ● Phone step 10 · chief · 1h
+    ○ Phone step 9 · chief · 1h ↩
+    ○ Phone step 8 · chief · 1h ↩
+    ○ Phone step 7 · chief · 1h ↩
+    ○ Phone step 6 · chief · 1h ↩
+    ○ Phone step 5 · chief · 1h ↩
+    ○ Phone step 4 · chief · 1h ↩
+    ● Phone step 3 · chief · 1h ↩
+    ○ Phone step 2 · chief · 1h ↩
+    ○ Phone step 1 · chief · 1h ↩
+  spec-s2 · #9 · 1 open · 0s · [idle]
+
+No task · 1 unread
+  ● Swept 6 finished agents; kept 5 · chief · 0s
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter thread · z fold · a answer · m read all · c chief · M all read · ? help · q quit

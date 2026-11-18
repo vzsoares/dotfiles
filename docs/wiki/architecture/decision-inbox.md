@@ -100,8 +100,8 @@ message.
   `cockpit · ✕ delivery failed · name · r retry` on a failed delivery, the chief
   message status, else counts: `cockpit · n open · k prod · ✉ u unread · h held`
   (`all clear` when none). The list shows labelled groups, most urgent first:
-  `Failed delivery` (retry rows with the reason), `Asks` (sessions with a prod ask
-  first, marked `PROD ·`), `Notes`, then `Held` (answers waiting for the session's
+  `Failed delivery` (retry rows with the reason), `Threads` (one per task, see
+  Threads below), `No task` (notes without a task), then `Held` (answers waiting for the session's
   open asks; not selectable). With nothing listed, `Nothing waiting for you` and
   `last item closed <age> ago` (latest decision close or note read) sit centred.
   The list footer is one row of keys for the row under the cursor (`enter open` /
@@ -240,14 +240,15 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
 - **Visible** means unread, read within 24 h, or with a reply in flight or failed;
   `zen-inbox notes [--all] [--json]` lists them newest first. Each insert prunes notes
   read over 30 days ago. `zen-inbox read <id>... | --all [--unread]` marks them.
-- **Panel.** After the decision and retry rows: a `Notes · n unread` header and one
+- **Panel.** Notes with a task sit in that task's thread (Threads below); the rest
+  under a `No task · n unread` header, one
   row per note (`● title · sender · #task · age`, bold unread, dim `○` read, `↩` once
   replied). Enter opens the note screen (header, title, glamour body cached per note
   id and width, then each reply in order as `↩ [n · ]age: text`), which scrolls like View full. `m` toggles read on the
   list row or the note, `M` marks every visible note read; opening never marks read.
   Notes bind none of `←`, `→`, `shift+tab`, `l`.
-- **Fold (#801).** `z` on a note row collapses the group to one selectable header,
-  `Notes · n unread` (yellow) or `Notes · all read` (dim); `enter` or `z` on it expands.
+- **Fold (#801).** `z` on a `No task` note row collapses the group to one selectable header,
+  `No task · n unread` (yellow) or `No task · all read` (dim); `enter` or `z` on it expands.
   New notes still raise the count and the banner. The state persists in
   `~/.cache/zen/inbox-panel.json` (`notes_folded`), not the db, so there is no migration.
 - **Reply.** `f` opens the textarea; `ctrl+d` sends a reply, as many per note as you like, through the
@@ -265,6 +266,40 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
   retry <session>` resend it (answers first; a `sending` claim whose `claimed_at` is older than 60 s counts).
 - **Header and bell.** Unread notes count in the header (`✉ k unread`). Notes never
   ring zen-bell and refresh on the same 2 s poll.
+
+## Threads (#861)
+
+Everything about one task ID is one thread: its asking sessions, its visible notes
+with their replies, and in the thread screen also its closed decisions and chats.
+
+- **Key.** The task ID only; no board lookup, no merging of related tasks. A session
+  asking for several tasks sits under its oldest open decision's task. The title is
+  the task's newest `decision_briefs.title`.
+- **List.** One `Threads · n` group. A thread with one row shows it flat; otherwise a
+  header `▸ #task · PROD · n open · k unread · m items · age · title` (only the title
+  is cut), bold with open asks or unread notes, red with a prod ask. Order: prod ask,
+  open ask, unread notes, newest activity. Collapsed by default; `z`/`→`/`←` toggle,
+  expand, collapse (`←` on a child collapses its parent). Expanded children are the
+  usual `s:`/`n:` rows indented, notes without `#task`, so their keys are unchanged.
+  `enter` on a header opens the thread, `a` answers its first session (prod first),
+  `m` marks its notes read. Expanded tasks persist as `threads_open` in
+  `~/.cache/zen/inbox-panel.json`; a poll keeps the cursor on its row, or on the
+  thread a row folded into.
+- **Thread screen.** `#task title` with `n open · k unread · m entries`, the brief
+  (dropped first when rows run short), then the timeline oldest first (created time,
+  then decisions, notes, chats, then ID): notes with replies, decisions with their state
+  (`open`, `→ b: …`, `free text: …`, `held`, `talk`, dim `withdrawn`), chats as
+  `✉ you → chief · age · status`. It opens at the first unread note or open ask, else
+  at the end, and marks nothing read. `tab`/`shift+tab` move the `›` focus; `enter` opens
+  the note (esc back to the thread) or walks the open ask (esc → decision list →
+  thread); `f` replies to the focused note, else the newest; `m`, `a`, `c`, `T`, `g`/`G`.
+  The panel reads `Thread(task)` only while a thread is open.
+- **Re-file.** `zen-inbox refile <note> <task|->` (prints `n12 → #860`; `-` clears; a
+  task that is not digits exits 2) or `T` on any note, a one-line input. Last write wins.
+- **Chats.** `c` on a thread row, child or thread screen sends `[#task title] text`
+  through `zen-chief`; every `c` send is stored in `chats` (task blank elsewhere) before
+  the send, then gets the message id and `queued`, or `failed` with the error; status
+  polls mirror `delivered`/`dropped`/`answered`/`sent` into the row.
 
 ## Phone access (#830)
 
@@ -318,7 +353,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 8. Tables `decisions` and `decision_options` use generic names because the db is
+now 10. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -336,6 +371,9 @@ v8 adds `prod_actions.pushed_sha`, `pushed_at` and `pushed_by` (default `''`), t
 push a used release approval let through; the migration stamps `pushed_at = used_at`,
 `pushed_by = 'schema v8'` on every used row, so no approval used before it becomes
 pushable. A v7 reader still works on a v8 db and never touches the new columns.
+v9 adds `note_replies` (every reply to a note). v10 adds `chats (id, task, text,
+sent_at, message_id, status, error)` with index `chats_task (task, id)`, the panel's
+messages to chief; no existing table changes, so a v9 reader keeps working.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

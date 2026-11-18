@@ -123,3 +123,32 @@ func (a *App) read() *cobra.Command {
 	cmd.Flags().BoolVar(&unread, "unread", false, "mark unread instead")
 	return cmd
 }
+
+func (a *App) refile() *cobra.Command {
+	return &cobra.Command{
+		Use:   "refile <note ID> <TASK|->",
+		Short: "Move a note into TASK's thread; - clears its task.",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			id, err := inbox.ParseNoteID(args[0])
+			if err != nil {
+				return err
+			}
+			ib, err := a.open()
+			if err != nil {
+				return err
+			}
+			defer ib.Close()
+			n, err := ib.Refile(id, args[1])
+			if err != nil {
+				return err
+			}
+			to := "no task"
+			if n.Task != "" {
+				to = "#" + n.Task
+			}
+			a.out(n.Label() + " → " + to)
+			return nil
+		},
+	}
+}

@@ -56,6 +56,8 @@ const (
 	scNote
 	scReply
 	scChief
+	scThread
+	scRefile
 )
 
 // snapshot is one read of everything the panel shows.
@@ -68,6 +70,10 @@ type snapshot struct {
 	drafts      map[string]inbox.Draft
 	notes       []inbox.Note
 	failedNotes []inbox.Note
+	// titles is each task's newest brief title, for thread rows.
+	titles map[string]string
+	// thread is the open thread's timeline, read only while one is open.
+	thread *inbox.Thread
 	// lastClosed stamps the latest close or note read, for the empty list.
 	lastClosed string
 	// gen is the panel's draftGen when the read started.
@@ -231,10 +237,20 @@ type Model struct {
 	// loc is where its reset times are shown.
 	quota     quota
 	quotaFile string
-	// stateFile keeps notesFolded across restarts.
+	// stateFile keeps notesFolded and threadsOpen across restarts.
 	stateFile   string
 	notesFolded bool
+	threadsOpen map[string]bool
 	loc         *time.Location
+
+	thread threadView
+	// passFrom, noteFrom and chiefFrom are where leaving a walk, a note or
+	// the chief compose goes back to: the list or the thread.
+	passFrom, noteFrom, chiefFrom screen
+	// chiefTask is the task the chief compose is bound to, "" for none.
+	chiefTask  string
+	refileNote inbox.Note
+	refileFrom screen
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -248,7 +264,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()), clip: copyText,
-		prodBlock: "guard not run", drafts: map[string]view.Staged{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
+		prodBlock: "guard not run", drafts: map[string]view.Staged{}, threadsOpen: map[string]bool{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -273,7 +289,13 @@ func Watch(client am.Client) func(*inbox.Inbox) error {
 
 // ---------------------------------------------------------------- loading --
 
-func load(ib *inbox.Inbox, client am.Client, ids []string, sessions am.Sessions, refresh bool) snapshot {
+// watch is what a read fetches beyond the list: decisions by id and the open thread.
+type watch struct {
+	ids  []string
+	task string
+}
+
+func load(ib *inbox.Inbox, client am.Client, w watch, sessions am.Sessions, refresh bool) snapshot {
 	s := snapshot{sessions: sessions, byID: map[string]inbox.Decision{}}
 	if refresh {
 		s.sessions, s.refreshed = client.Sessions(), true
@@ -296,13 +318,23 @@ func load(ib *inbox.Inbox, client am.Client, ids []string, sessions am.Sessions,
 	if s.failedNotes, s.err = ib.FailedNotes(); s.err != nil {
 		return s
 	}
+	if s.titles, s.err = ib.TaskTitles(); s.err != nil {
+		return s
+	}
+	if w.task != "" {
+		th, err := ib.Thread(w.task)
+		if s.err = err; err != nil {
+			return s
+		}
+		s.thread = &th
+	}
 	// Only the empty list shows it.
 	if len(s.open)+len(s.undelivered)+len(s.notes)+len(s.failedNotes) == 0 {
 		if s.lastClosed, s.err = ib.LastClosed(); s.err != nil {
 			return s
 		}
 	}
-	for _, id := range ids {
+	for _, id := range w.ids {
 		if d, err := ib.Get(id); err == nil {
 			s.byID[id] = d
 		}
@@ -326,17 +358,23 @@ func (m *Model) watchedIDs() []string {
 	return slices.Collect(maps.Keys(set))
 }
 
+func (m *Model) watched() watch { return watch{m.watchedIDs(), m.thread.task} }
+
 func (m *Model) loadCmd(refresh bool) tea.Cmd {
-	ib, client, ids, sessions, gen, qpath := m.ib, m.am, m.watchedIDs(), m.snap.sessions, m.draftGen, m.quotaFile
+	ib, client, w, sessions, gen, qpath := m.ib, m.am, m.watched(), m.snap.sessions, m.draftGen, m.quotaFile
 	return func() tea.Msg {
-		s := load(ib, client, ids, sessions, refresh)
+		s := load(ib, client, w, sessions, refresh)
 		s.gen = gen
 		return loadedMsg{s, readQuota(qpath)}
 	}
 }
 
 func (m *Model) Init() tea.Cmd {
-	m.notesFolded = readState(m.stateFile).NotesFolded
+	st := readState(m.stateFile)
+	m.notesFolded = st.NotesFolded
+	for _, task := range st.ThreadsOpen {
+		m.threadsOpen[task] = true
+	}
 	return m.loadCmd(true)
 }
 
@@ -369,6 +407,7 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	focused := m.focusedRow()
 	m.snap, m.loaded = s, true
 	m.refreshNote()
+	m.refreshThread()
 	m.refocus(focused)
 	if s.gen == m.draftGen && !m.saving && len(m.draftOps) == 0 {
 		m.drafts = map[string]view.Staged{}
@@ -413,17 +452,44 @@ func (m *Model) focusedRow() string {
 	return ""
 }
 
-// refocus keeps the cursor on row after rows above it come or go.
+// refocus keeps the cursor on row after rows above it come or go; a row
+// folded into its thread leaves the cursor on the thread.
 func (m *Model) refocus(row string) {
 	if row == "" {
 		return
 	}
-	for i, it := range m.listItems() {
+	items := m.listItems()
+	for i, it := range items {
 		if it.value == row {
 			m.cursor = i
 			return
 		}
 	}
+	if t, ok := m.threadOf(row); ok {
+		for i, it := range items {
+			if it.value == t.value() {
+				m.cursor = i
+				return
+			}
+		}
+	}
+}
+
+// refreshThread takes the open thread's timeline from the snapshot and opens
+// it at the first unread the first time.
+func (m *Model) refreshThread() {
+	th := m.snap.thread
+	if th == nil || th.Task != m.thread.task {
+		return
+	}
+	m.thread.data, m.thread.loaded = *th, true
+	if m.scr != scThread {
+		return
+	}
+	if !m.thread.placed {
+		m.placeThread()
+	}
+	m.cursor = min(m.cursor, max(len(th.Items)-1, 0))
 }
 
 // ring is one banner per decision or unread note not seen before; the first
@@ -543,6 +609,7 @@ func (m *Model) toList(flash string) {
 	m.scr, m.p, m.flash, m.cursor, m.scroll = scList, nil, flash, 0, 0
 	m.flashOK, m.flashAt = false, m.now()
 	m.known, m.markers, m.talkOpen = nil, nil, nil
+	m.thread, m.passFrom, m.noteFrom, m.chiefFrom = threadView{}, scList, scList, scList
 }
 
 func (m *Model) enterSession(sid string) {
@@ -845,7 +912,7 @@ func (m *Model) sendCmd() tea.Cmd {
 	ids := slices.Collect(maps.Keys(byID))
 	inbox.SortIDs(ids)
 	ib, client, sid, name, prior := m.ib, m.am, m.sid, m.sname, m.p.result
-	watched, sessions := m.watchedIDs(), m.snap.sessions
+	w, sessions := m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		msg := sentMsg{res: prior}
 		for _, id := range ids {
@@ -883,7 +950,7 @@ func (m *Model) sendCmd() tea.Cmd {
 		} else {
 			msg.flash = err.Error()
 		}
-		msg.snap = load(ib, client, watched, sessions, false)
+		msg.snap = load(ib, client, w, sessions, false)
 		return msg
 	}
 }
@@ -970,17 +1037,17 @@ func (m *Model) talkPicked() []inbox.Decision {
 func (m *Model) talkCmd() tea.Cmd {
 	msg := talkMessage(m.talkPicked())
 	m.busy = "Talking to " + m.sname + "…"
-	ib, client, sid, watched, sessions := m.ib, m.am, m.sid, m.watchedIDs(), m.snap.sessions
+	ib, client, sid, w, sessions := m.ib, m.am, m.sid, m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		if !client.CanPopup(sid) {
-			return talkMsg{snap: load(ib, client, watched, sessions, false)}
+			return talkMsg{snap: load(ib, client, w, sessions, false)}
 		}
 		_, _, told := client.Send(sid, msg)
 		if !client.Popup(sid) {
-			return talkMsg{told: told, snap: load(ib, client, watched, sessions, false)}
+			return talkMsg{told: told, snap: load(ib, client, w, sessions, false)}
 		}
 		open, _ := ib.SessionOpen(sid)
-		return talkMsg{ok: true, open: open, told: told, snap: load(ib, client, watched, sessions, false)}
+		return talkMsg{ok: true, open: open, told: told, snap: load(ib, client, w, sessions, false)}
 	}
 }
 
@@ -1032,7 +1099,7 @@ func (m *Model) chosen(from []inbox.Decision) []string {
 func (m *Model) resolveCmd(note string) tea.Cmd {
 	m.busy = "Resolving…"
 	ib, client, sid, name, ids := m.ib, m.am, m.sid, m.sname, m.chosen(m.talkOpen)
-	watched, sessions := m.watchedIDs(), m.snap.sessions
+	w, sessions := m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		var resolved, notes []string
 		var result *inbox.Delivery
@@ -1057,7 +1124,7 @@ func (m *Model) resolveCmd(note string) tea.Cmd {
 			}
 		}
 		return resolvedMsg{resolved, strings.Join(append(flash, notes...), "; "),
-			load(ib, client, watched, sessions, false)}
+			load(ib, client, w, sessions, false)}
 	}
 }
 
@@ -1167,14 +1234,18 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chiefSentMsg:
 		return m, m.onChiefSent(msg)
 	case chiefStatusMsg:
-		m.onChiefStatus(msg)
-		return m, nil
+		if msg.id == "" && msg.err != "" {
+			m.flash, m.flashOK = msg.err, false
+			return m, nil
+		}
+		return m, m.onChiefStatus(msg)
 	case notesMsg:
 		m.onNotes(msg)
 		return m, nil
 	case noteSentMsg:
-		m.onNoteSent(msg)
-		return m, nil
+		return m, m.onNoteSent(msg)
+	case refiledMsg:
+		return m, m.onRefiled(msg)
 	case retriedMsg:
 		m.busy, m.snap = "", msg.snap
 		m.toList(msg.flash)
@@ -1244,6 +1315,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyReply(msg)
 	case scChief:
 		return m.keyChief(msg)
+	case scRefile:
+		return m.keyRefile(msg)
 	}
 	n := m.menuLen()
 	switch k {
@@ -1276,6 +1349,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyTalkPick(k)
 	case scNote:
 		return m.keyNoteScreen(k)
+	case scThread:
+		return m.keyThread(k)
 	}
 	return m, nil
 }
@@ -1289,8 +1364,11 @@ func (m *Model) scrollBy(k string) int {
 	case "pgup":
 		return -half
 	}
-	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReply || m.scr == scChief {
+	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReply || m.scr == scChief || m.scr == scRefile {
 		return 0
+	}
+	if m.scr == scThread {
+		m.thread.follow = false
 	}
 	switch k {
 	case "ctrl+d", "ctrl+f":
@@ -1298,7 +1376,7 @@ func (m *Model) scrollBy(k string) int {
 	case "ctrl+u", "ctrl+b":
 		return -half
 	}
-	if m.scr == scFull || m.scr == scNote {
+	if m.scr == scFull || m.scr == scNote || m.scr == scThread {
 		switch k {
 		case "down", "j":
 			return 1
@@ -1309,38 +1387,15 @@ func (m *Model) scrollBy(k string) int {
 	return 0
 }
 
-// listItems are the cockpit's rows, most urgent first: retries, asks (prod
-// sessions first), then notes.
+// listItems are the cockpit's rows, most urgent first: retries, threads
+// (prod first), then the notes without a task.
 func (m *Model) listItems() []item {
-	room := max(m.w, view.MinWidth) - 2
-	var out []item
-	for _, b := range m.snap.undelivered {
-		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s) · " +
-			view.FailReason(b)
-		out = append(out, item{pyfmt.Clip(label, room), "r:" + b.SessionID})
+	rows := m.listRows()
+	out := make([]item, len(rows))
+	for i, r := range rows {
+		out[i] = r.item
 	}
-	for _, n := range m.snap.failedNotes {
-		label := "retry reply " + n.Label() + " to " + n.SessionName
-		if n.DeliveryError != "" {
-			label += " · " + n.DeliveryError
-		}
-		out = append(out, item{pyfmt.Clip(label, room), "nr:" + noteValue(n)})
-	}
-	at := m.now()
-	rows, prod := m.askRows()
-	for _, r := range rows {
-		label := view.RowLabel(r, at)
-		// shortcut: spliced after RowLabel's "n open" part since view is out of #838's scope; move into RowLabel if it changes.
-		if k, n := m.progress(r.SessionID); k > 0 {
-			open := " · " + strconv.Itoa(n) + " open · "
-			label = strings.Replace(label, open, open+strconv.Itoa(k)+"/"+strconv.Itoa(n)+" drafted · ", 1)
-		}
-		if prod[r.SessionID] {
-			label = "PROD · " + label
-		}
-		out = append(out, item{pyfmt.Clip(label, room), "s:" + r.SessionID})
-	}
-	return append(out, m.noteItems(room)...)
+	return out
 }
 
 // askRows are the asking sessions, those with a prod ask first; prod marks them.
@@ -1375,7 +1430,24 @@ func (m *Model) listKeys() []ranked {
 	if m.cursor < len(items) {
 		kind, _, _ = strings.Cut(items[m.cursor].value, ":")
 	}
+	row := ""
+	if m.cursor < len(items) {
+		row = items[m.cursor].value
+	}
+	t, inThread := m.rowThread(row)
 	switch kind {
+	case "t":
+		fold := "expand"
+		if m.threadsOpen[t.task] {
+			fold = "fold"
+		}
+		keys = append(keys, ranked{key{"enter", "thread"}, 0}, ranked{key{"z", fold}, 4})
+		if t.open > 0 {
+			keys = append(keys, ranked{key{"a", "answer"}, 1})
+		}
+		if t.unread() > 0 {
+			keys = append(keys, ranked{key{"m", "read all"}, 3})
+		}
 	case "s":
 		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
 	case "r", "nr":
@@ -1383,7 +1455,11 @@ func (m *Model) listKeys() []ranked {
 	case "nh":
 		keys = append(keys, ranked{key{"enter", "expand"}, 0})
 	case "n":
-		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"z", "fold"}, 6})
+		keys = append(keys, ranked{key{"enter", "open"}, 0})
+		if n, ok := m.cursorNote(); ok && n.Task == "" {
+			keys = append(keys, ranked{key{"z", "fold"}, 6})
+		}
+		keys = append(keys, ranked{key{"T", "refile"}, 6})
 		if n, ok := m.cursorNote(); ok {
 			mark := "read"
 			if !n.Unread() {
@@ -1394,6 +1470,9 @@ func (m *Model) listKeys() []ranked {
 				keys = append(keys, ranked{key{"f", "reply"}, 4})
 			}
 		}
+	}
+	if inThread && kind != "t" {
+		keys = append(keys, ranked{key{"←", "fold"}, 6})
 	}
 	if kind != "r" && kind != "nr" && len(m.snap.undelivered)+len(m.snap.failedNotes) > 0 {
 		keys = append(keys, ranked{key{"r", "retry"}, 1})
@@ -1415,15 +1494,23 @@ func (m *Model) undeliveredName(sid string) string {
 }
 
 func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
+	if ok, cmd := m.keyThreadRow(k); ok {
+		return m, cmd
+	}
 	switch k {
 	case "q", "esc":
 		return m, m.quit()
 	case "r":
 		return m, m.retryFirst()
 	case "c":
-		return m, m.openChief()
+		return m, m.openChief(m.rowTask(m.focusedRow()), scList)
+	case "T":
+		if n, ok := m.cursorNote(); ok {
+			return m, m.openRefile(n, scList)
+		}
 	case "z":
-		if kind, _, _ := strings.Cut(m.focusedRow(), ":"); kind == "n" || kind == "nh" {
+		row := m.focusedRow()
+		if n, ok := m.cursorNote(); (ok && n.Task == "") || row == "nh:" {
 			m.foldNotes(!m.notesFolded)
 		}
 	case "m":
@@ -1484,7 +1571,7 @@ func (m *Model) retryCmd(sid string) tea.Cmd {
 			flash = err.Error()
 		}
 		ok := err == nil && res != nil && res.OK
-		return retriedMsg{flash, ok, load(ib, client, nil, sessions, false)}
+		return retriedMsg{flash, ok, load(ib, client, watch{}, sessions, false)}
 	}
 }
 
@@ -1736,6 +1823,8 @@ func (m *Model) keyJump(k string) (tea.Model, tea.Cmd) {
 	switch {
 	case back && m.jumpFrom == scReview:
 		m.scr, m.cursor = scReview, 0
+	case back && m.passFrom == scThread:
+		return m, m.backToThread(m.p.stopped("back", m.drafts))
 	case back:
 		m.toList(m.p.stopped("back", m.drafts))
 	case k == "enter":

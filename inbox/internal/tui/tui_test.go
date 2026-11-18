@@ -173,7 +173,7 @@ var special = map[string]tea.KeyType{
 	"enter": tea.KeyEnter, "esc": tea.KeyEsc, "up": tea.KeyUp, "down": tea.KeyDown,
 	"ctrl+d": tea.KeyCtrlD, "ctrl+c": tea.KeyCtrlC, " ": tea.KeySpace, "pgdown": tea.KeyPgDown,
 	"pgup": tea.KeyPgUp, "ctrl+u": tea.KeyCtrlU, "left": tea.KeyLeft, "right": tea.KeyRight,
-	"shift+tab": tea.KeyShiftTab,
+	"shift+tab": tea.KeyShiftTab, "tab": tea.KeyTab,
 }
 
 func (d *drv) keys(ks ...string) {

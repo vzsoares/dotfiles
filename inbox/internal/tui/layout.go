@@ -155,7 +155,7 @@ type key struct{ key, label string }
 
 // spare hints are dropped when the footer would take more than two rows;
 // both sit in the walk's menu too.
-var spare = map[string]bool{"t talk": true, "v full": true}
+var spare = map[string]bool{"t talk": true, "v full": true, "T refile": true, "c chief": true}
 
 // Footer labels stay short so the walk's keys fit in two rows at 40 columns;
 // ? adds the longer explanation. The list builds its own from the cursor.
@@ -172,16 +172,23 @@ var footers = map[screen][]key{
 	scTalkPick:  {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
 	scTalkNote:  {{"enter", "done"}, {"esc", "no note"}},
 	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
-	scNote:      {{"↑↓", ""}, {"enter", "read · back"}, {"m", "mark"}, {"f", "reply"}, {"y", "copy"}, {"esc", "back"}, {"?", "help"}},
+	scNote:      {{"↑↓", ""}, {"enter", "read · back"}, {"m", "mark"}, {"f", "reply"}, {"T", "refile"}, {"y", "copy"}, {"esc", "back"}, {"?", "help"}},
 	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
 	scChief:     {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
+	scThread:    {{"↑↓", ""}, {"tab", "next"}, {"enter", "open"}, {"f", "reply"}, {"a", "answer"}, {"m", "read"}, {"c", "chief"}, {"T", "refile"}, {"esc", "back"}, {"?", "help"}},
+	scRefile:    {{"enter", "save"}, {"esc", "cancel"}},
 	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
-	scList: "Failed deliveries, asks (prod first), notes from chief and held answers, most urgent first." +
-		" enter opens the row under the cursor, a answers a session's asks, f replies to a note," +
-		" m marks a note read or unread, M marks them all read, r retries a failed delivery, c writes to chief.",
+	scList: "Failed deliveries, one thread per task (prod first) holding its asks and notes, notes without a task, then held answers, most urgent first." +
+		" enter opens the row under the cursor (a thread opens its timeline), z or →← folds a thread, a answers a session's asks," +
+		" f replies to a note, m marks a note read or unread (a thread: all its notes read), M marks them all read," +
+		" T moves a note to another task, r retries a failed delivery, c writes to chief (about the thread under the cursor).",
+	scThread: "Everything about this task, oldest first: notes with their replies, decisions with their answers, your messages to chief." +
+		" tab and shift+tab move the › mark; enter opens the marked note or open ask; f replies to the marked note (else the newest)," +
+		" m marks the thread's notes read, a answers its open asks, c writes to chief about it, T moves the marked note to another task. g and G jump to the top and end.",
+	scRefile:  "Type the task to move this note to; - or empty moves it to No task.",
 	scSession: "Answer walks the questions one by one; Review all shows every open decision on one screen; Talk opens the agent in a popup.",
 	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn scroll; enter walks from the marked one, t talks to the agent about picked ones.",
 	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything, y then a number copies that code block. ← or shift+tab goes back a question, → forward, esc or l lists them all. Answers are kept as drafts, even across leaving and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
@@ -190,7 +197,7 @@ var helps = map[screen]string{
 	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
-	scNote:    "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. y then a number copies that code block.",
+	scNote:    "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. y then a number copies that code block.",
 	scChief:   "ctrl+d sends the message to the live chief session, enter adds a line. esc cancels and keeps the draft for the next c.",
 	scReply:   "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }
@@ -240,7 +247,7 @@ func packKeys(keys []key, width int) [][]key {
 // scrollKey is the scroll hint; ctrl+u/d edit text on the input screens,
 // so only pgup/dn scroll there.
 func scrollKey(s screen) key {
-	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply || s == scChief {
+	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply || s == scChief || s == scRefile {
 		return key{"pgup/dn", "scroll"}
 	}
 	return key{"^u/^d", "scroll"}

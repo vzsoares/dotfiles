@@ -176,10 +176,39 @@ func TestV4FixtureMigratesToV5(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "9" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "10" {
 		t.Fatal(v)
 	}
 	if after := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols); after != before {
 		t.Fatalf("migration changed rows:\n%s\n%s", before, after)
+	}
+}
+
+func TestRefileCLI(t *testing.T) {
+	f := newFake(t)
+	f.chief()
+	f.zen(asChief, "note", "--title", "loose")
+	for _, c := range []struct {
+		args   []string
+		code   int
+		stdout string
+	}{
+		{[]string{"refile", "n1", "860"}, 0, "n1 → #860\n"},
+		{[]string{"refile", "1", "-"}, 0, "n1 → no task\n"},
+		{[]string{"refile", "n9", "860"}, 2, ""},
+		{[]string{"refile", "n1", "abc"}, 2, ""},
+		{[]string{"refile", "n1"}, 2, ""},
+		{[]string{"refile", "x", "860"}, 2, ""},
+	} {
+		if r := f.zen(nil, c.args...); r.code != c.code || r.stdout != c.stdout {
+			t.Errorf("%v: %+v", c.args, r)
+		}
+	}
+	if r := f.zen(nil, "read", "n9"); r.code != 2 {
+		t.Fatalf("read of an unknown id: %+v", r)
+	}
+	f.zen(nil, "refile", "n1", "860")
+	if task := f.sqlite("SELECT task FROM notes WHERE id = 1"); task != "860\n" && task != "860" {
+		t.Fatalf("%q", task)
 	}
 }

@@ -250,6 +250,10 @@ func (m *Model) frame() frame {
 		return m.viewReply()
 	case scChief:
 		return m.viewChief()
+	case scThread:
+		return m.viewThread()
+	case scRefile:
+		return m.viewRefile()
 	case scTalkNote:
 		return frame{s: scTalkNote, top: []section{{lines: []string{"note (optional)"}}},
 			body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
@@ -331,7 +335,8 @@ func group(body []section, head string, style *lipgloss.Style) []section {
 	return append(body, section{lines: []string{head}, style: style})
 }
 
-// viewList is the cockpit: failed deliveries, asks, notes and held answers,
+// viewList is the cockpit: failed deliveries, threads, notes without a task
+// and held answers,
 // in that order, each under its label; the rows follow listItems' order.
 func (m *Model) viewList() frame {
 	var body []section
@@ -347,53 +352,38 @@ func (m *Model) viewList() frame {
 	if len(items) == 0 && len(held) == 0 {
 		return frame{s: scList, body: append(body, m.emptySections(count(body))...), cur: -1, help: true}
 	}
-	rows, prod := m.askRows()
-	nFail := len(m.snap.undelivered) + len(m.snap.failedNotes)
-	cur, i := -1, 0
-	add := func(n int, style func(j int) *lipgloss.Style) {
-		for j := 0; j < n; j, i = j+1, i+1 {
-			prefix, st := "  ", style(j)
-			if i == m.cursor {
-				prefix, st, cur = "› ", &cursorStyle, count(body)
-			}
-			body = append(body, section{lines: []string{prefix + items[i].label}, style: st})
-		}
+	rows := m.listRows()
+	heads := map[int]string{
+		gFailed:  "Failed delivery · " + strconv.Itoa(len(m.snap.undelivered)+len(m.snap.failedNotes)),
+		gThreads: "Threads · " + strconv.Itoa(len(m.threads())),
+		gNoTask:  m.notesHead(),
 	}
-	if nFail > 0 {
-		body = group(body, "Failed delivery · "+strconv.Itoa(nFail), &failStyle)
-		add(nFail, func(int) *lipgloss.Style { return &failStyle })
-	}
-	if len(rows) > 0 {
-		head := "Asks · " + strconv.Itoa(len(m.snap.open)) + " open"
-		body = group(body, head, &bannerStyle)
-		add(len(rows), func(j int) *lipgloss.Style {
-			if prod[rows[j].SessionID] {
-				return &failStyle
-			}
-			return nil
-		})
-	}
-	if len(m.snap.notes) > 0 && m.notesFolded {
-		prefix, st := "  ", &readStyle
-		if inbox.Unread(m.snap.notes) > 0 {
-			st = &bannerStyle
-		}
+	headStyle := map[int]*lipgloss.Style{gFailed: &failStyle, gThreads: &bannerStyle, gNoTask: &bannerStyle}
+	cur, last := -1, -1
+	for i, r := range rows {
+		prefix, st := "  ", r.style
 		if i == m.cursor {
 			prefix, st = "› ", &cursorStyle
 		}
-		body = group(body, prefix+m.notesHead(), st)
+		// Folded, the No task header is the row itself.
+		if r.value == "nh:" {
+			if st == nil {
+				st = &readStyle
+				if inbox.Unread(m.looseNotes()) > 0 {
+					st = &bannerStyle
+				}
+			}
+			body = group(body, prefix+r.label, st)
+		} else {
+			if r.group != last {
+				body = group(body, heads[r.group], headStyle[r.group])
+			}
+			body = append(body, section{lines: []string{prefix + r.label}, style: st})
+		}
+		last = r.group
 		if i == m.cursor {
 			cur = count(body) - 1
 		}
-		i++
-	} else if len(m.snap.notes) > 0 {
-		body = group(body, m.notesHead(), &bannerStyle)
-		add(len(m.snap.notes), func(j int) *lipgloss.Style {
-			if m.snap.notes[j].Unread() {
-				return &unreadStyle
-			}
-			return &readStyle
-		})
 	}
 	if len(held) > 0 {
 		body = group(body, "Held · sent when the session's asks close", &bannerStyle)

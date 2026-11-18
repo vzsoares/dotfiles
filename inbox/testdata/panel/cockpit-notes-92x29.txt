@@ -1,7 +1,9 @@
 cockpit · ✉ 2 unread                                                               quota n/a
-Notes · 2 unread
-› ● Session spec-s2 died · chief · 0s
-  ● Task 707 merged · chief · #707 · 0s
+Threads · 1
+› ● Task 707 merged · chief · #707 · 0s
+
+No task · 1 unread
+  ● Session spec-s2 died · chief · 0s
 
 
 
@@ -24,6 +26,4 @@ Notes · 2 unread
 
 
 
-
-
-↑↓ · enter open · z fold · m read · f reply · c chief · M all read · ? help · q quit
+↑↓ · enter open · T refile · m read · f reply · c chief · M all read · ? help · q quit

@@ -2,7 +2,7 @@ cockpit · ✕ delivery failed · chief · r retry      quota n/a
 Failed delivery · 1
 › retry reply n1 to chief · gone
 
-Notes · 1 unread
+Threads · 1
   ● Task 707 merged · chief · #707 · 0s ↩
 
 

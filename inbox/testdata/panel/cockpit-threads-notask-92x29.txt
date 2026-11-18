@@ -1,0 +1,29 @@
+cockpit · 1 open · ✉ 2 unread                                                      quota n/a
+Threads · 1
+› spec-s1 · #861 · 1 open · 0s · [idle]
+
+No task · 2 unread
+  ● 06h report · chief · 0s
+  ● Swept 6 finished agents · chief · 0s
+  ○ Good night · chief · 0s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter open · a answer · c chief · M all read · ? help · q quit
