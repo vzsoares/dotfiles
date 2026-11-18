@@ -67,7 +67,11 @@ func (m *Model) threads() []thread {
 		t := get(r.First)
 		t.rows = append(t.rows, r)
 		t.prod = t.prod || prod[r.SessionID]
-		t.open += r.Count
+		for _, d := range m.snap.open {
+			if d.SessionID == r.SessionID && d.Task == r.First {
+				t.open++
+			}
+		}
 		t.newest = max(t.newest, r.Newest)
 	}
 	for _, n := range m.snap.notes {
@@ -360,6 +364,15 @@ func (m *Model) backToThread(flash string) tea.Cmd {
 	m.cursor, m.scroll = m.thread.cursor, m.thread.scroll
 	m.passFrom, m.noteFrom, m.chiefFrom = scList, scList, scList
 	return m.loadCmd(false)
+}
+
+// leavePass ends a walk on the thread it was started from, else on the list.
+func (m *Model) leavePass(flash string) tea.Cmd {
+	if m.passFrom == scThread {
+		return m.backToThread(flash)
+	}
+	m.toList(flash)
+	return nil
 }
 
 // leaveThread keeps where the thread was so a screen opened from it returns there.

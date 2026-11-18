@@ -106,7 +106,10 @@ func TestRefileMovesAndClears(t *testing.T) {
 	if _, err := ib.Refile(9, "1"); !errors.As(err, &ie) || ie.Code != 2 || ie.Msg != "no note n9" {
 		t.Fatalf("%v", err)
 	}
-	for _, bad := range []string{"abc", "8-1", "#860"} {
+	if n, err := ib.Refile(1, "#860"); err != nil || n.Task != "860" {
+		t.Fatalf("%+v %v", n, err)
+	}
+	for _, bad := range []string{"abc", "8-1", "##860"} {
 		if _, err := ib.Refile(1, bad); !errors.As(err, &ie) || ie.Code != 2 {
 			t.Fatalf("%q: %v", bad, err)
 		}

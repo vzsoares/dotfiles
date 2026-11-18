@@ -178,6 +178,9 @@ func TestThreadsGroupingOrderAndSingletons(t *testing.T) {
 		t.Fatalf("rows %v, want %v:\n%s", got, want, d.view())
 	}
 	d.has("PROD", "spec-s1 · #7, #8", "● eight note · chief · #8")
+	if th, _ := d.m.threadOf("s:s1"); th.open != 1 {
+		t.Fatalf("#7 counts %d open, want only its own ask", th.open)
+	}
 }
 
 func TestThreadFoldKeysAndPersist(t *testing.T) {
@@ -507,5 +510,25 @@ func TestThreadScreensFitSmallPanes(t *testing.T) {
 		}
 		d.keys("esc", "T")
 		d.fits()
+	}
+}
+
+func TestWalkFromThreadEndsOnTheThread(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		keys []string
+	}{
+		{"send", []string{"a", "a", "enter"}},
+		{"cancel", []string{"a", "a", "esc"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newDrv(t, 92, 29)
+			d.fixture843()
+			d.openThread843()
+			d.keys(tc.keys...)
+			if d.m.scr != scThread || d.m.thread.task != "843" {
+				t.Fatalf("screen %d:\n%s", d.m.scr, d.view())
+			}
+		})
 	}
 }

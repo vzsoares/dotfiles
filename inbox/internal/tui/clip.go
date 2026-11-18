@@ -12,7 +12,7 @@ import (
 
 // copyScreen is whether y copies a code block here.
 func (m *Model) copyScreen() bool {
-	return m.scr == scNote || m.scr == scWalk || m.scr == scFull
+	return m.scr == scNote || m.scr == scWalk || m.scr == scFull || m.scr == scThread
 }
 
 // keyYank handles y and the block number after it; it reports whether it

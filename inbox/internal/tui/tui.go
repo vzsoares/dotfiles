@@ -483,6 +483,12 @@ func (m *Model) refreshThread() {
 		return
 	}
 	m.thread.data, m.thread.loaded = *th, true
+	// A read note past VisibleFor is only in the thread, not in snap.notes.
+	for _, it := range th.Items {
+		if it.Note != nil && it.Note.ID == m.note.ID {
+			m.note = *it.Note
+		}
+	}
 	if m.scr != scThread {
 		return
 	}
@@ -984,9 +990,9 @@ func (m *Model) onSent(msg sentMsg) tea.Cmd {
 	for _, id := range p.order {
 		delete(m.drafts, id)
 	}
-	m.toList(strings.Join(append([]string{msg.flash}, p.notes...), "; "))
+	cmd := m.leavePass(strings.Join(append([]string{msg.flash}, p.notes...), "; "))
 	m.flashOK = ok
-	return m.queueDrafts(draftOp{clear: m.sid})
+	return tea.Batch(cmd, m.queueDrafts(draftOp{clear: m.sid}))
 }
 
 // ------------------------------------------------------------------- talk --
@@ -1758,7 +1764,7 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 	case "change":
 		m.openJump()
 	case "cancel":
-		m.toList(m.p.stopped("cancelled", m.drafts))
+		return m, m.leavePass(m.p.stopped("cancelled", m.drafts))
 	}
 	return m, nil
 }
@@ -1823,10 +1829,8 @@ func (m *Model) keyJump(k string) (tea.Model, tea.Cmd) {
 	switch {
 	case back && m.jumpFrom == scReview:
 		m.scr, m.cursor = scReview, 0
-	case back && m.passFrom == scThread:
-		return m, m.backToThread(m.p.stopped("back", m.drafts))
 	case back:
-		m.toList(m.p.stopped("back", m.drafts))
+		return m, m.leavePass(m.p.stopped("back", m.drafts))
 	case k == "enter":
 		m.show(items[m.cursor].value)
 	}

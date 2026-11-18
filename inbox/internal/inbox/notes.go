@@ -306,8 +306,9 @@ func (ib *Inbox) MarkAllNotes(read bool) error {
 		Stamp(Now().Add(-VisibleFor))))
 }
 
-// Refile moves note id into task's thread; "-" or "" clears its task.
+// Refile moves note id into task's thread (#860 or 860); "-" or "" clears its task.
 func (ib *Inbox) Refile(id int64, task string) (Note, error) {
+	task = strings.TrimPrefix(task, "#")
 	if task == "-" {
 		task = ""
 	}

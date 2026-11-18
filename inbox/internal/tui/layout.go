@@ -187,7 +187,7 @@ var helps = map[screen]string{
 		" T moves a note to another task, r retries a failed delivery, c writes to chief (about the thread under the cursor).",
 	scThread: "Everything about this task, oldest first: notes with their replies, decisions with their answers, your messages to chief." +
 		" tab and shift+tab move the › mark; enter opens the marked note or open ask; f replies to the marked note (else the newest)," +
-		" m marks the thread's notes read, a answers its open asks, c writes to chief about it, T moves the marked note to another task. g and G jump to the top and end.",
+		" m marks the thread's notes read, a answers its open asks, c writes to chief about it, T moves the marked note to another task. g and G jump to the top and end; y then a number copies that code block.",
 	scRefile:  "Type the task to move this note to; - or empty moves it to No task.",
 	scSession: "Answer walks the questions one by one; Review all shows every open decision on one screen; Talk opens the agent in a popup.",
 	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn scroll; enter walks from the marked one, t talks to the agent about picked ones.",
