@@ -1,0 +1,5 @@
+{
+    "defaultProvider": "featherless",
+    "defaultModel": "huihui-ai/Huihui-Qwen3.8-27B-abliterated",
+    "skills": ["~/.claude/skills/wiki", "~/.claude/skills/second-brain"]
+}

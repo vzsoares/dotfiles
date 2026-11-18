@@ -96,16 +96,6 @@
   "autoCompactEnabled": true,
   "agentPushNotifEnabled": true,
   "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--output-dir",
-        "/tmp/playwright-mcp"
-      ]
-    },
     "docs-mcp-server": {
       "type": "stdio",
       "command": "npx",

@@ -1,0 +1,25 @@
+{
+    "$schema": "https://pi.dev/schemas/models.schema.json",
+    "providers": {
+        "featherless": {
+            "name": "Featherless",
+            "baseUrl": "https://api.featherless.ai/v1",
+            "api": "openai-completions",
+            "apiKey": "$FEATHERLESS_API_KEY",
+            "models": [
+                {
+                    "id": "huihui-ai/Huihui-Qwen3.8-27B-abliterated",
+                    "contextWindow": 32768,
+                    "maxTokens": 8192
+                }
+            ]
+        },
+        "abliteration": {
+            "name": "abliteration.ai",
+            "baseUrl": "https://api.abliteration.ai/v1",
+            "api": "openai-completions",
+            "apiKey": "$ABLITERATION_API_KEY",
+            "models": [{ "id": "abliterated-model" }]
+        }
+    }
+}

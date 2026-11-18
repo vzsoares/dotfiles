@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+# Links file by file: pi keeps auth.json and session state in the same dir.
+# Set PI_CODING_AGENT_DIR to link into another agent dir.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$SCRIPT_DIR")"
+TARGET_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+mkdir -p "$TARGET_DIR"
+
+link() {
+  rm -f "$TARGET_DIR/$2"
+  ln -s "$1" "$TARGET_DIR/$2"
+  echo "linked $2 -> $1"
+}
+
+link "$SCRIPT_DIR/settings.json" settings.json
+link "$SCRIPT_DIR/models.json" models.json
+link "$REPO/mcp/servers.json" mcp.json
+link "$REPO/.claude/CLAUDE.md" AGENTS.md
