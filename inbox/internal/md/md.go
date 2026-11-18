@@ -179,7 +179,9 @@ func (r *Renderer) register(src string) int {
 		return id
 	}
 	if len(r.srcs) >= maxEntries*8 {
+		// Cached lines carry ids into srcs; drop them with the table.
 		r.srcs, r.ids = nil, map[string]int{}
+		clear(r.cache)
 	}
 	r.srcs = append(r.srcs, src)
 	r.ids[src] = len(r.srcs) - 1
