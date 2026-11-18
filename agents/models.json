@@ -13,14 +13,64 @@
                     "maxTokens": 8192
                 },
                 {
-                    "id": "huihui-ai/Huihui-Qwen3.8-27B-abliterated",
-                    "contextWindow": 32768,
-                    "maxTokens": 8192
-                },
-                {
                     "id": "huihui-ai/Llama-3.3-70B-Instruct-abliterated",
                     "contextWindow": 32768,
                     "maxTokens": 8192
+                }
+            ]
+        },
+        "venice": {
+            "name": "Venice",
+            "baseUrl": "https://api.venice.ai/api/v1",
+            "api": "openai-completions",
+            "apiKey": "!zsh -c 'source ~/.zshrc.local >/dev/null 2>&1; print -rn -- $VENICE_API_KEY'",
+            "compat": { "thinkingFormat": "openai" },
+            "models": [
+                {
+                    "id": "glm-5-3-flash-uncensored",
+                    "name": "GLM 5.3 Flash Uncensored (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": null,
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": ["text", "image"],
+                    "contextWindow": 1048576,
+                    "maxTokens": 32768,
+                    "cost": {
+                        "input": 0.165,
+                        "output": 0.55,
+                        "cacheRead": 0.033,
+                        "cacheWrite": 0
+                    }
+                },
+                {
+                    "id": "deepseek-v4-1-flash-1017-uncensored",
+                    "name": "DeepSeek V4.1 Flash 1017 Uncensored (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": ["text", "image"],
+                    "contextWindow": 1000000,
+                    "maxTokens": 32768,
+                    "cost": {
+                        "input": 0.33,
+                        "output": 1.32,
+                        "cacheRead": 0.00825,
+                        "cacheWrite": 0
+                    }
                 }
             ]
         },
