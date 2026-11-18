@@ -1,0 +1,24 @@
+cockpit · 2 open                   quota n/a
+spec-s1 · decisions · 1/2 drafted
+  ● 7.1  Which storage… → a: redis
+› ○ 7.2  Second?
+  Back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter open · esc back · ? help

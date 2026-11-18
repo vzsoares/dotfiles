@@ -32,6 +32,7 @@ type fakeAM struct {
 	popups   []string
 	bells    []string
 	notices  [][2]string
+	pushes   []string
 	// chiefs are the messages sent to chief; chiefErr fails the next one and
 	// chiefStatus is what ChiefStatus reports.
 	chiefs      []string
@@ -77,6 +78,12 @@ func (f *fakeAM) Notify(title, body string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.notices = append(f.notices, [2]string{title, body})
+}
+
+func (f *fakeAM) Push(body string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pushes = append(f.pushes, body)
 }
 
 func (f *fakeAM) Chief(msg string) (string, string) {

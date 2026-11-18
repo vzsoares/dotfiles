@@ -66,3 +66,5 @@ func TestNotifyLinuxUsesZenBell(t *testing.T) {
 		t.Fatalf("macOS notifier ran on linux: %q", got)
 	}
 }
+
+func readBells(data string) ([]byte, error) { return os.ReadFile(filepath.Join(data, "bells")) }

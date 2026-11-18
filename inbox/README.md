@@ -43,6 +43,10 @@ cd inbox
 gofmt -l . && go vet ./... && go test -race ./...
 ```
 
+`ZEN_NTFY_TOPIC` (with optional `ZEN_NTFY_URL`, default `https://ntfy.sh`, and
+`ZEN_NTFY_CLICK`) makes the desk panel POST a counts-only alert per new decision or note;
+nothing is sent over SSH (see the wiki's "Phone access").
+
 `ZEN_FLOW_DB` points tests at a temp db and `ZEN_INBOX_NOW` pins the clock (tests
 only). The golden files were captured once from `inbox.py` with
 `testdata/golden/pyshim.py` before it was deleted; `withdraw` by the asking session

@@ -258,6 +258,47 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
 - **Header and bell.** Unread notes count in the header (`✉ k unread`). Notes never
   ring zen-bell and refresh on the same 2 s poll.
 
+## Phone access (#830)
+
+The phone works the cockpit through a second panel, never the desk pane:
+
+```
+phone (Blink/Termius) → Tailscale → sshd (key-only) → zsh → zen-cockpit → zen-inbox watch
+```
+
+- **Quiet panel.** `zen-cockpit` (`scripts/cockpit.sh`) refuses to run without
+  `SSH_CONNECTION` and keeps `TERM` as the client set it. With it set, `watch`
+  posts no banner, rings no zen-bell and sends no ntfy push (`am.Remote`): those
+  belong to the desk cockpit. Everything else is unchanged.
+- **Prod asks.** The phone may approve them: the guard checks env vars and the
+  process tree for an agent, and an SSH shell has neither, so the y/N confirm
+  works. `guard` is untouched. The trust is the SSH key.
+- **Layout.** Goldens at 44x24 (`phone-*-44x24`) cover the list, the walk, the
+  review, the decision list and the prod confirm (full 40-char sha wrapped).
+- **Alert.** With `ZEN_NTFY_TOPIC` set, the desk panel POSTs once per new decision
+  or unread note, next to the banner, to `${ZEN_NTFY_URL:-https://ntfy.sh}/$topic`.
+  The body is counts only: `#<task> · <n> open` (`· PROD` for a prod ask) or
+  `✉ <n> unread`; never question, option, brief or note text. `ZEN_NTFY_CLICK`
+  sets the optional `Click` header. 5 s timeout, runs in a `tea.Cmd`, a failure
+  goes to stderr and is not retried.
+- **Security posture.** Tailscale: private tailnet, optional ACL so only the phone
+  reaches port 22. sshd: Remote Login for the user only, key-only. Key: Secure
+  Enclave, so it cannot leave the phone. ntfy.sh: the topic name is the only
+  secret and the body carries no content, so a leaked topic reveals only counts.
+- **Limit.** The Mac must be awake; nothing here wakes it.
+
+Setup checklist (this Mac and the phone only):
+
+1. Install Tailscale on both, one tailnet; optionally an ACL: phone → Mac:22.
+2. Turn on Remote Login for the user only; in `/etc/ssh/sshd_config.d/` set
+   `PasswordAuthentication no` and `KbdInteractiveAuthentication no` (sudo).
+3. In Blink or Termius create a Secure Enclave key; add its public key to
+   `~/.ssh/authorized_keys`.
+4. Pick a long random topic; `export ZEN_NTFY_TOPIC=…` in `~/.zshrc.local`;
+   subscribe in the ntfy app; restart the cockpit.
+5. On cellular with Wi-Fi off: connect, run `zen-cockpit`, answer a test ask,
+   approve a test prod ask.
+
 ## IDs
 
 `<task>.<n>` with n = 1 + the highest n ever used for that task (withdrawn included);

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,8 @@ type Client interface {
 	Bell(message string)
 	// Notify posts one banner.
 	Notify(title, body string)
+	// Push sends the content-free ntfy alert, when ZEN_NTFY_TOPIC is set.
+	Push(body string)
 	// Chief queues message for the live chief session (zen-chief) and returns
 	// the message id, or the error text.
 	Chief(message string) (messageID, errText string)
@@ -333,7 +336,50 @@ func (e Exec) Notify(title, body string) {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
+	if Remote() {
+		return
+	}
 	go notify(goos, title, body)
+}
+
+// Remote reports an SSH session, a second panel whose alerts belong to the
+// desk cockpit.
+func Remote() bool { return os.Getenv("SSH_CONNECTION") != "" }
+
+// pushTimeout bounds one ntfy POST.
+var pushTimeout = 5 * time.Second
+
+// Push POSTs body to ZEN_NTFY_URL/ZEN_NTFY_TOPIC. A failure is logged and
+// dropped; it runs in a tea.Cmd, so it may block.
+func (e Exec) Push(body string) {
+	topic := os.Getenv("ZEN_NTFY_TOPIC")
+	if topic == "" || Remote() {
+		return
+	}
+	base := os.Getenv("ZEN_NTFY_URL")
+	if base == "" {
+		base = "https://ntfy.sh"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		strings.TrimRight(base, "/")+"/"+topic, strings.NewReader(body))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zen-inbox: ntfy:", err)
+		return
+	}
+	if click := os.Getenv("ZEN_NTFY_CLICK"); click != "" {
+		req.Header.Set("Click", click)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zen-inbox: ntfy:", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		fmt.Fprintln(os.Stderr, "zen-inbox: ntfy:", resp.Status)
+	}
 }
 
 func notify(goos, title, body string) {

@@ -24,6 +24,7 @@ LINKS=(
     "zen-lock:scripts/lock.sh"
     "zen-resume-watch:scripts/resume-watch.sh"
     "zen-inbox:inbox/zen-inbox"
+    "zen-cockpit:scripts/cockpit.sh"
     "zen-board:scripts/board.py"
     "zen-pgp:scripts/pgp.py"
     "zen-hash:scripts/hash.sh"

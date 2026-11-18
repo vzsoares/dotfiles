@@ -427,7 +427,7 @@ func (m *Model) ring() []tea.Cmd {
 	if m.seen != nil {
 		for _, n := range view.Notices(m.snap.open, m.snap.notes, m.seen) {
 			client := m.am
-			cmds = append(cmds, func() tea.Msg { client.Notify(n.Title, n.Body); return nil })
+			cmds = append(cmds, func() tea.Msg { client.Notify(n.Title, n.Body); client.Push(n.Push); return nil })
 		}
 	} else {
 		m.seen = map[string]bool{}

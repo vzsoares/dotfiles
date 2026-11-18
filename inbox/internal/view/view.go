@@ -459,7 +459,8 @@ func Render(open, held []inbox.Decision, undelivered []inbox.Batch, sessions am.
 }
 
 // Notice is one banner: a decision or note not seen before.
-type Notice struct{ Title, Body string }
+// Push is its ntfy body: counts only, never question or note text.
+type Notice struct{ Title, Body, Push string }
 
 // Notices is one banner per open decision and unread note not in seen: first
 // the decisions in open order, then the notes. A note takes its task's title
@@ -467,9 +468,17 @@ type Notice struct{ Title, Body string }
 func Notices(open []inbox.Decision, notes []inbox.Note, seen map[string]bool) []Notice {
 	var out []Notice
 	titles := map[string]string{}
+	perTask := map[string]int{}
 	for _, d := range open {
+		perTask[d.Task]++
 		if d.Title != "" {
 			titles[d.Task] = d.Title
+		}
+	}
+	unread := 0
+	for _, n := range notes {
+		if n.Unread() {
+			unread++
 		}
 	}
 	title := func(task string) string {
@@ -481,12 +490,19 @@ func Notices(open []inbox.Decision, notes []inbox.Note, seen map[string]bool) []
 	for _, d := range open {
 		if !seen[d.ID] {
 			body, _, _ := strings.Cut(strings.TrimSpace(d.Question), "\n")
-			out = append(out, Notice{title(d.Task), strings.TrimSpace(body)})
+			push := fmt.Sprintf("%d open", perTask[d.Task])
+			if d.Task != "" {
+				push = "#" + d.Task + " · " + push
+			}
+			if d.Prod != nil {
+				push += " · PROD"
+			}
+			out = append(out, Notice{title(d.Task), strings.TrimSpace(body), push})
 		}
 	}
 	for _, n := range notes {
 		if n.Unread() && !seen[n.Label()] {
-			out = append(out, Notice{title(n.Task), n.Title})
+			out = append(out, Notice{title(n.Task), n.Title, fmt.Sprintf("✉ %d unread", unread)})
 		}
 	}
 	return out

@@ -1,0 +1,24 @@
+cockpit · 1 open · 1 prod          quota n/a
+680.1  prod approval
+action release
+repo   dotfiles
+branch prod
+sha
+0123456789abcdef0123456789abcdef01234567
+
+Approve? y/N
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+y approve · n/esc back

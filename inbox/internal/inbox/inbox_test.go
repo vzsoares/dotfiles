@@ -31,6 +31,7 @@ func (f *fakeAM) CanPopup(string) bool                { return true }
 func (f *fakeAM) Popup(string) bool                   { return true }
 func (f *fakeAM) Bell(string)                         {}
 func (f *fakeAM) Notify(_, _ string)                  {}
+func (f *fakeAM) Push(string)                         {}
 func (f *fakeAM) Chief(string) (string, string)       { return "", "" }
 func (f *fakeAM) ChiefStatus(string) (string, string) { return "", "" }
 

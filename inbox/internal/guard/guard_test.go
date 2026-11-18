@@ -121,3 +121,10 @@ func TestPSReadsThisProcess(t *testing.T) {
 		t.Fatalf("%d %q %v", ppid, comm, err)
 	}
 }
+
+func TestSSHConnectionAloneDoesNotRefuse(t *testing.T) {
+	e := env(map[string]string{"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"})
+	if ok, reason := Check(e, tree(nil), 40); !ok || reason != "" {
+		t.Fatalf("%v %q", ok, reason)
+	}
+}

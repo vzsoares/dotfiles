@@ -102,3 +102,7 @@ Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
 ## [2026-11-17] update | zen-report: scheduled routines via launchd (#802)
 `scripts/report.py` (`zen-report`) replaces chief's session crons: a launchd agent (`launchd/`, `StartInterval` 900) runs `tick`, which sends due jobs from zen.json `report.jobs` through `zen-chief` and records them in `~/.cache/zen/report/state.json`. A daily slot is due until its `window_until`; after a wake only the latest runs (older ones `stale`), a window closed undelivered is `missed` with a banner. Runs under `zen-lock report`.
 Pages updated: none (see scripts/README.md)
+
+## [2026-11-18] feature | Phone access to the cockpit (#830)
+`zen-cockpit` runs a second `zen-inbox watch` over SSH (Tailscale); `SSH_CONNECTION` silences banner, bell and ntfy there. The desk panel POSTs a content-free ntfy alert when `ZEN_NTFY_TOPIC` is set. 44x24 panel goldens added.
+Pages updated: architecture/decision-inbox.md

@@ -1,0 +1,24 @@
+cockpit · 2 open                   quota n/a
+#7
+asked by spec-s1 · idle · 0s
+
+7.1  Which storage should the cache use?
+a) redis
+b) files
+› a
+  b
+  Free text
+  Skip
+  Talk
+  View full
+  Back
+
+
+
+
+
+
+
+
+↑↓ · enter · a-d pick · f free · s skip
+←→ move · esc list · ? help
