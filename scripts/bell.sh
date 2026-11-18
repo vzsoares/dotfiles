@@ -8,7 +8,7 @@
 #   - .claude/settings.json  Claude Code Notification / Stop hooks
 #
 # Usage:
-#   zen-bell <sound> [-f] [-N] [-v N] [-n SUMMARY] [-b BODY] [-u URGENCY] [-t MS]
+#   zen-bell <sound> [-f] [-N] [--chief] [-v N] [-n SUMMARY] [-b BODY] [-u URGENCY] [-t MS]
 #
 #   <sound>  a freedesktop sound name (complete, dialog-error, window-attention)
 #            or an absolute path to a sound file. On macOS the names map to
@@ -16,6 +16,10 @@
 #   -f       play even if the terminal is focused
 #   -N       raise the notification even if the terminal is focused;
 #            the sound stays gated
+#   --chief  only act when $AGENT_MANAGER_SESSION_ID is the live, unarchived
+#            agent-manager session named "chief"; otherwise exit silently.
+#            The notification then fires even with bell.enabled=false (sound
+#            stays muted); ZEN_BELL_OFF=1 and the focus gate still apply
 #   -v N     volume, 0.0 - 1.0 (default: $ZEN_BELL_VOLUME, bell.volume, 0.4)
 #   -n TEXT  also raise a desktop notification with this summary
 #   -b TEXT  body text for the notification (needs -n)
@@ -26,7 +30,8 @@
 #            Ignored on macOS, where Notification Center owns the timing.
 #
 # bell.enabled=false in zen.json (see zen-config), or ZEN_BELL_OFF=1, silences
-# everything: no sound, no notification, even with -f.
+# everything: no sound, no notification, even with -f (--chief keeps its
+# notification under bell.enabled=false).
 #
 # The notification is gated by the same focus check as the sound: if you are
 # looking at the terminal, neither fires. Pass -f to always notify.
@@ -42,6 +47,8 @@ set -euo pipefail
 volume="${ZEN_BELL_VOLUME:-}"
 force="${ZEN_BELL_WHEN_FOCUSED:-}"
 notify_always=0
+chief=0
+mute=0
 sound=""
 summary=""
 body=""
@@ -63,21 +70,38 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -f | --force) force=1; shift ;;
         -N | --notify-always) notify_always=1; shift ;;
+        --chief) chief=1; shift ;;
         -v | --volume) need_arg "$@"; volume="$2"; shift 2 ;;
         -n | --notify) need_arg "$@"; summary="$2"; shift 2 ;;
         -b | --body) need_arg "$@"; body="$2"; shift 2 ;;
         -u | --urgency) need_arg "$@"; urgency="$2"; shift 2 ;;
         -t | --timeout) need_arg "$@"; timeout_ms="$2"; shift 2 ;;
-        -h | --help) sed -n '2,36p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        -h | --help) sed -n '2,43p' "$0" | sed 's/^# \?//'; exit 0 ;;
         -*) echo "zen-bell: unknown option $1" >&2; exit 2 ;;
         *) sound="$1"; shift ;;
     esac
 done
 
+# True when $AGENT_MANAGER_SESSION_ID maps to the unarchived session "chief".
+is_chief() {
+    [[ -n ${AGENT_MANAGER_SESSION_ID:-} ]] || return 1
+    command -v agent-manager >/dev/null 2>&1 || return 1
+    agent-manager sessions --json 2>/dev/null | python3 -I -c '
+import json, sys
+sid = sys.argv[1]
+data = json.load(sys.stdin)
+rows = data if isinstance(data, list) else data.get("sessions", [])
+sys.exit(0 if any(s.get("id") == sid and s.get("name") == "chief"
+                  and not s.get("archived") for s in rows) else 1)
+' "$AGENT_MANAGER_SESSION_ID" 2>/dev/null
+}
+
+(( chief )) && { is_chief || exit 0; }
+
 if [[ -n ${ZEN_BELL_OFF:-} ]]; then
     [[ $ZEN_BELL_OFF == 1 ]] && exit 0
 elif [[ $(cfg enabled) == false ]]; then
-    exit 0
+    (( chief )) && mute=1 || exit 0
 fi
 [[ -n $volume ]] || volume=$(cfg volume)
 volume=${volume:-0.4}
@@ -249,7 +273,7 @@ if [[ -n $summary ]] && { (( ! is_focused )) || (( notify_always )); }; then
     notify
 fi
 
-(( is_focused )) && exit 0
+(( is_focused || mute )) && exit 0
 
 if (( macos )); then
     afplay -v "$volume" "$sound" >/dev/null 2>&1 || true
