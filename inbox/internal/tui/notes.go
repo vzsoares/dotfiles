@@ -203,6 +203,11 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 		m.ta.Placeholder = "reply (empty cancels)"
 		m.scr, m.flash = scReply, ""
 		return m, m.ta.Focus()
+	case "enter":
+		m.scr, m.flash = scList, ""
+		if n.Unread() {
+			return m, m.markCmd(n.ID, false, true)
+		}
 	case "esc", "q":
 		m.scr, m.flash = scList, ""
 	}
@@ -228,7 +233,13 @@ func (m *Model) keyReply(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) viewNote() frame {
 	n := m.note
-	top := []section{{lines: []string{pyfmt.Clip(view.NoteHead(n, m.now()), m.w)}, style: &bannerStyle}}
+	mark, markStyle := "✓ read", &readStyle
+	if n.Unread() {
+		mark, markStyle = "● unread", &cursorStyle
+	}
+	head := pyfmt.Clip(view.NoteHead(n, m.now()), max(m.w-lipgloss.Width(mark)-1, 0))
+	line := bannerStyle.Render(head) + " " + markStyle.Render(mark)
+	top := []section{{lines: []string{line}}}
 	if m.flash != "" {
 		top = append(top, section{lines: view.WrapRest("» "+m.flash, m.w, "", "  "), style: &bannerStyle})
 	}

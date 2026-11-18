@@ -1,7 +1,6 @@
 cockpit · ✉ 1 unread                               quota n/a
-n1 · #707 · chief · 0s
-↑ 105 more
-
+n1 · #707 · chief · 0s ● unread
+↑ 106 more
 Part 26
 lorem ipsum dolor sit amet consectetur adipiscing elit sed
 do eiusmod lorem ipsum dolor sit amet con
@@ -17,4 +16,5 @@ do eiusmod lorem ipsum dolor sit amet con
 Part 29
 lorem ipsum dolor sit amet consectetur adipiscing elit sed
 do eiusmod lorem ipsum dolor sit amet con
-↑↓ · m mark · f reply · esc back · ? help · ^u/^d scroll
+↑↓ · enter read · back · m mark · f reply · esc back
+? help · ^u/^d scroll

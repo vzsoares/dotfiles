@@ -345,3 +345,53 @@ func TestRefusedReplyKeepsText(t *testing.T) {
 		t.Fatalf("text lost: %q", d.m.ta.Value())
 	}
 }
+
+func TestEnterOnUnreadNoteMarksReadAndGoesBack(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.notesFixture()
+	d.cursorTo("Task 707")
+	row := d.m.focusedRow()
+	d.keys("enter")
+	if d.m.scr != scNote || !strings.Contains(d.view(), "● unread") {
+		t.Fatalf("not on the unread note:\n%s", d.view())
+	}
+	d.keys("enter")
+	if d.noteRow(1).Unread() {
+		t.Fatal("enter did not mark the note read")
+	}
+	if d.m.scr != scList || d.m.focusedRow() != row {
+		t.Fatalf("scr %v row %q, want the list on %q:\n%s", d.m.scr, d.m.focusedRow(), row, d.view())
+	}
+	if !strings.Contains(d.view(), "Notes · 0 unread") || !strings.Contains(d.view(), "○ Task 707") {
+		t.Fatalf("list not refreshed:\n%s", d.view())
+	}
+}
+
+func TestEnterOnReadNoteGoesBackWithoutWrite(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.notesFixture()
+	d.cursorTo("spec-s2 died")
+	d.keys("enter")
+	if d.m.scr != scNote || !strings.Contains(d.view(), "✓ read") {
+		t.Fatalf("not on the read note:\n%s", d.view())
+	}
+	d.keys("enter")
+	if d.m.scr != scList || d.noteRow(2).Unread() {
+		t.Fatalf("scr %v:\n%s", d.m.scr, d.view())
+	}
+}
+
+func TestNoteHeaderShowsReadStateAt92x29(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 29)
+	d.notesFixture()
+	for _, c := range []struct{ row, mark string }{{"Task 707", "● unread"}, {"spec-s2 died", "✓ read"}} {
+		d.cursorTo(c.row)
+		d.keys("enter")
+		d.fits()
+		if !strings.Contains(d.line(1), c.mark) || !strings.Contains(d.view(), "enter read · back") {
+			t.Fatalf("%s:\n%s", c.mark, d.view())
+		}
+		d.keys("esc")
+	}
+}
