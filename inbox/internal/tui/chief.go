@@ -223,7 +223,10 @@ func (m *Model) chiefPass() tea.Cmd {
 		if err != nil {
 			return chiefPassMsg{}
 		}
-		titles, _ := ib.TaskTitles()
+		titles, err := ib.TaskTitles()
+		if err != nil {
+			return chiefPassMsg{}
+		}
 		for _, c := range chats {
 			if c.ID == skip {
 				continue
