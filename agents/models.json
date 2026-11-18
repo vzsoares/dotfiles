@@ -5,7 +5,7 @@
             "name": "Featherless",
             "baseUrl": "https://api.featherless.ai/v1",
             "api": "openai-completions",
-            "apiKey": "$FEATHERLESS_API_KEY",
+            "apiKey": "!zsh -c 'source ~/.zshrc.local >/dev/null 2>&1; print -rn -- $FEATHERLESS_API_KEY'",
             "models": [
                 {
                     "id": "huihui-ai/Huihui-gemma-4-31B-it-abliterated-v2",
