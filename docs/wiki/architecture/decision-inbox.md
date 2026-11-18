@@ -285,7 +285,9 @@ phone (Blink/Termius) → Tailscale → sshd (key-only) → zsh → zen-cockpit 
   reaches port 22. sshd: Remote Login for the user only, key-only. Key: Secure
   Enclave, so it cannot leave the phone. ntfy.sh: the topic name is the only
   secret and the body carries no content, so a leaked topic reveals only counts.
-- **Limit.** The Mac must be awake; nothing here wakes it.
+- **Limit.** The Mac must be awake; nothing here wakes it. Start the desk tmux
+  server from a local terminal: one started over SSH leaks `SSH_CONNECTION` into
+  every pane and silences the desk cockpit too.
 
 Setup checklist (this Mac and the phone only):
 
