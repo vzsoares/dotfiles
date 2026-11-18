@@ -1,4 +1,4 @@
-cockpit · 1 decision · 3 notes     quota n/a
+cockpit                            quota n/a
 #843 Phone …  1 open · 2 unread · 11 entries
   Reach the cockpit from the phone over SSH.
 ↑ 14 more

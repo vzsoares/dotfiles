@@ -1,4 +1,6 @@
-cockpit · 2 notes                                                                  quota n/a
+cockpit                                                                            quota n/a
+  Inbox · 0 decisions · 2 notes
+
 › No task · 2 unread
 
 
@@ -24,6 +26,4 @@ cockpit · 2 notes                                                              
 
 
 
-
-
-enter expand · c chief · M all read · ? help · q quit
+↑↓ · enter expand · c chief · M all read · ? help · q quit

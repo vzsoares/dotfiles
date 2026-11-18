@@ -176,7 +176,18 @@ var special = map[string]tea.KeyType{
 	"shift+tab": tea.KeyShiftTab, "tab": tea.KeyTab,
 }
 
+// keys sends each key; a cockpit list resting on the Inbox row first steps
+// off it so flows written for the asks below keep working. rawKeys does not.
 func (d *drv) keys(ks ...string) {
+	for _, k := range ks {
+		if d.m.scr == scList && d.m.focusedRow() == "i:" {
+			d.rawKeys("down")
+		}
+		d.rawKeys(k)
+	}
+}
+
+func (d *drv) rawKeys(ks ...string) {
 	for _, k := range ks {
 		if t, ok := special[k]; ok {
 			d.send(tea.KeyMsg{Type: t})
@@ -186,7 +197,15 @@ func (d *drv) keys(ks ...string) {
 	}
 }
 
-func (d *drv) poll() { d.send(tickMsg{}) }
+// poll reloads and steps off the Inbox row like keys does; pollKeep leaves it.
+func (d *drv) poll() {
+	d.pollKeep()
+	if d.m.scr == scList && d.m.focusedRow() == "i:" {
+		d.rawKeys("down")
+	}
+}
+
+func (d *drv) pollKeep() { d.send(tickMsg{}) }
 
 func (d *drv) view() string { return d.m.View() }
 
@@ -785,8 +804,9 @@ func TestKeysAndFooterPerScreen(t *testing.T) {
 		}
 	}
 	footer("enter open", "q quit", "? help")
+	at := d.m.cursor
 	d.keys("j")
-	if d.m.cursor != 1 {
+	if d.m.cursor != at+1 {
 		t.Fatal("j did not move")
 	}
 	d.keys("k", "?")
@@ -1015,11 +1035,11 @@ func TestStatusLineStates(t *testing.T) {
 	d.ask("8", "s2", "Q2?", "a", "b")
 	d.poll()
 	golden(t, "status-open", d.view())
-	if got := d.head(); got != "cockpit · 3 decisions" {
+	if got := d.head(); got != "cockpit" {
 		t.Errorf("header %q", got)
 	}
 	d.send(tea.WindowSizeMsg{Width: 14, Height: 10})
-	if got := d.head(); got != "cockpit · 3 d…" {
+	if got := d.head(); got != "cockpit" {
 		t.Errorf("header wrapped or overflowed: %q", got)
 	}
 	if got := d.last(); got != "enter open" {

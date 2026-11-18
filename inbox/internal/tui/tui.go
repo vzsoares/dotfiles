@@ -242,6 +242,10 @@ type Model struct {
 	stateFile   string
 	notesFolded bool
 	threadsOpen map[string]bool
+	// inboxOpen shows the flat Inbox list in place of the cockpit; inboxAt is
+	// the row an item was opened from.
+	inboxOpen bool
+	inboxAt   int
 	// chiefMu serialises chat sends and the delivery pass; passing marks a
 	// pass in flight and chatMisses counts its empty status polls per chat.
 	chiefMu    *sync.Mutex
@@ -412,6 +416,7 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	}
 	focused := m.focusedRow()
 	m.snap, m.loaded = s, true
+	m.closeEmptyInbox()
 	m.refreshNote()
 	m.refreshThread()
 	m.refocus(focused)
@@ -449,6 +454,13 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		m.cursor = min(m.cursor, n-1)
 	}
 	return cmds
+}
+
+// closeEmptyInbox leaves the Inbox list once nothing is left in it.
+func (m *Model) closeEmptyInbox() {
+	if m.inboxOpen && m.scr == scList && len(m.listItems()) == 0 {
+		m.inboxOpen = false
+	}
 }
 
 // focusedRow is the list row under the cursor, "" off the list.
@@ -1002,6 +1014,7 @@ func (m *Model) onSent(msg sentMsg) tea.Cmd {
 	}
 	cmd := m.leavePass(strings.Join(append([]string{msg.flash}, p.notes...), "; "))
 	m.flashOK = ok
+	m.openNextInbox(ok)
 	return tea.Batch(cmd, m.queueDrafts(draftOp{clear: m.sid}))
 }
 
@@ -1467,6 +1480,8 @@ func (m *Model) listKeys() []ranked {
 		if t.unread() > 0 {
 			keys = append(keys, ranked{key{"m", "read all"}, 3})
 		}
+	case "i":
+		keys = append(keys, ranked{key{"enter", "open"}, 0})
 	case "s":
 		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
 	case "r", "nr":
@@ -1513,11 +1528,16 @@ func (m *Model) undeliveredName(sid string) string {
 }
 
 func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
-	if ok, cmd := m.keyThreadRow(k); ok {
+	if ok, cmd := m.keyThreadRow(k); ok && !m.inboxOpen {
 		return m, cmd
 	}
 	switch k {
 	case "q", "esc":
+		if m.inboxOpen {
+			m.inboxOpen = false
+			m.refocus("i:")
+			return m, nil
+		}
 		return m, m.quit()
 	case "r":
 		return m, m.retryFirst()
@@ -1560,7 +1580,13 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		kind, sid, _ := strings.Cut(items[m.cursor].value, ":")
+		if m.inboxOpen {
+			m.inboxAt = m.cursor
+		}
 		switch kind {
+		case "i":
+			m.inboxOpen, m.cursor = true, 0
+			return m, nil
 		case "r":
 			return m, m.retryCmd(sid)
 		case "nr":

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
+	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
@@ -128,7 +129,8 @@ func (m *Model) threadOf(value string) (thread, bool) {
 }
 
 const (
-	gFailed = iota
+	gInbox = iota
+	gFailed
 	gThreads
 	gNoTask
 )
@@ -210,7 +212,13 @@ func (m *Model) threadRows(room int) []listRow {
 // the notes without a task.
 func (m *Model) listRows() []listRow {
 	room := max(m.w, view.MinWidth) - 2
+	if m.inboxOpen {
+		return m.inboxRows(room)
+	}
 	var out []listRow
+	if label := m.inboxLabel(); label != "" {
+		out = append(out, listRow{item{pyfmt.Clip(label, room), "i:"}, gInbox, &unreadStyle})
+	}
 	for _, b := range m.snap.undelivered {
 		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s) · " +
 			view.FailReason(b)
@@ -233,6 +241,71 @@ func (m *Model) listRows() []listRow {
 			noteStyle(n)})
 	}
 	return out
+}
+
+// inboxLabel is the Inbox row's text, "" when nothing waits.
+func (m *Model) inboxLabel() string {
+	d, n := len(m.snap.open), inbox.Unread(m.snap.notes)
+	if d+n == 0 {
+		return ""
+	}
+	return "Inbox · " + plural(d, "decision") + " · " + plural(n, "note")
+}
+
+// inboxRows are the open decisions, then the unread notes, across all threads.
+func (m *Model) inboxRows(room int) []listRow {
+	var out []listRow
+	for _, d := range m.snap.open {
+		label := d.SessionName + " · #" + d.Task + " · " + md.Plain(strings.Join(strings.Fields(d.Question), " "))
+		var st *lipgloss.Style
+		if d.Prod != nil {
+			st = &failStyle
+		}
+		out = append(out, listRow{item{pyfmt.Clip(label, room), "s:" + d.SessionID}, gInbox, st})
+	}
+	for _, n := range m.snap.notes {
+		if n.Unread() {
+			out = append(out, listRow{item{pyfmt.Clip(view.NoteLabel(n, m.now()), room), "n:" + noteValue(n)}, gInbox,
+				noteStyle(n)})
+		}
+	}
+	return out
+}
+
+// nextInboxRow is the row after cur in the Inbox list.
+func (m *Model) nextInboxRow(cur string) (string, bool) {
+	items := m.listItems()
+	at := slices.IndexFunc(items, func(it item) bool { return it.value == cur })
+	if at < 0 || at+1 >= len(items) {
+		return "", false
+	}
+	return items[at+1].value, true
+}
+
+// openNextInbox opens the row now where the finished item was; with none
+// there, the Inbox list stays up.
+func (m *Model) openNextInbox(ok bool) {
+	if !m.inboxOpen || !ok || m.scr != scList {
+		return
+	}
+	items := m.listItems()
+	if m.inboxAt < len(items) {
+		m.openRow(items[m.inboxAt].value)
+	} else {
+		m.cursor = max(len(items)-1, 0)
+	}
+}
+
+// openRow opens the note or the session a list row stands for.
+func (m *Model) openRow(row string) {
+	m.refocus(row)
+	kind, id, _ := strings.Cut(row, ":")
+	switch kind {
+	case "n":
+		m.openNote(id)
+	case "s":
+		m.enterSession(id)
+	}
 }
 
 // saveState writes the fold state; a failure is flashed, not fatal.

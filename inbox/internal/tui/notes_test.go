@@ -81,7 +81,7 @@ func TestNotesListGoldens(t *testing.T) {
 		}
 		d.fits()
 		golden(t, "notes-list-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]), v)
-		if d.head() != pyfmtClip("cockpit · 1 decision · 1 note", sz[0]) {
+		if d.head() != pyfmtClip("cockpit", sz[0]) {
 			t.Errorf("header %q", d.head())
 		}
 		if !strings.HasPrefix(d.last(), "enter open · a answer") && !strings.HasPrefix(d.last(), "↑↓ · enter open · a answer") {
@@ -105,7 +105,7 @@ func TestNotesOnlyStatusAndCursorAcrossRows(t *testing.T) {
 	}
 	d.addNote("", "one", "")
 	d.poll()
-	if d.head() != "cockpit · 1 note" {
+	if d.head() != "cockpit" {
 		t.Fatalf("%q", d.head())
 	}
 	if d.last() != "enter open · m read · f reply · c chief · ? help · q quit" {

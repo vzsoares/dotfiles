@@ -1,11 +1,11 @@
-cockpit · 1 decision · 3 notes     quota n/a
+cockpit                            quota n/a
+  Inbox · 1 decision · 3 notes
+
 Threads · 1
 › ▸ #843 · 1 open · 2 unread · 11 items · 1h
 
 No task · 1 unread
   ● Swept 6 finished agents · chief · 0s
-
-
 
 
 

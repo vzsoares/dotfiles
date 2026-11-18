@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
@@ -92,27 +91,27 @@ func (m *Model) openNote(id string) {
 	}
 }
 
-// nextUnreadNote is the list row right after n when it is an unread note and
-// n was opened from the list.
-func (m *Model) nextUnreadNote(n inbox.Note) (inbox.Note, bool) {
+// nextNoteRow is the list row to open after finishing n: the next row of the
+// Inbox list, or in the cockpit the next row when it is an unread note.
+func (m *Model) nextNoteRow(n inbox.Note) (string, bool) {
 	if m.noteFrom != scList {
-		return inbox.Note{}, false
+		return "", false
 	}
-	items := m.listItems()
-	at := slices.IndexFunc(items, func(it item) bool { return it.value == "n:"+noteValue(n) })
-	if at < 0 || at+1 >= len(items) {
-		return inbox.Note{}, false
+	cur := "n:" + noteValue(n)
+	next, ok := m.nextInboxRow(cur)
+	if !ok || m.inboxOpen {
+		return next, ok
 	}
-	id, ok := strings.CutPrefix(items[at+1].value, "n:")
-	if !ok {
-		return inbox.Note{}, false
+	id, isNote := strings.CutPrefix(next, "n:")
+	if !isNote {
+		return "", false
 	}
 	for _, c := range m.snap.notes {
 		if noteValue(c) == id && c.Unread() {
-			return c, true
+			return next, true
 		}
 	}
-	return inbox.Note{}, false
+	return "", false
 }
 
 // leaveNote goes back to the list or the thread the note was opened from.
@@ -143,6 +142,7 @@ func (m *Model) markCmd(id int64, all, read bool) tea.Cmd {
 func (m *Model) onNotes(msg notesMsg) {
 	focused := m.focusedRow()
 	m.snap = msg.snap
+	m.closeEmptyInbox()
 	m.refreshNote()
 	m.refreshThread()
 	m.refocus(focused)
@@ -227,11 +227,10 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 	case "T":
 		return m, m.openRefile(n, scNote)
 	case "enter":
-		next, hasNext := m.nextUnreadNote(n)
+		next, hasNext := m.nextNoteRow(n)
 		cmd := m.leaveNote("", false)
 		if hasNext {
-			m.refocus("n:" + noteValue(next))
-			m.openNote(noteValue(next))
+			m.openRow(next)
 		}
 		if n.Unread() {
 			return m, tea.Batch(cmd, m.markCmd(n.ID, false, true))

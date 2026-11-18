@@ -1,4 +1,6 @@
-cockpit · 1 decision · 2 notes                                                     quota n/a
+cockpit                                                                            quota n/a
+  Inbox · 1 decision · 2 notes
+
 Threads · 1
 › spec-s1 · #861 · 1 open · 0s · [idle]
 
@@ -6,8 +8,6 @@ No task · 2 unread
   ● 06h report · chief · 0s
   ● Swept 6 finished agents · chief · 0s
   ○ Good night · chief · 0s
-
-
 
 
 

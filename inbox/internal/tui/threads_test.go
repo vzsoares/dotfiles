@@ -173,7 +173,7 @@ func TestThreadsGroupingOrderAndSingletons(t *testing.T) {
 	for _, it := range d.m.listItems() {
 		got = append(got, it.value)
 	}
-	want := []string{"t:680", "s:s1", "t:5", "n:3"}
+	want := []string{"i:", "t:680", "s:s1", "t:5", "n:3"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("rows %v, want %v:\n%s", got, want, d.view())
 	}
@@ -571,30 +571,89 @@ func TestEnterTogglesThreadRowAndOpensItemRow(t *testing.T) {
 	}
 }
 
-func TestHeaderCountsRefreshOnPollAndFit(t *testing.T) {
-	d := newDrv(t, 92, 29)
-	d.poll()
-	d.ask("7", "s1", "Q?", "a", "b")
-	d.addNote("707", "Task 707 merged", "")
-	d.poll()
-	if got := d.head(); got != "cockpit · 1 decision · 1 note" {
-		t.Fatalf("header %q", got)
-	}
-	d.ask("8", "s2", "Q?", "a", "b")
-	d.addNote("", "Session died", "")
-	d.poll()
-	d.fits()
-	if got := d.head(); got != "cockpit · 2 decisions · 2 notes" {
-		t.Fatalf("header %q", got)
+func (d *drv) inboxFixture() {
+	d.ask("7", "s1", "Q one?", "a", "b")
+	d.ask("8", "s2", "Q two?", "a", "b")
+	d.addNote("707", "Unread merged", "")
+	read := d.addNote("", "Already read", "")
+	if err := d.ib.MarkNotes([]int64{read.ID}, true); err != nil {
+		d.t.Fatal(err)
 	}
 }
 
-func TestThreadNameIsBriefTitleElseNewestNoteTitle(t *testing.T) {
+func TestInboxRowIsFirstSelectedAndCountsRefresh(t *testing.T) {
 	d := newDrv(t, 92, 29)
-	d.fixture843()
-	d.addNote("860", "Older note", "")
-	d.addNote("860", "Newest **note** title", "")
-	d.poll()
+	d.inboxFixture()
+	d.pollKeep()
 	d.fits()
-	d.has("▸ #843 · Phone cockpit setup · ", "▸ #860 · Newest note title · 2 unread")
+	if d.m.focusedRow() != "i:" || d.m.cursor != 0 {
+		t.Fatalf("Inbox row not selected first: %q\n%s", d.m.focusedRow(), d.view())
+	}
+	d.has("› Inbox · 2 decisions · 1 note")
+	d.addNote("", "Another unread", "")
+	d.pollKeep()
+	d.fits()
+	d.has("› Inbox · 2 decisions · 2 notes")
+	if strings.Contains(d.head(), "decision") {
+		t.Fatalf("header repeats the counts: %q", d.head())
+	}
+}
+
+func TestInboxEnterListsOnlyUnreadNotesAndOpenDecisions(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.inboxFixture()
+	d.pollKeep()
+	d.rawKeys("enter")
+	var got []string
+	for _, it := range d.m.listItems() {
+		got = append(got, it.value)
+	}
+	want := []string{"s:s1", "s:s2", "n:1"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("rows %v, want %v:\n%s", got, want, d.view())
+	}
+	d.has("spec-s1 · #7 · Q one?", "Unread merged")
+	if strings.Contains(d.view(), "Already read") {
+		t.Fatalf("read note listed:\n%s", d.view())
+	}
+	d.rawKeys("esc")
+	if d.m.inboxOpen || d.m.focusedRow() != "i:" {
+		t.Fatalf("esc did not leave the Inbox list:\n%s", d.view())
+	}
+}
+
+func TestInboxFinishingAnItemOpensTheNextOrReturnsToTheInbox(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.inboxFixture()
+	d.pollKeep()
+	d.rawKeys("enter", "enter", "enter", "a", "enter")
+	if d.get("7.1").Status != "answered" {
+		t.Fatalf("7.1 not answered:\n%s", d.view())
+	}
+	if d.m.scr != scSession || d.m.sid != "s2" {
+		t.Fatalf("next decision did not open: screen %d sid %q\n%s", d.m.scr, d.m.sid, d.view())
+	}
+	d.rawKeys("enter", "a", "enter")
+	if d.m.scr != scNote || d.m.note.Title != "Unread merged" {
+		t.Fatalf("next unread note did not open:\n%s", d.view())
+	}
+	d.rawKeys("enter")
+	if d.m.scr != scList || d.m.inboxOpen {
+		t.Fatalf("last item should end on the cockpit once the Inbox is empty:\n%s", d.view())
+	}
+}
+
+func TestInboxLastItemReturnsToTheInboxList(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.addNote("", "First unread", "")
+	d.addNote("", "Second unread", "")
+	d.pollKeep()
+	d.rawKeys("enter", "down", "enter")
+	if d.m.scr != scNote {
+		t.Fatalf("note not open:\n%s", d.view())
+	}
+	d.rawKeys("enter")
+	if d.m.scr != scList || !d.m.inboxOpen || len(d.m.listItems()) != 1 {
+		t.Fatalf("did not return to the Inbox list:\n%s", d.view())
+	}
 }

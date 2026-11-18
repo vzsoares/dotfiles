@@ -1,4 +1,4 @@
-cockpit · 1 decision                                                               quota n/a
+cockpit                                                                            quota n/a
 #669
 asked by spec-s1 · idle · 0s
 

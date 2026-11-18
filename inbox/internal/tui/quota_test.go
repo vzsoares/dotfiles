@@ -80,7 +80,7 @@ func TestQuotaHeaderGoldens(t *testing.T) {
 		d.ask("7", "s1", "Q?", "a", "b")
 		d.poll()
 		d.fits()
-		if head := d.line(0); !strings.HasPrefix(head, "cockpit · 1 decision") || !strings.HasSuffix(head, c.want) {
+		if head := d.line(0); !strings.HasPrefix(head, "cockpit") || !strings.HasSuffix(head, c.want) {
 			t.Errorf("%s header %q, want …%q", c.name, head, c.want)
 		}
 		golden(t, c.name, d.view())
@@ -94,12 +94,12 @@ func TestQuotaShrinksThenDropsOnANarrowHeader(t *testing.T) {
 	d.ask("7", "s1", "Q?", "a", "b")
 	d.addNote("", "one", "")
 	d.poll()
-	d.send(tea.WindowSizeMsg{Width: 70, Height: 29})
-	if head := d.line(0); !strings.HasSuffix(head, "  5h 42%  ·  week 63%") || lipgloss.Width(head) != 70 {
+	d.send(tea.WindowSizeMsg{Width: 52, Height: 29})
+	if head := d.line(0); !strings.HasSuffix(head, "  5h 42%  ·  week 63%") || lipgloss.Width(head) != 52 {
 		t.Fatalf("long status did not get the short quota: %q", head)
 	}
-	d.send(tea.WindowSizeMsg{Width: 40, Height: 15})
-	if head := d.line(0); strings.Contains(head, "5h") || head != "cockpit · 1 decision · 1 note" {
+	d.send(tea.WindowSizeMsg{Width: 24, Height: 15})
+	if head := d.line(0); strings.Contains(head, "5h") || head != "cockpit" {
 		t.Fatalf("narrow header kept the quota: %q", head)
 	}
 }

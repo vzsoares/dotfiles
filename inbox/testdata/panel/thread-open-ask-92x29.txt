@@ -1,4 +1,4 @@
-cockpit · 1 decision                                                               quota n/a
+cockpit                                                                            quota n/a
 #861                                                                      1 open · 2 entries
 › 861.1 · spec-s1 · 0s
   Re-file with T?

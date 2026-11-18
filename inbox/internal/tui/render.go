@@ -303,9 +303,6 @@ func (m *Model) header() (string, lipgloss.Style) {
 		return pyfmt.Clip(name+"loading…", m.w), headerStyle
 	}
 	parts := []string{"cockpit"}
-	if n := len(m.snap.open); n > 0 {
-		parts = append(parts, plural(n, "decision"))
-	}
 	prod := 0
 	for _, d := range m.snap.open {
 		if d.Prod != nil {
@@ -315,13 +312,10 @@ func (m *Model) header() (string, lipgloss.Style) {
 	if prod > 0 {
 		parts = append(parts, strconv.Itoa(prod)+" prod")
 	}
-	if n := inbox.Unread(m.snap.notes); n > 0 {
-		parts = append(parts, plural(n, "note"))
-	}
 	if n := len(m.snap.held); n > 0 {
 		parts = append(parts, strconv.Itoa(n)+" held")
 	}
-	if len(parts) == 1 {
+	if len(parts) == 1 && m.inboxLabel() == "" {
 		parts = append(parts, "all clear")
 	}
 	return pyfmt.Clip(strings.Join(parts, " · "), m.w), headerStyle
@@ -375,7 +369,7 @@ func (m *Model) viewList() frame {
 			}
 			body = group(body, prefix+r.label, st)
 		} else {
-			if r.group != last {
+			if r.group != last && r.group != gInbox {
 				body = group(body, heads[r.group], headStyle[r.group])
 			}
 			body = append(body, section{lines: []string{prefix + r.label}, style: st})

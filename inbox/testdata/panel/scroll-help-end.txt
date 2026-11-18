@@ -1,5 +1,5 @@
-cockpit · 40 decisions                                                             quota n/a
-↑ 20 more
+cockpit                                                                            quota n/a
+↑ 22 more
   spec-t29 · #719 · 1 open · 0s · [gone]
   spec-t30 · #720 · 1 open · 0s · [gone]
   spec-t31 · #721 · 1 open · 0s · [gone]

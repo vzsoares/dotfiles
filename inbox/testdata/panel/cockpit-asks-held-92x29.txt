@@ -1,12 +1,12 @@
-cockpit · 2 decisions · 1 held                                                     quota n/a
+cockpit · 1 held                                                                   quota n/a
+  Inbox · 2 decisions · 0 notes
+
 Threads · 2
 › spec-s1 · #7 · 1 open · 0s · [idle]
   spec-s2 · #8 · 1 open · 0s · [idle]
 
 Held · sent when the session's asks close
   spec-s1: 7.1 held until 7.2
-
-
 
 
 

@@ -1,4 +1,4 @@
-cockpit · 1 decision · 2 notes                                                     quota n/a
+cockpit                                                                            quota n/a
 refile n2  Swept 6 finished agents
 > task (- or empty clears)                                                               
 

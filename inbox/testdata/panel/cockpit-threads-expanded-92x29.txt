@@ -1,4 +1,6 @@
-cockpit · 2 decisions · 3 notes                                                    quota n/a
+cockpit                                                                            quota n/a
+  Inbox · 2 decisions · 3 notes
+
 Threads · 2
 › ▾ #843 · Phone cockpit setup · 1 open · 2 unread · 11 items · 1h
     spec-s1 · #843 Phone cockpit setup · 1 open · 1h · [idle]
@@ -16,8 +18,6 @@ Threads · 2
 
 No task · 1 unread
   ● Swept 6 finished agents; kept 5 · chief · 0s
-
-
 
 
 

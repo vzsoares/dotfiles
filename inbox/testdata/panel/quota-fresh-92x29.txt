@@ -1,4 +1,6 @@
-cockpit · 1 decision                         5h 42% · resets 15:20  ·  week 63% · resets Fri
+cockpit                                      5h 42% · resets 15:20  ·  week 63% · resets Fri
+  Inbox · 1 decision · 0 notes
+
 Threads · 1
 › spec-s1 · #7 · 1 open · 0s · [idle]
 
@@ -24,6 +26,4 @@ Threads · 1
 
 
 
-
-
-enter open · a answer · c chief · ? help · q quit
+↑↓ · enter open · a answer · c chief · ? help · q quit
