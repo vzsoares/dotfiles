@@ -16,7 +16,7 @@ if [ -f "$gd/commondir" ]; then
 	*) gd=$gd/$common ;;
 	esac
 fi
-[ -d "$gd/objects" ] || gd=$(git rev-parse --path-format=absolute --git-common-dir) || exit 0
+[ -d "$gd/objects" ] || gd=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
 hook=$gd/hooks/${0##*/}
 if [ -x "$hook" ] && ! [ "$hook" -ef "$0" ]; then
 	exec "$hook" "$@"

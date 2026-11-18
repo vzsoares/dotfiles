@@ -1074,6 +1074,18 @@ def test_dispatcher_without_repo_hook_passes(env: Env) -> None:
     env.git("rebase", "-q", "HEAD~1")
 
 
+def test_dispatcher_quiet_on_init(env: Env) -> None:
+    cmds = [
+        ("init", str(env.tmp / "fresh")),
+        ("init", "--bare", str(env.tmp / "fresh.git")),
+        ("clone", str(env.repo), str(env.tmp / "cloned")),
+    ]
+    for args in cmds:
+        r = env.run(*args, cwd=env.tmp)
+        assert r.returncode == 0, r.stderr
+        assert "fatal" not in r.stderr, r.stderr
+
+
 def test_push_to_checkout_keeps_update_instead(env: Env) -> None:
     target = env.tmp / "target"
     env.git("clone", "-q", str(env.repo), str(target), cwd=env.tmp)
