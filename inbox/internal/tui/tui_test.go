@@ -59,13 +59,21 @@ func (f *fakeAM) Send(sid, msg string) (bool, string, string) {
 	return true, "42", ""
 }
 
-func (f *fakeAM) CanPopup(string) bool { return !f.noCanPopup && !f.noPopup }
+func (f *fakeAM) CanPopup(string) error {
+	if f.noCanPopup {
+		return errors.New("no terminal client attached")
+	}
+	return nil
+}
 
-func (f *fakeAM) Popup(sid string) bool {
+func (f *fakeAM) Popup(sid string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.popups = append(f.popups, sid)
-	return !f.noPopup
+	if f.noPopup {
+		return errors.New("popup exited 1")
+	}
+	return nil
 }
 
 func (f *fakeAM) Bell(msg string) {
@@ -672,15 +680,31 @@ func TestTalkFromWalkResolvesCurrent(t *testing.T) {
 
 func TestTalkUnavailablePrintsAttach(t *testing.T) {
 	d := newDrv(t, 92, 29)
+	d.am.noCanPopup = true
+	d.ask("7", "s1", "Which way?", "left", "right")
+	d.poll()
+	d.keys("enter", "t", "enter")
+	want := "talk popup failed: no terminal client attached; c to chat with the agent, or attach: tmux -L agentmgr attach -t am_s1"
+	if d.m.flash != want || d.m.scr == scTalkPick {
+		t.Fatalf("screen %d flash %q", d.m.scr, d.m.flash)
+	}
+	if len(d.am.sends) != 0 || len(d.am.popups) != 0 {
+		t.Fatalf("sends %v popups %v", d.am.sends, d.am.popups)
+	}
+}
+
+func TestTalkPopupErrorSkipsSettlePick(t *testing.T) {
+	d := newDrv(t, 92, 29)
 	d.am.noPopup = true
 	d.ask("7", "s1", "Which way?", "left", "right")
 	d.poll()
 	d.keys("enter", "t", "enter")
-	if d.m.flash != "talk unavailable; attach with: tmux -L agentmgr attach -t am_s1" {
-		t.Fatalf("flash %q", d.m.flash)
+	want := "talk popup failed: popup exited 1; c to chat with the agent, or attach: tmux -L agentmgr attach -t am_s1"
+	if d.m.flash != want || d.m.scr == scTalkPick {
+		t.Fatalf("screen %d flash %q", d.m.scr, d.m.flash)
 	}
-	if len(d.am.sends) != 0 || len(d.am.popups) != 0 {
-		t.Fatalf("sends %v popups %v", d.am.sends, d.am.popups)
+	if len(d.am.popups) != 1 {
+		t.Fatalf("popups %v", d.am.popups)
 	}
 }
 
@@ -708,7 +732,7 @@ func TestTalkFromReviewAllUnavailableReturnsThere(t *testing.T) {
 	}
 	d.poll()
 	d.keys("enter", "r", "down", "down", "t", "enter")
-	want := "talk unavailable; attach with: tmux -L agentmgr attach -t am_s1"
+	want := "talk popup failed: no terminal client attached; c to chat with the agent, or attach: tmux -L agentmgr attach -t am_s1"
 	if d.m.scr != scAll || d.m.cursor != 2 || d.m.flash != want || len(d.am.sends) != 0 {
 		t.Fatalf("screen %d cursor %d flash %q sends %v", d.m.scr, d.m.cursor, d.m.flash, d.am.sends)
 	}

@@ -27,8 +27,8 @@ type fakeAM struct {
 }
 
 func (f *fakeAM) Sessions() am.Sessions               { return f.sessions }
-func (f *fakeAM) CanPopup(string) bool                { return true }
-func (f *fakeAM) Popup(string) bool                   { return true }
+func (f *fakeAM) CanPopup(string) error               { return nil }
+func (f *fakeAM) Popup(string) error                  { return nil }
 func (f *fakeAM) Bell(string)                         {}
 func (f *fakeAM) Notify(_, _ string)                  {}
 func (f *fakeAM) Push(string)                         {}

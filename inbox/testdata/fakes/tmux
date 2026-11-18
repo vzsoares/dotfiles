@@ -14,6 +14,9 @@ capture-pane)
     [ "$n" -ge "$last" ] && n=$((last - 1))
     cat "$FAKE_AM/screens/$n"
     ;;
+list-clients)
+    cat "$FAKE_AM/clients" 2>/dev/null
+    ;;
 send-keys)
     mkdir -p "$FAKE_AM/keys"
     n=$(find "$FAKE_AM/keys" -type f | wc -l | tr -d ' ')

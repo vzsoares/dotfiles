@@ -111,38 +111,58 @@ func TestSessionsUnavailableIsNil(t *testing.T) {
 	}
 }
 
-func TestPopupArgvAttachesOnManagerSocket(t *testing.T) {
+func TestPopupArgvTargetsClient(t *testing.T) {
 	for _, env := range []string{"/tmp/tmux-501/agentmgr,123,4", "/tmp/tmux-501/default,9,0"} {
-		argv := PopupArgv("ab12", env)
-		want := []string{"tmux", "-S", strings.Split(env, ",")[0], "display-popup", "-E", "-w", "90%", "-h", "90%",
-			"env -u TMUX tmux -L agentmgr attach -t am_ab12"}
+		argv := PopupArgv("ab12", env, "/dev/ttys003")
+		want := []string{"tmux", "-S", strings.Split(env, ",")[0], "display-popup", "-c", "/dev/ttys003",
+			"-E", "-w", "90%", "-h", "90%", "env -u TMUX tmux -L agentmgr attach -t am_ab12"}
 		if !slices.Equal(argv, want) {
 			t.Fatal(argv)
 		}
 	}
-	if PopupArgv("ab12", "") != nil {
-		t.Fatal("no $TMUX should mean no popup")
+	if PopupArgv("ab12", "", "c") != nil || PopupArgv("ab12", "/s,1,2", "") != nil {
+		t.Fatal("no $TMUX or no client should mean no popup")
 	}
 	if got := AttachCommand("a b"); got != "tmux -L agentmgr attach -t 'am_a b'" {
 		t.Fatal(got)
 	}
 }
 
-func TestPopupRunsTmuxAndFailsWithoutServer(t *testing.T) {
+func TestPickClientSkipsControlClients(t *testing.T) {
+	out := "client-1\t1\t900\n/dev/ttys001\t0\t100\n/dev/ttys002\t0\t300\n"
+	if got := PickClient(out); got != "/dev/ttys002" {
+		t.Fatal(got)
+	}
+	if got := PickClient("client-1\t1\t900\n"); got != "" {
+		t.Fatalf("control-only server picked %q", got)
+	}
+	if PickClient("") != "" {
+		t.Fatal("empty")
+	}
+}
+
+func TestPopupRunsTmuxAndReportsErrors(t *testing.T) {
 	data := fakes(t, live)
-	if !(Exec{TmuxEnv: "/tmp/sock,1,2"}).Popup("ab12") {
-		t.Fatal("popup failed")
+	e := Exec{TmuxEnv: "/tmp/sock,1,2"}
+	if err := e.Popup("ab12"); err == nil || !strings.Contains(err.Error(), "no terminal client") {
+		t.Fatalf("control-only server: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(data, "clients"), []byte("client-1\t1\t900\n/dev/ttys009\t0\t5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Popup("ab12"); err != nil {
+		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(filepath.Join(data, "tmux.argv"))
 	argv := strings.Split(string(raw), "\x00")
-	if !slices.Equal(argv[:3], []string{"-S", "/tmp/sock", "display-popup"}) || !strings.HasSuffix(argv[len(argv)-2], "attach -t am_ab12") {
+	if !slices.Equal(argv[:5], []string{"-S", "/tmp/sock", "display-popup", "-c", "/dev/ttys009"}) || !strings.HasSuffix(argv[len(argv)-2], "attach -t am_ab12") {
 		t.Fatal(argv)
 	}
-	if (Exec{}).Popup("ab12") {
+	if err := (Exec{}).Popup("ab12"); err == nil {
 		t.Fatal("popup without $TMUX")
 	}
 	touch(t, filepath.Join(data, "tmux_rc"))
-	if (Exec{TmuxEnv: "/tmp/sock,1,2"}).Popup("ab12") {
+	if err := e.Popup("ab12"); err == nil {
 		t.Fatal("failed tmux reported success")
 	}
 }
@@ -156,7 +176,7 @@ func TestDirName(t *testing.T) {
 }
 
 func TestCanPopupNeedsTmuxServer(t *testing.T) {
-	if (Exec{}).CanPopup("ab12") {
+	if (Exec{}).CanPopup("ab12") == nil {
 		t.Fatal("popup without a tmux server")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,8 +41,8 @@ type Client interface {
 	Send(sessionID, message string) (ok bool, messageID, errText string)
 	// CanPopup reports whether Popup can open for the session, so the agent is
 	// not told about a talk that cannot start.
-	CanPopup(sessionID string) bool
-	Popup(sessionID string) bool
+	CanPopup(sessionID string) error
+	Popup(sessionID string) error
 	Bell(message string)
 	// Notify posts one banner.
 	Notify(title, body string)
@@ -298,32 +299,85 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
-// PopupArgv is nil without a tmux server to open the popup on.
-func PopupArgv(sessionID, tmuxEnv string) []string {
+// PopupArgv is nil without a tmux server to open the popup on. client must
+// be a terminal client: display-popup on a control-mode one exits 0 and draws
+// nothing.
+func PopupArgv(sessionID, tmuxEnv, client string) []string {
 	socket, _, _ := strings.Cut(tmuxEnv, ",")
-	if socket == "" {
+	if socket == "" || client == "" {
 		return nil
 	}
 	return []string{
-		"tmux", "-S", socket, "display-popup", "-E", "-w", "90%", "-h", "90%",
+		"tmux", "-S", socket, "display-popup", "-c", client, "-E", "-w", "90%", "-h", "90%",
 		"env -u TMUX " + AttachCommand(sessionID),
 	}
 }
 
-func (e Exec) CanPopup(sessionID string) bool {
-	if PopupArgv(sessionID, e.TmuxEnv) == nil {
-		return false
+// PickClient is the most recently active non-control client in `tmux
+// list-clients -F '#{client_name}<TAB>#{client_control_mode}<TAB>#{client_activity}'`.
+func PickClient(out string) string {
+	best, bestAt := "", int64(-1)
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Split(strings.TrimSpace(line), "\t")
+		if len(f) != 3 || f[0] == "" || f[1] != "0" {
+			continue
+		}
+		at, err := strconv.ParseInt(f[2], 10, 64)
+		if err != nil {
+			at = 0
+		}
+		if at > bestAt {
+			best, bestAt = f[0], at
+		}
 	}
-	return exec.Command("tmux", "-L", Socket, "has-session", "-t", "am_"+sessionID).Run() == nil
+	return best
 }
 
-func (e Exec) Popup(sessionID string) bool {
-	argv := PopupArgv(sessionID, e.TmuxEnv)
-	if argv == nil {
-		return false
+func (e Exec) popupClient() (string, error) {
+	socket, _, _ := strings.Cut(e.TmuxEnv, ",")
+	if socket == "" {
+		return "", errors.New("not running inside tmux")
 	}
+	out, err := exec.Command("tmux", "-S", socket, "list-clients", "-F",
+		"#{client_name}\t#{client_control_mode}\t#{client_activity}").Output()
+	if err != nil {
+		return "", fmt.Errorf("tmux list-clients: %w", err)
+	}
+	client := PickClient(string(out))
+	if client == "" {
+		return "", errors.New("no terminal client attached to the tmux server")
+	}
+	return client, nil
+}
+
+// CanPopup reports why Popup cannot open, nil when it can.
+func (e Exec) CanPopup(sessionID string) error {
+	if _, err := e.popupClient(); err != nil {
+		return err
+	}
+	if exec.Command("tmux", "-L", Socket, "has-session", "-t", "am_"+sessionID).Run() != nil {
+		return errors.New("agent session am_" + sessionID + " is not running")
+	}
+	return nil
+}
+
+// Popup blocks until the popup closes.
+func (e Exec) Popup(sessionID string) error {
+	client, err := e.popupClient()
+	if err != nil {
+		return err
+	}
+	argv := PopupArgv(sessionID, e.TmuxEnv, client)
+	var stderr bytes.Buffer
 	cmd := exec.Command(argv[0], argv[1:]...)
-	return cmd.Run() == nil
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return errors.New(msg)
+		}
+		return err
+	}
+	return nil
 }
 
 func (e Exec) Bell(message string) { e.Notify("zen-inbox", message) }

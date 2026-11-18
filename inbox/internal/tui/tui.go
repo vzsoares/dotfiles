@@ -95,7 +95,8 @@ type sentMsg struct {
 	snap                     snapshot
 }
 type talkMsg struct {
-	ok   bool
+	// err is why the popup could not open; the settle pick is skipped.
+	err  string
 	open []inbox.Decision
 	// told is why the agent got no talk message; the popup still opens.
 	told string
@@ -1073,15 +1074,15 @@ func (m *Model) talkCmd() tea.Cmd {
 	m.busy = "Talking to " + m.sname + "…"
 	ib, client, sid, w, sessions := m.ib, m.am, m.sid, m.watched(), m.snap.sessions
 	return func() tea.Msg {
-		if !client.CanPopup(sid) {
-			return talkMsg{snap: load(ib, client, w, sessions, false)}
+		if err := client.CanPopup(sid); err != nil {
+			return talkMsg{err: err.Error(), snap: load(ib, client, w, sessions, false)}
 		}
 		_, _, told := client.Send(sid, msg)
-		if !client.Popup(sid) {
-			return talkMsg{told: told, snap: load(ib, client, w, sessions, false)}
+		if err := client.Popup(sid); err != nil {
+			return talkMsg{err: err.Error(), told: told, snap: load(ib, client, w, sessions, false)}
 		}
 		open, _ := ib.SessionOpen(sid)
-		return talkMsg{ok: true, open: open, told: told, snap: load(ib, client, w, sessions, false)}
+		return talkMsg{open: open, told: told, snap: load(ib, client, w, sessions, false)}
 	}
 }
 
@@ -1094,8 +1095,8 @@ func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 	}
 	msg.open = slices.DeleteFunc(msg.open, m.locked)
 	switch {
-	case !msg.ok:
-		m.finishTalk(nil, "talk unavailable; attach with: "+am.AttachCommand(m.sid))
+	case msg.err != "":
+		m.finishTalk(nil, "talk popup failed: "+msg.err+"; c to chat with the agent, or attach: "+am.AttachCommand(m.sid))
 	case len(msg.open) == 0:
 		m.finishTalk(nil, "nothing open")
 	default:
