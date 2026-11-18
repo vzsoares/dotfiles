@@ -43,11 +43,21 @@ echo "linked statusline-command.sh"
 # in ~/.claude.json, so each one is re-registered there.
 MCP_SERVERS="$SCRIPT_DIR/mcp/servers.json"
 if command -v claude >/dev/null && command -v jq >/dev/null; then
+  # Claude stores an empty env as {}; drop it so unchanged entries compare equal.
+  # shellcheck disable=SC2016
+  norm='.mcpServers[$n] | select(. != null) | if .env == {} then del(.env) else . end'
   for name in $(jq -r '.mcpServers | keys[]' "$MCP_SERVERS"); do
-    if jq -e --arg n "$name" '.mcpServers[$n]' "$HOME/.claude.json" >/dev/null 2>&1; then
-      claude mcp remove -s user "$name" >/dev/null
+    want="$(jq -cS --arg n "$name" "$norm" "$MCP_SERVERS")"
+    have="$(jq -cS --arg n "$name" "$norm" "$HOME/.claude.json" 2>/dev/null || true)"
+    if [ "$want" = "$have" ]; then
+      echo "mcp $name unchanged"
+      continue
     fi
-    claude mcp add-json -s user "$name" "$(jq -c --arg n "$name" '.mcpServers[$n]' "$MCP_SERVERS")"
+    if [ -n "$have" ]; then
+      claude mcp remove -s user "$name" >/dev/null || true
+    fi
+    claude mcp add-json -s user "$name" "$want" ||
+      echo "warning: failed to register MCP server $name" >&2
   done
 else
   echo "warning: claude or jq missing; skipped MCP servers" >&2
