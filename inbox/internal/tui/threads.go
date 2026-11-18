@@ -18,11 +18,14 @@ import (
 // visible notes (newest first).
 type thread struct {
 	task, title string
-	rows        []view.Row
-	notes       []inbox.Note
-	prod        bool
-	open        int
-	newest      string
+	// noteAt is the newest note's time when its title stands in for a missing one.
+	noteAt string
+	noteID int64
+	rows   []view.Row
+	notes  []inbox.Note
+	prod   bool
+	open   int
+	newest string
 }
 
 func (t thread) size() int { return len(t.rows) + len(t.notes) }
@@ -80,6 +83,9 @@ func (m *Model) threads() []thread {
 		}
 		t := get(n.Task)
 		t.notes = append(t.notes, n)
+		if m.snap.titles[n.Task] == "" && (n.CreatedAt > t.noteAt || n.CreatedAt == t.noteAt && n.ID > t.noteID) {
+			t.title, t.noteAt, t.noteID = n.Title, n.CreatedAt, n.ID
+		}
 		t.newest = max(t.newest, n.CreatedAt)
 	}
 	out := make([]thread, len(order))

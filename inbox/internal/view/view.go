@@ -614,30 +614,30 @@ type ThreadHead struct {
 	Newest              string
 }
 
-// ThreadLabel is ▸/▾ #task, PROD, the counts, the age of the newest item and
-// the title; only the title is cut to fit room.
+// ThreadLabel is ▸/▾ #task, the title, PROD, the counts and the age of the
+// newest item; only the title is cut to fit room.
 func ThreadLabel(h ThreadHead, at time.Time, room int) string {
 	arrow := "▸ "
 	if h.Expanded {
 		arrow = "▾ "
 	}
-	parts := []string{arrow + "#" + h.Task}
+	var rest []string
 	if h.Prod {
-		parts = append(parts, "PROD")
+		rest = append(rest, "PROD")
 	}
 	if h.Open > 0 {
-		parts = append(parts, strconv.Itoa(h.Open)+" open")
+		rest = append(rest, strconv.Itoa(h.Open)+" open")
 	}
 	if h.Unread > 0 {
-		parts = append(parts, strconv.Itoa(h.Unread)+" unread")
+		rest = append(rest, strconv.Itoa(h.Unread)+" unread")
 	}
-	parts = append(parts, strconv.Itoa(h.Items)+" items", Age(h.Newest, at))
-	label := strings.Join(parts, " · ")
-	title := md.Plain(h.Title)
-	if left := room - lipgloss.Width(label) - 3; title != "" && left > 1 {
-		label += " · " + pyfmt.Clip(title, left)
+	rest = append(rest, strconv.Itoa(h.Items)+" items", Age(h.Newest, at))
+	head, tail := arrow+"#"+h.Task, " · "+strings.Join(rest, " · ")
+	title := md.Plain(strings.Join(strings.Fields(h.Title), " "))
+	if left := room - lipgloss.Width(head) - lipgloss.Width(tail) - 3; title != "" && left > 1 {
+		head += " · " + pyfmt.Clip(title, left)
 	}
-	return label
+	return head + tail
 }
 
 var (

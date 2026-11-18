@@ -80,7 +80,7 @@ func TestThreadGoldens(t *testing.T) {
 	d.addNote("", "Swept 6 finished agents; kept 5", "")
 	d.poll()
 	d.fits()
-	d.has("Threads · 2", "› ▸ #843 · 1 open · 2 unread · 11 items · 1h · Phone cockpit setup", "  spec-s2 · #9",
+	d.has("Threads · 2", "› ▸ #843 · Phone cockpit setup · 1 open · 2 unread · 11 items · 1h", "  spec-s2 · #9",
 		"No task · 1 unread", "enter expand")
 	if strings.Contains(d.view(), "Phone step") {
 		t.Fatalf("thread not collapsed:\n%s", d.view())
@@ -587,4 +587,14 @@ func TestHeaderCountsRefreshOnPollAndFit(t *testing.T) {
 	if got := d.head(); got != "cockpit · 2 decisions · 2 notes" {
 		t.Fatalf("header %q", got)
 	}
+}
+
+func TestThreadNameIsBriefTitleElseNewestNoteTitle(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.fixture843()
+	d.addNote("860", "Older note", "")
+	d.addNote("860", "Newest **note** title", "")
+	d.poll()
+	d.fits()
+	d.has("▸ #843 · Phone cockpit setup · ", "▸ #860 · Newest note title · 2 unread")
 }
