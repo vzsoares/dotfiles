@@ -13,12 +13,15 @@ usage: zen-resume-watch [--once]
                  gets `agent-manager revive` (at most once per 5 min)
   every 5 min    running claude sessions whose screen tail shows a usage limit
                  are resumed once a `claude -p --model haiku` probe passes
-                 (re-probed every 10 min)
+                 (re-probed every 10 min); a failed send is retried at the
+                 next 3 scans without a new probe
 
   --once         one pass of both checks, then exit
   -h, --help     show this help
 
 Env: ZEN_RESUME_PROBE_WAIT  seconds between probes (default 600)
+     ZEN_RESUME_STATE       dir for the seen/pending files, kept on exit
+                            (default: a temp dir removed on exit)
 USAGE
 }
 
@@ -36,8 +39,17 @@ esac
 
 LIMIT_RE='(usage|claude|5-hour|weekly|session) limit (reached|hit)|hit your (usage )?limit|limit will reset at|limit reached.{0,40}reset'
 PROBE_WAIT="${ZEN_RESUME_PROBE_WAIT:-600}"
-SEEN=$(mktemp "${TMPDIR:-/tmp}/zen-resume-watch.XXXXXX")
-trap 'rm -f "$SEEN"' EXIT
+if [ -n "${ZEN_RESUME_STATE:-}" ]; then
+	STATE="$ZEN_RESUME_STATE"
+	mkdir -p "$STATE"
+else
+	STATE=$(mktemp -d "${TMPDIR:-/tmp}/zen-resume-watch.XXXXXX")
+	trap 'rm -rf "$STATE"' EXIT
+fi
+SEEN="$STATE/seen"
+PENDING="$STATE/pending"
+touch "$SEEN" "$PENDING"
+MAX_RETRIES=3
 trap 'exit 0' INT TERM
 last_revive=-300
 
@@ -76,8 +88,35 @@ revive_chief() {
 	fi
 }
 
+send_continue() {
+	agent-manager send "$1" "The Claude usage limit has reset. Continue exactly where you left off." </dev/null >/dev/null 2>&1
+}
+
+# PENDING lines are "<id> <failed retries>"; the limit was already confirmed
+# cleared, so retries skip the probe.
+retry_pending() {
+	[ -s "$PENDING" ] || return 0
+	local running id n next="$PENDING.new"
+	running=$(sessions_where running)
+	[ -n "$running" ] || return 0
+	: >"$next"
+	while read -r id n; do
+		if ! printf '%s\n' "$running" | grep -qxF "$id"; then
+			echo "$(stamp) dropped $id: not running"
+		elif send_continue "$id"; then
+			echo "$(stamp) resumed $id"
+		elif [ $((n + 1)) -ge "$MAX_RETRIES" ]; then
+			echo "$(stamp) giving up on $id"
+		else
+			echo "$id $((n + 1))" >>"$next"
+		fi
+	done <"$PENDING"
+	mv "$next" "$PENDING"
+}
+
 scan_limits() {
 	local limited=() id tail_text key
+	retry_pending
 	for id in $(sessions_where running); do
 		tail_text=$(agent-manager read "$id" 2>/dev/null | tail -15)
 		printf '%s' "$tail_text" | grep -qiE "$LIMIT_RE" || continue
@@ -98,10 +137,11 @@ scan_limits() {
 	done
 	echo "$(stamp) limit cleared"
 	for id in "${limited[@]}"; do
-		if agent-manager send "$id" "The Claude usage limit has reset. Continue exactly where you left off." >/dev/null 2>&1; then
+		if send_continue "$id"; then
 			echo "$(stamp) resumed $id"
 		else
 			echo "$(stamp) could not message $id"
+			grep -q "^$id " "$PENDING" || echo "$id 0" >>"$PENDING"
 		fi
 	done
 }
