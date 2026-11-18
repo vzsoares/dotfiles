@@ -411,3 +411,23 @@ func TestNoteHeaderShowsReadStateAt92x29(t *testing.T) {
 		d.keys("esc")
 	}
 }
+
+func TestOneLineRowsDropMarkdownMarkers(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Keep **glamour** as `the renderer`?", "yes", "no")
+	d.addNote("", "Ship **it** via `zen-release`", "")
+	d.poll()
+	list := d.view()
+	if !strings.Contains(list, "Ship it via zen-release") || strings.ContainsAny(list, "*`") {
+		t.Fatalf("list rows keep markers:\n%s", list)
+	}
+	d.openWalk()
+	d.keys("esc")
+	if d.m.scr != scJump {
+		t.Fatalf("not on the jump list:\n%s", d.view())
+	}
+	jump := d.view()
+	if !strings.Contains(jump, "Keep glamour as the") || strings.ContainsAny(jump, "*`") {
+		t.Fatalf("jump list keeps markers:\n%s", jump)
+	}
+}

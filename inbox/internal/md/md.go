@@ -314,3 +314,24 @@ func Style() gansi.StyleConfig {
 		},
 	}
 }
+
+var plainMarks = []*regexp.Regexp{
+	regexp.MustCompile("`+([^`]+)`+"),
+	regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`),
+	regexp.MustCompile(`\*\*([^*\s](?:[^*]*[^*\s])?)\*\*`),
+	regexp.MustCompile(`~~([^~\s](?:[^~]*[^~\s])?)~~`),
+	regexp.MustCompile(`(^|[^*\w])\*([^*\s](?:[^*]*[^*\s])?)\*`),
+}
+
+// Plain drops inline markdown markers (code ticks, bold, italic, strike,
+// link targets) for one-line rows; the text inside stays.
+func Plain(s string) string {
+	for i, re := range plainMarks {
+		repl := "$1"
+		if i == len(plainMarks)-1 {
+			repl = "$1$2"
+		}
+		s = re.ReplaceAllString(s, repl)
+	}
+	return s
+}

@@ -486,7 +486,7 @@ func (m *Model) viewWalk() frame {
 
 func (m *Model) viewFree() frame {
 	d, _ := m.decision(m.p.cur)
-	head := pyfmt.Clip(d.ID+"  "+d.Question, m.w)
+	head := pyfmt.Clip(d.ID+"  "+md.Plain(d.Question), m.w)
 	s := scFree
 	if pyfmt.Blank(m.ta.Value()) {
 		s = scFreeBlank
@@ -589,7 +589,7 @@ func (m *Model) markMenu(ds []inbox.Decision) []section {
 		if m.marked[d.ID] {
 			box = "[x] "
 		}
-		items = append(items, item{box + d.ID + "  " + d.Question, d.ID})
+		items = append(items, item{box + d.ID + "  " + md.Plain(d.Question), d.ID})
 	}
 	return menuSection(items, m.cursor, len(items), m.w)
 }

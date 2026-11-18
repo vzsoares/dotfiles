@@ -208,7 +208,7 @@ func SessionLines(ds []inbox.Decision, sessions am.Sessions, width int, at time.
 			if d.Gate {
 				tag = " gate"
 			}
-			lines = append(lines, pyfmt.Clip(d.ID+tag+"  "+d.Question, max(width, MinWidth)))
+			lines = append(lines, pyfmt.Clip(d.ID+tag+"  "+md.Plain(d.Question), max(width, MinWidth)))
 		} else {
 			lines = append(lines, "")
 			lines = append(lines, DecisionLines(d, width)...)
@@ -379,7 +379,7 @@ func RowLabel(r Row, at time.Time) string {
 	}
 	parts := []string{
 		r.Name,
-		pyfmt.RStrip(strings.Join(tasks, ", ") + " " + r.Title),
+		pyfmt.RStrip(strings.Join(tasks, ", ") + " " + md.Plain(r.Title)),
 		fmt.Sprintf("%d open", r.Count),
 		Age(r.Oldest, at),
 		"[" + r.Status + "]",
@@ -490,7 +490,7 @@ func Notices(open []inbox.Decision, notes []inbox.Note, seen map[string]bool) []
 	}
 	for _, d := range open {
 		if !seen[d.ID] {
-			body, _, _ := strings.Cut(strings.TrimSpace(d.Question), "\n")
+			body, _, _ := strings.Cut(strings.TrimSpace(md.Plain(d.Question)), "\n")
 			push := fmt.Sprintf("%d open", perTask[d.Task])
 			if d.Task != "" {
 				push = "#" + d.Task + " · " + push
@@ -546,7 +546,7 @@ func NoteLabel(n inbox.Note, at time.Time) string {
 	if n.Unread() {
 		dot = "● "
 	}
-	parts := []string{n.Title, n.SessionName}
+	parts := []string{md.Plain(n.Title), n.SessionName}
 	if n.Task != "" {
 		parts = append(parts, "#"+n.Task)
 	}

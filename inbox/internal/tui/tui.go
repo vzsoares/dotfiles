@@ -1676,7 +1676,7 @@ func (m *Model) jumpItems() []item {
 			continue
 		}
 		mark, answer := m.draftText(d)
-		label := mark + " " + id + "  " + pyfmt.Clip(d.Question, max(m.w/3, 10))
+		label := mark + " " + id + "  " + pyfmt.Clip(md.Plain(d.Question), max(m.w/3, 10))
 		if answer != "" {
 			label += " → " + answer
 		}
@@ -1694,7 +1694,7 @@ func (m *Model) closedItems() []string {
 		if !ok || d.Status == "open" {
 			continue
 		}
-		out = append(out, "  × "+id+"  "+pyfmt.Clip(d.Question, max(m.w/3, 10))+" · "+closedState(d))
+		out = append(out, "  × "+id+"  "+pyfmt.Clip(md.Plain(d.Question), max(m.w/3, 10))+" · "+closedState(d))
 	}
 	return out
 }

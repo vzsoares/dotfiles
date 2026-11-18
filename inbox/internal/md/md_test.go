@@ -212,3 +212,18 @@ func TestSentinelRunesInTextDoNotOpenABox(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestPlainDropsInlineMarkers(t *testing.T) {
+	cases := map[string]string{
+		"Keep **glamour** as `the` renderer": "Keep glamour as the renderer",
+		"a *b* and ~~c~~ [d](http://x) ok":   "a b and c d ok",
+		"2 * 3 * 4, snake_case, a**b":        "2 * 3 * 4, snake_case, a**b",
+		"**Bold with `code` inside**":        "Bold with code inside",
+		"plain":                              "plain",
+	}
+	for in, want := range cases {
+		if got := Plain(in); got != want {
+			t.Errorf("Plain(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

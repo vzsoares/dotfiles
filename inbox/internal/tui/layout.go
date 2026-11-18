@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
+	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
@@ -140,7 +141,7 @@ func reviewLines(entries []entry, width int, p view.Painter) []string {
 			out = append(out, view.PanelReviewLines(e.d, e.staged, width, p)...)
 			continue
 		}
-		q := pyfmt.Clip(e.d.Question, width/2)
+		q := pyfmt.Clip(md.Plain(e.d.Question), width/2)
 		head := e.d.ID
 		if q != "" {
 			head += "  " + q
