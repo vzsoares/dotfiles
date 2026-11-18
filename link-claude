@@ -39,9 +39,9 @@ rm -f "$TARGET_DIR/statusline-command.sh"
 ln -s "$DOTFILES_CLAUDE/statusline-command.sh" "$TARGET_DIR/statusline-command.sh"
 echo "linked statusline-command.sh"
 
-# MCP servers: mcp/servers.json is the source; Claude keeps user-scope servers
+# MCP servers: agents/mcp.json is the source; Claude keeps user-scope servers
 # in ~/.claude.json, so each one is re-registered there.
-MCP_SERVERS="$SCRIPT_DIR/mcp/servers.json"
+MCP_SERVERS="$SCRIPT_DIR/agents/mcp.json"
 if command -v claude >/dev/null && command -v jq >/dev/null; then
   # Claude stores an empty env as {}; drop it so unchanged entries compare equal.
   # shellcheck disable=SC2016

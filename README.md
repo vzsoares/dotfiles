@@ -40,9 +40,8 @@ alacritty/    # terminal emulator config
 aerospace/    # AeroSpace window manager config (macOS counterpart to i3/)
 gnupg/        # gpg-agent.conf (per-OS pinentry-program)
 i3/           # i3 window manager config (linux)
-mcp/          # MCP servers shared by Claude Code and pi
 nvim/         # neovim config (lua)
-pi/           # pi coding agent config (models, settings)
+agents/       # agent-neutral config shared by Claude Code and pi
 tmux/         # tmux config
 typst/        # long-form writing (books, TCC) — template + nvim setup
 zsh/          # zsh aliases, plugins, themes
@@ -53,19 +52,21 @@ scripts/      # utility scripts (release, commit, run, ...)
 ### pi agent
 
 [pi](https://pi.dev) (`bun add -g @earendil-works/pi-coding-agent`) shares
-Claude's setup instead of copying it. `pi/link` symlinks into `~/.pi/agent/`:
+Claude's setup instead of copying it. `agents/link` symlinks into `~/.pi/agent/`:
 
 - `AGENTS.md` → `.claude/CLAUDE.md` (same global instructions)
-- `mcp.json` → `mcp/servers.json` (Playwright browser, qmd vault search);
+- `mcp.json` → `agents/mcp.json` (Playwright browser, qmd vault search);
   `./link-claude` registers the same file in Claude's user scope
-- `settings.json` loads the `wiki` and `second-brain` skills from
-  `~/.claude/skills/`
+- `settings.json`, `models.json` → `agents/`
 
-Models are abliterated API models in `pi/models.json` (Featherless and
+It also links the `wiki` and `second-brain` skills from `.claude/skills/` into
+`~/.agents/skills/`, the Agent Skills dir pi reads by default.
+
+Models are abliterated API models in `agents/models.json` (Featherless and
 abliteration.ai). Keys come from env vars set in `~/.zshrc.local`:
 `FEATHERLESS_API_KEY` and `ABLITERATION_API_KEY`. Switch models with
 `/model` (or Ctrl+P) in a session, `pi --model abliteration/abliterated-model`
-for one run, or `defaultModel` in `pi/settings.json`.
+for one run, or `defaultModel` in `agents/settings.json`.
 
 ### Other
 

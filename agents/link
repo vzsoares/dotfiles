@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+# Links file by file: pi keeps auth.json and session state in its agent dir,
+# and other tools may add their own skills to ~/.agents/skills.
+# PI_CODING_AGENT_DIR overrides the pi agent dir.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$SCRIPT_DIR")"
+PI_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+SKILLS_DIR="$HOME/.agents/skills"
+SHARED_SKILLS=(wiki second-brain)
+
+link() {
+  mkdir -p "$(dirname "$2")"
+  rm -f "$2"
+  ln -s "$1" "$2"
+  echo "linked $2 -> $1"
+}
+
+link "$SCRIPT_DIR/settings.json" "$PI_DIR/settings.json"
+link "$SCRIPT_DIR/models.json" "$PI_DIR/models.json"
+link "$SCRIPT_DIR/mcp.json" "$PI_DIR/mcp.json"
+link "$REPO/.claude/CLAUDE.md" "$PI_DIR/AGENTS.md"
+
+for skill in "${SHARED_SKILLS[@]}"; do
+  link "$REPO/.claude/skills/$skill" "$SKILLS_DIR/$skill"
+done

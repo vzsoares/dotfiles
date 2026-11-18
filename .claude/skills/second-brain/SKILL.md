@@ -87,7 +87,7 @@ Write typed `lex:`/`vec:` lines yourself — a bare `qmd query "<text>"` runs a 
 
 After any vault write, run `zen-doc reindex` (`qmd update && qmd embed`) so search sees it.
 
-**Per-machine setup** (once): `bun install -g @tobilu/qmd`, then `cd ~/.bun/install/global && bun pm trust node-llama-cpp`, `cd <vault> && qmd collection add . --name valt --mask '**/*.md'`, `qmd embed` (downloads ~2GB of models). The `qmd` MCP server is defined in dotfiles `mcp/servers.json`; `./link-claude` and `pi/link` register it.
+**Per-machine setup** (once): `bun install -g @tobilu/qmd`, then `cd ~/.bun/install/global && bun pm trust node-llama-cpp`, `cd <vault> && qmd collection add . --name valt --mask '**/*.md'`, `qmd embed` (downloads ~2GB of models). The `qmd` MCP server is defined in dotfiles `agents/mcp.json`; `./link-claude` and `agents/link` register it.
 
 ## Operations
 

@@ -32,9 +32,9 @@ Each tool is symlinked into place (always **absolute paths**) by a `link` script
 
 - `./link` — `.zshrc`, `.gitconfig`, `biome.json` → `~` (requires oh-my-zsh already installed)
 - `./link-claude` — `.claude/{CLAUDE.md,settings.json,skills,agents}` → `~/.claude/`,
-  then registers each server in `mcp/servers.json` with `claude mcp add-json -s user`
-- `pi/link` — `pi/{settings,models}.json`, `mcp/servers.json` (as `mcp.json`) and
-  `.claude/CLAUDE.md` (as `AGENTS.md`) → `~/.pi/agent/`
+  then registers each server in `agents/mcp.json` with `claude mcp add-json -s user`
+- `agents/link` — `agents/{settings,models,mcp}.json` and `.claude/CLAUDE.md`
+  (as `AGENTS.md`) → `~/.pi/agent/`; shared skills → `~/.agents/skills/`
 - `alacritty/link` — `.alacritty.toml` → `~/.config/alacritty/alacritty.toml`,
   plus `macos.toml`/`linux.toml` (chosen by `uname`) → `local.toml`, which the
   shared config pulls in via `[general] import`

@@ -18,6 +18,12 @@ agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
               #   saved prompts as JSON; ./link imports (or `export`s back)
               #   since it stores config in SQLite. Groups live in the vault.
               #   The `am` zsh function exports on quit
+agents/       # agent-neutral config for Claude and pi (not .claude/agents/,
+              #   Claude's subagents): mcp.json is the one MCP server list
+              #   (./link-claude registers it with `claude mcp add-json`);
+              #   pi's settings/models.json. agents/link links them plus
+              #   .claude/CLAUDE.md (as AGENTS.md) into ~/.pi/agent and shared
+              #   skills into ~/.agents/skills
 aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
               #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)
@@ -37,11 +43,7 @@ inbox/        # zen-inbox decision inbox (Go, Bubble Tea panel); the
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.
               #   Driven by the `diagram` skill in .claude/skills/
-mcp/          # servers.json: the one MCP server list for Claude and pi;
-              #   ./link-claude registers it with `claude mcp add-json -s user`
 nvim/         # neovim config (lua)
-pi/           # pi coding agent: models.json, settings.json; pi/link also
-              #   links mcp/servers.json and .claude/CLAUDE.md (as AGENTS.md)
 tmux/         # tmux config
 typst/        # long-form writing (books, TCC): tinymist LSP in nvim +
               #   a book template with citations, figures and quotes.
@@ -58,8 +60,8 @@ zen.json      # personal settings (bell, git fetch, wrapup) read via
               #   ~/.config/zen/config.json (untracked)
 ```
 
-Config dirs (agent-manager, aerospace, alacritty, cava, flameshot, gnupg, i3,
-nvim, pi, tmux) each have their own `link` script.
+Config dirs (agent-manager, agents, aerospace, alacritty, cava, flameshot,
+gnupg, i3, nvim, tmux) each have their own `link` script.
 
 ## Linking
 
@@ -69,7 +71,7 @@ Root-level link scripts:
 - `./link` — symlinks `.zshrc`, `.gitconfig`, `biome.json` to `~`
 - `./link-claude` — symlinks `.claude/` contents to `~/.claude/`: `CLAUDE.md`,
   `settings.json`, `skills/`, `output-styles/`, `agents/`, `statusline-command.sh`;
-  then registers each server in `mcp/servers.json` (needs `claude` and `jq`)
+  then registers each server in `agents/mcp.json` (needs `claude` and `jq`)
 - `scripts/claude-cloud-setup.sh` — Claude Code **web** setup script (paste into the
   cloud environment). Fetches `.claude/CLAUDE.cloud.md` (cloud-safe variant of
   `CLAUDE.md`: no zen-* tools, vault, or Playwright) and `output-styles/adhd.md`
