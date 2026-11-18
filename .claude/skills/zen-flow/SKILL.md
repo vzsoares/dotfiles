@@ -235,6 +235,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 
 - `zen-await <session>...` (orchestrator, run_in_background): waits until a worker
   stops; 0 done marker, 10 escalation, 11 idle, 20 dead, 124 timeout.
+- `zen-report tick|status|run <job>` (launchd agent, every 15 min): queues chief's scheduled
+  routines (06h/12h/18h reports, Monday survey) via `zen-chief`; the schedule lives in
+  zen.json `report.jobs`.
 - `zen-gate [--base dev]` (worker, before `WORKER_DONE`): banned ways to get green
   in the branch diff; exceptions in `.zen-gate-allow`.
 - `zen-merge <session>` (orchestrator, on exit 0): gate, ff-merge, dev release

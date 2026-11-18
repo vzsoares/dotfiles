@@ -40,6 +40,8 @@ gnupg/        # gpg-agent.conf; macos.conf / linux.conf are full per-OS files
 inbox/        # zen-inbox decision inbox (Go, Bubble Tea panel); the
               #   inbox/zen-inbox launcher rebuilds into ~/.cache/zen/bin
               #   when a source changed -- see its README
+launchd/      # macOS launchd agent for zen-report (local.zen.report, every 15 min);
+              #   `launchd/link` renders the plist into ~/Library/LaunchAgents
 mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
               #   custom HTML in diagram nodes — see its README.
               #   Driven by the `diagram` skill in .claude/skills/
@@ -61,7 +63,7 @@ zen.json      # personal settings (bell, git fetch, wrapup) read via
 ```
 
 Config dirs (agent-manager, agents, aerospace, alacritty, cava, flameshot,
-gnupg, i3, nvim, tmux) each have their own `link` script.
+gnupg, i3, launchd, nvim, tmux) each have their own `link` script.
 
 ## Linking
 

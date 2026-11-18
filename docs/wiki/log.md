@@ -98,3 +98,7 @@ approved sha and the pushed tip adds only version lines and `CHANGELOG.md` to it
 Content-bound rather than "one child commit", since zen-release's merge, bump and
 changelog commits all sit on top of the approved sha.
 Pages updated: architecture/release-tooling.md, architecture/decision-inbox.md
+
+## [2026-11-17] update | zen-report: scheduled routines via launchd (#802)
+`scripts/report.py` (`zen-report`) replaces chief's session crons: a launchd agent (`launchd/`, `StartInterval` 900) runs `tick`, which sends due jobs from zen.json `report.jobs` through `zen-chief` and records them in `~/.cache/zen/report/state.json`. A daily slot is due until its `window_until`; after a wake only the latest runs (older ones `stale`), a window closed undelivered is `missed` with a banner. Runs under `zen-lock report`.
+Pages updated: none (see scripts/README.md)

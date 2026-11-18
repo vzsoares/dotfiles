@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -e
+
+# launchd/link [--uninstall | --render-only <dir>]
+#
+# Installs the zen-report launchd agent (macOS). The plist is rendered with
+# absolute paths into ~/Library/LaunchAgents as a file, not a symlink: launchd
+# does not follow symlinks reliably and the template holds @HOME@ placeholders.
+#   --uninstall         boot the agent out and remove the plist
+#   --render-only <dir> write the rendered plist into <dir>, nothing else (tests)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LABEL="local.zen.report"
+TEMPLATE="$SCRIPT_DIR/zen-report.plist"
+
+render() {
+    sed "s|@HOME@|$HOME|g" "$TEMPLATE" >"$1"
+}
+
+case "${1:-}" in
+    --render-only)
+        [ -n "${2:-}" ] || { echo "usage: link --render-only <dir>" >&2; exit 2; }
+        mkdir -p "$2"
+        render "$2/$LABEL.plist"
+        exit 0
+        ;;
+    --uninstall | "") ;;
+    *)
+        echo "usage: link [--uninstall | --render-only <dir>]" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$(uname)" != "Darwin" ]; then
+    echo "launchd/link: macOS only, nothing to do on $(uname)"
+    exit 0
+fi
+
+DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+
+launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+
+if [ "${1:-}" = "--uninstall" ]; then
+    rm -f "$DEST"
+    echo "removed $LABEL"
+    exit 0
+fi
+
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.cache/zen/report"
+rm -f "$DEST"
+render "$DEST"
+plutil -lint "$DEST"
+# bootout is asynchronous: retry while the old job unloads
+for _ in 1 2 3 4 5; do
+    launchctl bootstrap "$DOMAIN" "$DEST" 2>/dev/null && break
+    sleep 1
+done
+launchctl print "$DOMAIN/$LABEL" >/dev/null
+echo "installed $LABEL ($DEST)"

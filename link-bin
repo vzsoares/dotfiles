@@ -17,6 +17,7 @@ LINKS=(
     "zen-commit:scripts/commit.py"
     "zen-await:scripts/await.py"
     "zen-chief:scripts/chief.py"
+    "zen-report:scripts/report.py"
     "zen-gate:scripts/gate.py"
     "zen-merge:scripts/merge.py"
     "zen-sweep:scripts/sweep.py"

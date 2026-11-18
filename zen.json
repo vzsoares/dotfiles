@@ -20,6 +20,26 @@
   "git": {
     "fetchIntervalMinutes": 10
   },
+  "report": {
+    "jobs": [
+      {
+        "id": "report-06", "at": "06:00", "window_until": "12:00",
+        "prompt": "Write the 06h report as a zen-inbox note: plan for the day and the path (board In Progress, To Do by priority, Human Only steps, open decisions)."
+      },
+      {
+        "id": "report-12", "at": "12:00", "window_until": "18:00",
+        "prompt": "Write the 12h report as a zen-inbox note: what is done so far today."
+      },
+      {
+        "id": "report-18", "at": "18:00", "window_until": "23:59",
+        "prompt": "Write the 18h report as a zen-inbox note: what was done today and what to expect tomorrow."
+      },
+      {
+        "id": "survey", "at": "09:07", "weekday": "mon", "window_until": "next-week",
+        "prompt": "Run the weekly refresh of the uncensored-model value survey."
+      }
+    ]
+  },
   "wrapup": {
     "model": "sonnet",
     "minUserTurns": 3
