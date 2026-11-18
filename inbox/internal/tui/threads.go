@@ -282,18 +282,60 @@ func (m *Model) nextInboxRow(cur string) (string, bool) {
 	return items[at+1].value, true
 }
 
-// openNextInbox opens the row now where the finished item was; with none
-// there, the Inbox list stays up.
-func (m *Model) openNextInbox(ok bool) {
-	if !m.inboxOpen || !ok || m.scr != scList {
-		return
+// openNextAfterPass runs when a pass ends at from: it opens the row or thread
+// item after the finished one when that is an unread note or an open decision
+// of another session; otherwise the screen the pass came from stays up.
+func (m *Model) openNextAfterPass(ok bool, from screen, sid string) tea.Cmd {
+	switch {
+	case !ok:
+	case from == scThread:
+		return m.openNextInThread(sid)
+	case m.scr == scList:
+		items := m.listItems()
+		if m.listAt >= len(items) {
+			m.cursor = max(len(items)-1, 0)
+			break
+		}
+		row := items[m.listAt].value
+		kind, id, _ := strings.Cut(row, ":")
+		if kind == "s" && id != sid || kind == "n" && m.unreadNote(id) {
+			m.openRow(row)
+		}
 	}
-	items := m.listItems()
-	if m.inboxAt < len(items) {
-		m.openRow(items[m.inboxAt].value)
-	} else {
-		m.cursor = max(len(items)-1, 0)
+	return nil
+}
+
+func (m *Model) unreadNote(id string) bool {
+	for _, n := range m.snap.notes {
+		if noteValue(n) == id && n.Unread() {
+			return true
+		}
 	}
+	return false
+}
+
+// openNextInThread opens the item after the focused one when it is an unread
+// note or an open decision outside session skip.
+func (m *Model) openNextInThread(skip string) tea.Cmd {
+	items := m.thread.data.Items
+	at := m.thread.cursor + 1
+	if at >= len(items) {
+		return nil
+	}
+	it := items[at]
+	switch {
+	case it.Note != nil && it.Note.Unread():
+		m.cursor = at
+		m.leaveThread()
+		m.note, m.noteFrom, m.scr, m.flash = *it.Note, scThread, scNote, ""
+		m.scroll = 0
+	case it.Decision != nil && it.Decision.SessionID != skip:
+		if d, ok := m.decision(it.Decision.ID); ok && d.Status == "open" {
+			m.cursor = at
+			return m.walkFromThread(d.SessionID, d.ID)
+		}
+	}
+	return nil
 }
 
 // openRow opens the note or the session a list row stands for.
@@ -672,6 +714,12 @@ func (m *Model) keyThread(k string) (tea.Model, tea.Cmd) {
 // decision list returns to the thread.
 func (m *Model) walkFromThread(sid, id string) tea.Cmd {
 	m.leaveThread()
+	for i, it := range m.thread.data.Items {
+		if d := it.Decision; d != nil && d.Status == "open" && d.SessionID == sid && (id == "" || d.ID == id) {
+			m.thread.cursor = i
+			break
+		}
+	}
 	m.enterSession(sid)
 	if m.scr != scSession {
 		return nil

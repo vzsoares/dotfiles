@@ -102,6 +102,9 @@ func (m *Model) nextNoteRow(n inbox.Note) (string, bool) {
 	if !ok || m.inboxOpen {
 		return next, ok
 	}
+	if strings.HasPrefix(next, "s:") {
+		return next, true
+	}
 	id, isNote := strings.CutPrefix(next, "n:")
 	if !isNote {
 		return "", false
@@ -228,9 +231,12 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 		return m, m.openRefile(n, scNote)
 	case "enter":
 		next, hasNext := m.nextNoteRow(n)
+		fromThread := m.noteFrom == scThread
 		cmd := m.leaveNote("", false)
 		if hasNext {
 			m.openRow(next)
+		} else if fromThread {
+			cmd = tea.Batch(cmd, m.openNextInThread(""))
 		}
 		if n.Unread() {
 			return m, tea.Batch(cmd, m.markCmd(n.ID, false, true))

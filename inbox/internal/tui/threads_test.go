@@ -657,3 +657,70 @@ func TestInboxLastItemReturnsToTheInboxList(t *testing.T) {
 		t.Fatalf("did not return to the Inbox list:\n%s", d.view())
 	}
 }
+
+func (d *drv) threadOf900() {
+	d.ask("900", "s1", "Q one?", "a", "b")
+	d.ask("900", "s2", "Q two?", "a", "b")
+	d.addNote("900", "Unread merged", "")
+	d.poll()
+	d.cursorTo("#900")
+	d.keys("o")
+	if d.m.scr != scThread || !d.m.thread.loaded {
+		d.t.Fatalf("thread not open:\n%s", d.view())
+	}
+}
+
+func TestThreadFinishingADecisionOpensTheNextUnreadItem(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.threadOf900()
+	items := d.m.thread.data.Items
+	if len(items) != 3 || items[0].Decision == nil || items[1].Decision == nil || items[2].Note == nil {
+		t.Fatalf("thread items %+v", items)
+	}
+	d.m.cursor = 0
+	d.keys("enter", "a", "enter")
+	if d.get("900.1").Status != "answered" || d.m.scr != scWalk || d.m.p.cur != "900.2" {
+		t.Fatalf("next open decision did not open: screen %d\n%s", d.m.scr, d.view())
+	}
+	d.keys("a", "enter")
+	if d.m.scr != scNote || d.m.noteFrom != scThread {
+		t.Fatalf("next unread note did not open:\n%s", d.view())
+	}
+	d.keys("enter")
+	if d.m.scr != scThread {
+		t.Fatalf("last item did not return to the thread:\n%s", d.view())
+	}
+}
+
+func TestThreadFinishingADecisionReturnsWhenNextIsRead(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("901", "s1", "Q one?", "a", "b")
+	read := d.addNote("901", "Old news", "")
+	if err := d.ib.MarkNotes([]int64{read.ID}, true); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	d.cursorTo("#901")
+	d.keys("o")
+	d.m.cursor = 0
+	d.keys("enter", "a", "enter")
+	if d.get("901.1").Status != "answered" || d.m.scr != scThread {
+		t.Fatalf("did not return to the thread: screen %d\n%s", d.m.scr, d.view())
+	}
+}
+
+func TestListFinishingADecisionOpensTheNextUnansweredRow(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.ask("7", "s1", "Q one?", "a", "b")
+	d.ask("8", "s2", "Q two?", "a", "b")
+	d.poll()
+	d.cursorTo("spec-s1")
+	d.keys("a", "a", "enter")
+	if d.get("7.1").Status != "answered" || d.m.scr != scSession || d.m.sid != "s2" {
+		t.Fatalf("next unanswered row did not open: screen %d\n%s", d.m.scr, d.view())
+	}
+	d.keys("enter", "a", "enter")
+	if d.m.scr != scList {
+		t.Fatalf("no row left, want the list: screen %d\n%s", d.m.scr, d.view())
+	}
+}

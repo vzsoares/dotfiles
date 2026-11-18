@@ -242,10 +242,10 @@ type Model struct {
 	stateFile   string
 	notesFolded bool
 	threadsOpen map[string]bool
-	// inboxOpen shows the flat Inbox list in place of the cockpit; inboxAt is
-	// the row an item was opened from.
+	// inboxOpen shows the flat Inbox list in place of the cockpit; listAt is
+	// the list row an item was opened from.
 	inboxOpen bool
-	inboxAt   int
+	listAt    int
 	// chiefMu serialises chat sends and the delivery pass; passing marks a
 	// pass in flight and chatMisses counts its empty status polls per chat.
 	chiefMu    *sync.Mutex
@@ -1012,10 +1012,10 @@ func (m *Model) onSent(msg sentMsg) tea.Cmd {
 	for _, id := range p.order {
 		delete(m.drafts, id)
 	}
+	from, sid := m.passFrom, m.sid
 	cmd := m.leavePass(strings.Join(append([]string{msg.flash}, p.notes...), "; "))
 	m.flashOK = ok
-	m.openNextInbox(ok)
-	return tea.Batch(cmd, m.queueDrafts(draftOp{clear: m.sid}))
+	return tea.Batch(cmd, m.openNextAfterPass(ok, from, sid), m.queueDrafts(draftOp{clear: m.sid}))
 }
 
 // ------------------------------------------------------------------- talk --
@@ -1528,8 +1528,8 @@ func (m *Model) undeliveredName(sid string) string {
 }
 
 func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
-	if m.inboxOpen && (k == "enter" || k == "a" || k == "f") {
-		m.inboxAt = m.cursor
+	if k == "enter" || k == "a" || k == "f" {
+		m.listAt = m.cursor
 	}
 	if !m.inboxOpen {
 		if ok, cmd := m.keyThreadRow(k); ok {
