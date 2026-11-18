@@ -236,19 +236,20 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
 - **Panel.** After the decision and retry rows: a `Notes · n unread` header and one
   row per note (`● title · sender · #task · age`, bold unread, dim `○` read, `↩` once
   replied). Enter opens the note screen (header, title, glamour body cached per note
-  id and width, `↩ replied: …`), which scrolls like View full. `m` toggles read on the
+  id and width, then each reply in order as `↩ [n · ]age: text`), which scrolls like View full. `m` toggles read on the
   list row or the note, `M` marks every visible note read; opening never marks read.
   Notes bind none of `←`, `→`, `shift+tab`, `l`.
 - **Fold (#801).** `z` on a note row collapses the group to one selectable header,
   `Notes · n unread` (yellow) or `Notes · all read` (dim); `enter` or `z` on it expands.
   New notes still raise the count and the banner. The state persists in
   `~/.cache/zen/inbox-panel.json` (`notes_folded`), not the db, so there is no migration.
-- **Reply.** `f` opens the textarea; `ctrl+d` sends one reply per note through the
+- **Reply.** `f` opens the textarea; `ctrl+d` sends a reply, as many per note as you like, through the
   answer send path (`agent-manager send … --from zen-inbox`, the refusal fallback, the
   30 s timeout and the stuck-paste follow-up) as `[zen-inbox] Reply to your note n12
-  (#707 <title>):` plus the text, cut at a UTF-8 boundary under the send limit. The
-  `none → sending` claim runs in one `BEGIN IMMEDIATE`, so two panels never send
-  twice. The target is the one live session named like the sender (as `zen-chief`
+  (#707 <title>):` (`Reply 2 to …` from the second on) plus the text, cut at a UTF-8 boundary under the send limit. Schema v9 keeps every reply in `note_replies`; `notes.reply` and the delivery columns
+  track the latest. A new reply waits while the latest is `sending` or `failed` (retry
+  it first). The claim runs in one `BEGIN IMMEDIATE`, so two panels never overwrite
+  each other's delivery state. The target is the one live session named like the sender (as `zen-chief`
   does), falling back to the stored id only while that session is alive; none or
   several live fail the reply. The send stores `message_id` first, then marks `sent`; a
   retry that finds a `message_id` asks `agent-manager message-status` and marks `sent`

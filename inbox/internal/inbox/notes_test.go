@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -182,9 +183,6 @@ func TestReplyOnceMarksReadAndFormats(t *testing.T) {
 	if n.Unread() || n.Delivery != "sent" || n.MessageID != "42" || fake.followed != 1 {
 		t.Fatalf("%+v", n)
 	}
-	if _, err := ib.Reply(1, "again"); code(err) != 1 {
-		t.Fatalf("second reply: %v", err)
-	}
 	addNote(t, ib, "", "No task")
 	if _, err := ib.Reply(2, " "); code(err) != 2 {
 		t.Fatalf("blank reply: %v", err)
@@ -208,7 +206,74 @@ func TestReplyMessageTruncatesAtUTF8Boundary(t *testing.T) {
 	}
 }
 
-func TestConcurrentRepliesSendOnce(t *testing.T) {
+func TestTwoRepliesAreDeliveredNumberedAndKeptInOrder(t *testing.T) {
+	ib, fake, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "707", "Task done")
+	if _, err := ib.Reply(1, "first"); err != nil {
+		t.Fatal(err)
+	}
+	at(t, "2026-01-01T00:05:00+00:00")
+	res, err := ib.Reply(1, "second")
+	if err != nil || !res.OK {
+		t.Fatalf("%+v %v", res, err)
+	}
+	want := [][2]string{
+		{"c1", "[zen-inbox] Reply to your note n1 (#707 Task done):\nfirst"},
+		{"c1", "[zen-inbox] Reply 2 to your note n1 (#707 Task done):\nsecond"},
+	}
+	if !slices.Equal(fake.sends, want) {
+		t.Fatalf("%q", fake.sends)
+	}
+	n, _ := ib.Note(1)
+	wantReplies := []NoteReply{{"first", "2026-01-01T00:00:00+00:00"}, {"second", "2026-01-01T00:05:00+00:00"}}
+	if !slices.Equal(n.Replies, wantReplies) || n.Reply != "second" || n.Delivery != "sent" {
+		t.Fatalf("%+v", n)
+	}
+}
+
+func TestReplyWaitsForAFailedOrInFlightReply(t *testing.T) {
+	ib, fake, _ := open(t)
+	addNote(t, ib, "", "a")
+	fake.fail = "session gone"
+	if _, err := ib.Reply(1, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ib.Reply(1, "second"); code(err) != 1 {
+		t.Fatalf("reply over a failed one: %v", err)
+	}
+	fake.fail = ""
+	if out, err := ib.RetryNotes("c1"); err != nil || len(out) != 1 || !out[0].OK {
+		t.Fatalf("%+v %v", out, err)
+	}
+	if _, err := ib.Reply(1, "second"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := ib.Note(1); len(n.Replies) != 2 || n.Replies[1].Text != "second" {
+		t.Fatalf("%+v", n.Replies)
+	}
+}
+
+func TestRetriedSecondReplyKeepsItsNumber(t *testing.T) {
+	ib, fake, _ := open(t)
+	addNote(t, ib, "", "a")
+	if _, err := ib.Reply(1, "first"); err != nil {
+		t.Fatal(err)
+	}
+	fake.fail = "session gone"
+	if _, err := ib.Reply(1, "second"); err != nil {
+		t.Fatal(err)
+	}
+	fake.fail = ""
+	if _, err := ib.RetryNote(1); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.sends[len(fake.sends)-1][1]; !strings.HasPrefix(got, "[zen-inbox] Reply 2 to your note n1") {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestConcurrentRepliesAreNeverLost(t *testing.T) {
 	ib, fake, path := open(t)
 	addNote(t, ib, "", "race")
 	other, err := Open(path, fake)
@@ -222,8 +287,15 @@ func TestConcurrentRepliesSendOnce(t *testing.T) {
 		wg.Go(func() { _, errs[i] = x.Reply(1, "mine") })
 	}
 	wg.Wait()
-	if len(fake.sends) != 1 || (errs[0] == nil) == (errs[1] == nil) {
-		t.Fatalf("sends %d, errs %v", len(fake.sends), errs)
+	ok := 0
+	for _, err := range errs {
+		if err == nil {
+			ok++
+		}
+	}
+	n, _ := ib.Note(1)
+	if ok == 0 || len(fake.sends) != ok || len(n.Replies) != ok {
+		t.Fatalf("ok %d, sends %d, stored %d, errs %v", ok, len(fake.sends), len(n.Replies), errs)
 	}
 }
 
@@ -575,5 +647,70 @@ func TestRetryWithNothingFailedIsMarkedEmpty(t *testing.T) {
 	}
 	if _, err := ib.Get("nope"); !errors.As(err, &ie) || ie.Empty {
 		t.Fatalf("a missing decision is not an empty retry: %v", err)
+	}
+}
+
+func TestV8ReplyMigratesIntoTheRepliesTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "zen-flow.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v := 1; v <= 8; v++ {
+		for _, stmt := range strings.Split(Migrations[v], ";") {
+			if strings.TrimSpace(stmt) != "" {
+				if _, err := raw.Exec(stmt); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	for _, stmt := range []string{
+		"PRAGMA user_version = 8",
+		"INSERT INTO notes (task, session_id, session_name, title, created_at) VALUES ('', 'c1', 'chief', 'plain', '2026-01-01T00:00:00+00:00')",
+		"INSERT INTO notes (task, session_id, session_name, title, created_at, reply, replied_at, claimed_at, delivery)" +
+			" VALUES ('', 'c1', 'chief', 'sent', '2026-01-01T00:00:00+00:00', 'old', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00', 'sent')",
+	} {
+		if _, err := raw.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = raw.Close()
+	at(t, "2026-01-03T00:00:00+00:00")
+	ib, err := Open(path, &fakeAM{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ib.Close()
+	if v, _ := ib.userVersion(); v != SchemaVersion {
+		t.Fatalf("user_version %d", v)
+	}
+	n, err := ib.Note(2)
+	if err != nil || !slices.Equal(n.Replies, []NoteReply{{"old", "2026-01-02T00:00:00+00:00"}}) || n.Reply != "old" {
+		t.Fatalf("%+v %v", n, err)
+	}
+	if plain, _ := ib.Note(1); len(plain.Replies) != 0 {
+		t.Fatalf("%+v", plain)
+	}
+	if _, err := ib.Reply(2, "new"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ = ib.Note(2); len(n.Replies) != 2 || n.Replies[0].Text != "old" || n.Replies[1].Text != "new" {
+		t.Fatalf("%+v", n.Replies)
+	}
+}
+
+func TestPruneDropsTheRepliesOfPrunedNotes(t *testing.T) {
+	ib, _, _ := open(t)
+	at(t, "2026-01-01T00:00:00+00:00")
+	addNote(t, ib, "", "old")
+	if _, err := ib.Reply(1, "x"); err != nil {
+		t.Fatal(err)
+	}
+	at(t, "2026-03-01T00:00:00+00:00")
+	addNote(t, ib, "", "new")
+	var n int
+	if err := ib.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM note_replies").Scan(&n); err != nil || n != 0 {
+		t.Fatalf("%d rows, %v", n, err)
 	}
 }

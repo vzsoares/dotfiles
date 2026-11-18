@@ -1380,7 +1380,7 @@ func (m *Model) listKeys() []ranked {
 				mark = "unread"
 			}
 			keys = append(keys, ranked{key{"m", mark}, 3})
-			if n.Reply == "" && n.Delivery == "none" {
+			if n.CanReply() {
 				keys = append(keys, ranked{key{"f", "reply"}, 4})
 			}
 		}

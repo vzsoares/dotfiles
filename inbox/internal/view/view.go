@@ -5,6 +5,7 @@ package view
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -551,7 +552,7 @@ func NoteLabel(n inbox.Note, at time.Time) string {
 	}
 	parts = append(parts, Age(n.CreatedAt, at))
 	label := dot + strings.Join(parts, " · ")
-	if n.Reply != "" {
+	if len(n.Replies) > 0 || n.Reply != "" {
 		label += " ↩"
 	}
 	return label
@@ -566,14 +567,21 @@ func NoteHead(n inbox.Note, at time.Time) string {
 	return strings.Join(append(parts, n.SessionName, Age(n.CreatedAt, at)), " · ")
 }
 
-// PanelNoteLines is a note's title, painted body and sent reply.
-func PanelNoteLines(n inbox.Note, width int, p Painter) []string {
+// PanelNoteLines is a note's title, painted body and its replies in order,
+// each led by its age (and number, when there are several).
+func PanelNoteLines(n inbox.Note, width int, at time.Time, p Painter) []string {
 	out := Wrap(n.Title, width, "")
 	if !pyfmt.Blank(n.Body) {
 		out = append(append(out, ""), Painted(p, md.Key{ID: n.Label(), Field: "note"}, n.Body, width, "", "")...)
 	}
-	if n.Reply != "" {
-		out = append(append(out, ""), Painted(p, md.Key{ID: n.Label(), Field: "reply"}, n.Reply, width, "↩ replied: ", "  ")...)
+	for i, r := range n.Replies {
+		lead := "↩ "
+		if len(n.Replies) > 1 {
+			lead += strconv.Itoa(i+1) + " · "
+		}
+		lead += Age(r.RepliedAt, at) + ": "
+		key := md.Key{ID: n.Label(), Field: "reply" + strconv.Itoa(i+1)}
+		out = append(append(out, ""), Painted(p, key, r.Text, width, lead, "  ")...)
 	}
 	return out
 }

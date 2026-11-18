@@ -148,6 +148,8 @@ func (m *Model) onNoteSent(msg noteSentMsg) {
 		m.scr, m.flash, m.flashOK = scNote, msg.err.Error(), false
 		return
 	}
+	m.ta.Reset()
+	m.replyFor = 0
 	flash := msg.res.Describe()
 	if msg.res.OK {
 		flash = "reply sent to " + m.note.SessionName + inbox.FollowupText(msg.res.Followup, m.note.SessionID)
@@ -191,8 +193,8 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 	case "m":
 		return m, m.markCmd(n.ID, false, n.Unread())
 	case "f":
-		if n.Reply != "" || n.Delivery != "none" {
-			m.flash, m.flashOK = "already replied", false
+		if !n.CanReply() {
+			m.flash, m.flashOK = "reply "+n.Delivery+": retry it first", false
 			return m, nil
 		}
 		// A reply refused by the store keeps its text for the next f.
@@ -243,7 +245,7 @@ func (m *Model) viewNote() frame {
 	if m.flash != "" {
 		top = append(top, section{lines: view.WrapRest("» "+m.flash, m.w, "", "  "), style: &bannerStyle})
 	}
-	return frame{s: scNote, top: top, body: []section{{lines: view.PanelNoteLines(n, m.w, m.paint)}},
+	return frame{s: scNote, top: top, body: []section{{lines: view.PanelNoteLines(n, m.w, m.now(), m.paint)}},
 		cur: -1, help: true}
 }
 

@@ -77,10 +77,11 @@ func mdGolden(t *testing.T, name string, lines []string, width int) {
 }
 
 func TestSampleNoteAndDecisionGoldens(t *testing.T) {
-	note := inbox.Note{ID: 1, Title: "Cache move", Body: sampleNoteBody, Reply: "thanks, **ship it**"}
+	note := inbox.Note{ID: 1, Title: "Cache move", Body: sampleNoteBody, Reply: "thanks, **ship it**",
+		Replies: []inbox.NoteReply{{Text: "thanks, **ship it**", RepliedAt: "2026-01-01T00:00:00+00:00"}}}
 	for _, w := range []int{92, 60} {
 		p := colourPainter()
-		mdGolden(t, "note-"+strconv.Itoa(w), PanelNoteLines(note, w, p), w)
+		mdGolden(t, "note-"+strconv.Itoa(w), PanelNoteLines(note, w, at, p), w)
 		mdGolden(t, "decision-"+strconv.Itoa(w), PanelDecisionLines(sampleDecision(), w, p), w)
 	}
 }

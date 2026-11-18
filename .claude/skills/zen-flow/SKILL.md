@@ -295,7 +295,7 @@ listed until `zen-inbox retry <session>`.
 - Storage: `<vault>/config/zen-flow.db` (SQLite, gitignored in the vault).
 - Notes: only chief sends them, `zen-inbox note [<task>] --title "<one line>" [--body
   "<markdown>" | --body -]` (prints `n12`); they never ring. The panel lists them under
-  `Notes · n unread`; the user marks them read (`m`, `M`) or writes one reply (`f`),
+  `Notes · n unread`; the user marks them read (`m`, `M`) or writes replies (`f`, any number),
   which reaches chief as `[zen-inbox] Reply to your note n12 (…)` and is treated like
   a chat message. When the user says in chat they read one, chief runs `zen-inbox read
   <id>`. Anything the user must choose stays a `zen-inbox ask`.

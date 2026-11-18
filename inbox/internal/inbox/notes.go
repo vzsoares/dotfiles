@@ -39,6 +39,20 @@ ALTER TABLE notes ADD COLUMN claimed_at TEXT NOT NULL DEFAULT '';
 UPDATE notes SET claimed_at = replied_at WHERE reply != '';
 `
 
+// schemaV9 keeps every reply to a note; notes.reply and its delivery columns
+// still describe the latest one. A v8 reader works but never sees the history.
+const schemaV9 = `
+CREATE TABLE note_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    replied_at TEXT NOT NULL
+);
+CREATE INDEX note_replies_note ON note_replies (note_id, id);
+INSERT INTO note_replies (note_id, text, replied_at)
+    SELECT id, reply, replied_at FROM notes WHERE reply != '' ORDER BY id;
+`
+
 const (
 	NoteSender   = "chief"
 	TitleMax     = 120
@@ -52,7 +66,11 @@ const (
 	failedNotes = "(delivery = 'failed' OR (delivery = 'sending' AND max(claimed_at, replied_at) < ?))"
 )
 
-// Note is one message from chief; ID is shown as n<ID>.
+// NoteReply is one reply to a note.
+type NoteReply struct{ Text, RepliedAt string }
+
+// Note is one message from chief; ID is shown as n<ID>. Reply and the
+// delivery fields describe the latest reply; Replies holds all, oldest first.
 type Note struct {
 	ID                                  int64
 	Task, SessionID, SessionName        string
@@ -60,7 +78,12 @@ type Note struct {
 	CreatedAt, ReadAt, Reply, RepliedAt string
 	ClaimedAt                           string
 	Delivery, MessageID, DeliveryError  string
+	Replies                             []NoteReply
 }
+
+// CanReply is false while the latest reply is in flight or failed: it must be
+// retried first, or a new reply would overwrite its delivery state.
+func (n Note) CanReply() bool { return n.Delivery == "none" || n.Delivery == "sent" }
 
 func (n Note) Label() string { return "n" + strconv.FormatInt(n.ID, 10) }
 
@@ -80,7 +103,16 @@ func (n Note) JSON() pyfmt.Object {
 		{Key: "reply", Value: n.Reply},
 		{Key: "replied_at", Value: n.RepliedAt},
 		{Key: "delivery", Value: n.Delivery},
+		{Key: "replies", Value: n.repliesJSON()},
 	}
+}
+
+func (n Note) repliesJSON() []any {
+	out := make([]any, len(n.Replies))
+	for i, r := range n.Replies {
+		out[i] = pyfmt.Object{{Key: "text", Value: r.Text}, {Key: "replied_at", Value: r.RepliedAt}}
+	}
+	return out
 }
 
 // ParseNoteID reads n12 or 12.
@@ -135,6 +167,9 @@ func (ib *Inbox) AddNote(in NoteInput) (Note, error) {
 			Stamp(Now().Add(-KeepFor))); err != nil {
 			return err
 		}
+		if err := ib.exec("DELETE FROM note_replies WHERE note_id NOT IN (SELECT id FROM notes)"); err != nil {
+			return err
+		}
 		res, err := ib.conn.ExecContext(ctx, "INSERT INTO notes (task, session_id, session_name, title, body,"+
 			" created_at) VALUES (?, ?, ?, ?, ?, ?)", in.Task, in.SessionID, in.Name, in.Title, in.Body, stamp())
 		if err != nil {
@@ -166,7 +201,35 @@ func (ib *Inbox) selNotes(where string, args ...any) ([]Note, error) {
 		}
 		out = append(out, n)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil || len(out) == 0 {
+		return out, err
+	}
+	return out, ib.loadReplies(out, where, args)
+}
+
+// loadReplies fills Replies for the notes selNotes matched with where.
+func (ib *Inbox) loadReplies(ns []Note, where string, args []any) error {
+	rows, err := ib.conn.QueryContext(ctx, "SELECT note_id, text, replied_at FROM note_replies"+
+		" WHERE note_id IN (SELECT id FROM notes WHERE "+where+") ORDER BY id", args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	at := make(map[int64]int, len(ns))
+	for i, n := range ns {
+		at[n.ID] = i
+	}
+	for rows.Next() {
+		var id int64
+		var r NoteReply
+		if err := rows.Scan(&id, &r.Text, &r.RepliedAt); err != nil {
+			return err
+		}
+		if i, ok := at[id]; ok {
+			ns[i].Replies = append(ns[i].Replies, r)
+		}
+	}
+	return rows.Err()
 }
 
 func (ib *Inbox) note(id int64) (Note, error) {
@@ -245,7 +308,11 @@ func ReplyHeader(n Note) string {
 	if n.Task != "" {
 		about = "#" + n.Task + " " + n.Title
 	}
-	return "[zen-inbox] Reply to your note " + n.Label() + " (" + about + "):"
+	reply := "Reply"
+	if len(n.Replies) > 1 {
+		reply += " " + strconv.Itoa(len(n.Replies))
+	}
+	return "[zen-inbox] " + reply + " to your note " + n.Label() + " (" + about + "):"
 }
 
 // ReplyMessage is the header then the text, cut at a UTF-8 boundary to fit
@@ -258,7 +325,7 @@ func ReplyMessage(n Note, text string) string {
 	return msg
 }
 
-// claimReply stores text as id's one reply and moves it none → sending.
+// claimReply appends text as id's next reply and moves it to sending.
 func (ib *Inbox) claimReply(id int64, text string) (Note, error) {
 	if pyfmt.Blank(text) {
 		return Note{}, errf(2, "a reply must not be empty")
@@ -271,13 +338,21 @@ func (ib *Inbox) claimReply(id int64, text string) (Note, error) {
 		if n, err = ib.note(id); err != nil {
 			return err
 		}
-		if n.Delivery != "none" || n.Reply != "" {
-			return errf(1, "%s already replied", n.Label())
+		if !n.CanReply() {
+			return errf(1, "%s has a reply %s; retry it first (zen-inbox retry %s)", n.Label(), n.Delivery, n.SessionID)
 		}
 		n.Reply, n.RepliedAt, n.Delivery = text, stamp(), "sending"
-		n.ClaimedAt = n.RepliedAt
-		return ib.exec("UPDATE notes SET reply = ?, replied_at = ?, claimed_at = ?, delivery = 'sending'"+
-			" WHERE id = ? AND delivery = 'none'", n.Reply, n.RepliedAt, n.ClaimedAt, id)
+		n.ClaimedAt, n.MessageID, n.DeliveryError = n.RepliedAt, "", ""
+		if err := ib.exec("UPDATE notes SET reply = ?, replied_at = ?, claimed_at = ?, delivery = 'sending',"+
+			" message_id = '', delivery_error = '' WHERE id = ?", n.Reply, n.RepliedAt, n.ClaimedAt, id); err != nil {
+			return err
+		}
+		if err := ib.exec("INSERT INTO note_replies (note_id, text, replied_at) VALUES (?, ?, ?)",
+			id, text, n.RepliedAt); err != nil {
+			return err
+		}
+		n.Replies = append(n.Replies, NoteReply{text, n.RepliedAt})
+		return nil
 	})
 	return n, err
 }
@@ -382,7 +457,7 @@ func (ib *Inbox) sendReply(n Note) (NoteDelivery, error) {
 	return NoteDelivery{Note: n, OK: true, Followup: ib.AM.Followup(target)}, nil
 }
 
-// Reply sends text as id's one reply to the note's sender.
+// Reply sends text as id's next reply to the note's sender.
 func (ib *Inbox) Reply(id int64, text string) (NoteDelivery, error) {
 	n, err := ib.claimReply(id, text)
 	if err != nil {

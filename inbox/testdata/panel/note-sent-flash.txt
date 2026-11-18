@@ -17,4 +17,4 @@ Notes · 0 unread
 
 
 
-enter open · z fold · m unread · c chief · ? help · q quit
+enter open · m unread · f reply · c chief · ? help · q quit

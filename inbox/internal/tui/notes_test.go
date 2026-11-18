@@ -239,12 +239,26 @@ func TestReplySendsOnceAndMarksRead(t *testing.T) {
 		t.Fatalf("no reply mark:\n%s", d.view())
 	}
 	d.cursorTo("Task 707")
+	if !strings.Contains(d.view(), "f reply") {
+		t.Fatalf("f reply hidden after a reply:\n%s", d.view())
+	}
 	d.keys("enter", "f")
-	if d.m.scr != scNote || !strings.Contains(d.view(), "already replied") || len(d.am.sends) != 1 {
+	if d.m.scr != scReply {
 		t.Fatalf("f on a replied note:\n%s", d.view())
 	}
-	if !strings.Contains(d.text(), "↩ replied: thanks, ship it") {
-		t.Fatalf("%s", d.view())
+	d.keys("and one more")
+	_, cmd = d.m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	d.run(cmd)
+	want = "[zen-inbox] Reply 2 to your note n1 (#707 Task 707 merged):\nand one more"
+	if len(d.am.sends) != 2 || d.am.sends[1] != [2]string{"c1", want} {
+		t.Fatalf("%q", d.am.sends)
+	}
+	d.cursorTo("Task 707")
+	d.keys("enter")
+	txt := d.text()
+	first, second := strings.Index(txt, "thanks, ship it"), strings.Index(txt, "and one more")
+	if first < 0 || second < first || !strings.Contains(txt, "↩ 1 · ") || !strings.Contains(txt, "↩ 2 · ") {
+		t.Fatalf("replies missing or out of order:\n%s", d.view())
 	}
 }
 
@@ -334,11 +348,13 @@ func TestRefusedReplyKeepsText(t *testing.T) {
 	d.addNote("", "raced", "")
 	d.poll()
 	d.keys("enter", "f", "my words")
+	d.am.fail = "session gone"
 	if _, err := d.other.Reply(1, "other panel"); err != nil {
 		t.Fatal(err)
 	}
+	d.am.fail = ""
 	d.keys("ctrl+d")
-	if d.m.scr != scNote || !strings.Contains(d.view(), "already replied") {
+	if d.m.scr != scNote || !strings.Contains(d.view(), "retry it first") {
 		t.Fatalf("%s", d.view())
 	}
 	if d.m.ta.Value() != "my words" {

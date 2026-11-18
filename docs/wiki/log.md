@@ -106,3 +106,7 @@ Pages updated: none (see scripts/README.md)
 ## [2026-11-18] feature | Phone access to the cockpit (#830)
 `zen-cockpit` runs a second `zen-inbox watch` over SSH (Tailscale); `SSH_CONNECTION` silences banner, bell and ntfy there. The desk panel POSTs a content-free ntfy alert when `ZEN_NTFY_TOPIC` is set. 44x24 panel goldens added.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-18] feature | Many replies per note (#857)
+Schema v9 adds `note_replies`; a note takes any number of replies, delivered as `Reply 2 to your note …` from the second on, listed in order on the note screen. A reply waits while the previous one is sending or failed.
+Pages updated: architecture/decision-inbox.md

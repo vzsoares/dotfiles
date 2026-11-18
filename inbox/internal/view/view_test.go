@@ -128,12 +128,19 @@ func TestNoteLabelsAndLines(t *testing.T) {
 		t.Fatal(got)
 	}
 	n.Task, n.ReadAt, n.Reply = "", "2026-01-01T00:00:30+00:00", "thanks"
+	n.Replies = []inbox.NoteReply{{Text: "thanks"}}
 	if got := NoteLabel(n, at); got != "○ Task done · chief · 1m ↩" {
 		t.Fatal(got)
 	}
 	plain := func(k md.Key, text string) []string { return strings.Split(text, "\n") }
-	want := []string{"Task done", "", "body", "", "↩ replied: thanks"}
-	if got := PanelNoteLines(n, 40, plain); !slices.Equal(got, want) {
+	n.Replies = []inbox.NoteReply{{Text: "thanks", RepliedAt: "2026-01-01T00:00:00+00:00"}}
+	want := []string{"Task done", "", "body", "", "↩ 1m: thanks"}
+	if got := PanelNoteLines(n, 40, at, plain); !slices.Equal(got, want) {
+		t.Fatalf("%q", got)
+	}
+	n.Replies = append(n.Replies, inbox.NoteReply{Text: "and\nmore", RepliedAt: "2026-01-01T00:00:30+00:00"})
+	want = []string{"Task done", "", "body", "", "↩ 1 · 1m: thanks", "", "↩ 2 · 30s: and", "  more"}
+	if got := PanelNoteLines(n, 40, at, plain); !slices.Equal(got, want) {
 		t.Fatalf("%q", got)
 	}
 }
