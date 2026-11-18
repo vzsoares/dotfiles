@@ -250,6 +250,7 @@ type Model struct {
 	// pass in flight and chatMisses counts its empty status polls per chat.
 	chiefMu    *sync.Mutex
 	passing    bool
+	passAt     time.Time
 	chatMisses map[int64]int
 	loc        *time.Location
 
@@ -415,8 +416,12 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		return nil
 	}
 	focused := m.focusedRow()
+	d, n := m.inboxCount()
+	hadInbox := d+n > 0
 	m.snap, m.loaded = s, true
-	m.closeEmptyInbox()
+	if hadInbox {
+		m.closeEmptyInbox()
+	}
 	m.refreshNote()
 	m.refreshThread()
 	m.refocus(focused)
@@ -437,7 +442,7 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	if c := m.chiefPoll(); c != nil {
 		cmds = append(cmds, c)
 	}
-	if c := m.chiefPass(); c != nil {
+	if c := m.chiefPassDue(); c != nil {
 		cmds = append(cmds, c)
 	}
 	m.pruneThreadsOpen()

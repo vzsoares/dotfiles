@@ -1,10 +1,10 @@
 cockpit · all clear                                quota n/a
+› Inbox · all clear
 
 
 
-                  Nothing waiting for you
 
 
 
 
-c chief · ? help · q quit
+enter open · c chief · ? help · q quit

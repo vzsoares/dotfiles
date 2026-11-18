@@ -23,7 +23,7 @@ func TestCockpitGoldens(t *testing.T) {
 			}
 			at := d.m.now()
 			d.m.now = func() time.Time { return at.Add(5 * time.Minute) }
-		}, []string{"cockpit · all clear", "Nothing waiting for you", "last item closed 5m ago"}},
+		}, []string{"cockpit · all clear", "› Inbox · all clear"}},
 		{"cockpit-notes-92x29", func(d *drv) {
 			d.addNote("707", "Task 707 merged", "")
 			d.addNote("", "Session spec-s2 died", "")
@@ -61,8 +61,9 @@ func TestCockpitGoldens(t *testing.T) {
 
 func TestCockpitEmptyIsCentred(t *testing.T) {
 	d := newDrv(t, 92, 29)
+	d.rawKeys("enter")
 	for i, l := range strings.Split(d.view(), "\n") {
-		if strings.TrimSpace(l) != "Nothing waiting for you" {
+		if strings.TrimSpace(l) != "All clear · nothing to act on" {
 			continue
 		}
 		left := len(l) - len(strings.TrimLeft(l, " "))

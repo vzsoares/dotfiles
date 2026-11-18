@@ -1,4 +1,6 @@
 cockpit · all clear                                                                quota n/a
+  Inbox · all clear
+
 › No task · all read
 
 
@@ -24,6 +26,4 @@ cockpit · all clear                                                            
 
 
 
-
-
-enter expand · c chief · ? help · q quit
+↑↓ · enter expand · c chief · ? help · q quit

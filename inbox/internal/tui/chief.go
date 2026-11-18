@@ -3,11 +3,14 @@ package tui
 import (
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
+	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
@@ -207,40 +210,34 @@ const maxChatMisses = maxPollFailures
 
 type chiefPassMsg struct{}
 
+// chiefPassEvery is how often the delivery pass runs.
+const chiefPassEvery = 15 * time.Second
+
+// chiefPassDue starts a pass when none is in flight and the last one began
+// chiefPassEvery ago.
+func (m *Model) chiefPassDue() tea.Cmd {
+	if m.now().Sub(m.passAt) < chiefPassEvery {
+		return nil
+	}
+	return m.chiefPass()
+}
+
 // chiefPass works every stored chat but the header's tracked one, oldest
 // first: a chat that never got a message id is sent, the rest get a status
-// poll. A send that fails stops the pass so later chats stay in order.
+// poll. A send that fails stops the pass so later chats stay in order. Only
+// the sends hold chiefMu, so a slow status poll never blocks a new chat.
 func (m *Model) chiefPass() tea.Cmd {
 	if m.passing {
 		return nil
 	}
-	m.passing = true
+	m.passing, m.passAt = true, m.now()
 	ib, client, mu, skip, misses := m.ib, m.am, m.chiefMu, m.chief.chat, m.chatMisses
 	return func() tea.Msg {
-		mu.Lock()
-		defer mu.Unlock()
-		chats, err := ib.PendingChats(chatDone())
-		if err != nil {
+		polls, ok := sendUnsent(ib, client, mu, skip)
+		if !ok {
 			return chiefPassMsg{}
 		}
-		titles, err := ib.TaskTitles()
-		if err != nil {
-			return chiefPassMsg{}
-		}
-		for _, c := range chats {
-			if c.ID == skip {
-				continue
-			}
-			if c.MessageID == "" {
-				id, errText := client.Chief(chiefText(c.Task, titles[c.Task], c.Text))
-				if errText != "" {
-					return chiefPassMsg{}
-				}
-				if ib.UpdateChat(c.ID, id, "queued", "") != nil {
-					return chiefPassMsg{}
-				}
-				continue
-			}
+		for _, c := range polls {
 			status, errText := client.ChiefStatus(c.MessageID)
 			if errText != "" || status == "" {
 				if misses[c.ID]++; misses[c.ID] >= maxChatMisses {
@@ -257,4 +254,37 @@ func (m *Model) chiefPass() tea.Cmd {
 		}
 		return chiefPassMsg{}
 	}
+}
+
+// sendUnsent sends the stored chats that never got a message id, under mu so
+// a chat being added is not sent twice, and returns the chats to poll. ok is
+// false when a read or send failed.
+func sendUnsent(ib *inbox.Inbox, client am.Client, mu *sync.Mutex, skip int64) (polls []inbox.Chat, ok bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	chats, err := ib.PendingChats(chatDone())
+	if err != nil {
+		return nil, false
+	}
+	titles, err := ib.TaskTitles()
+	if err != nil {
+		return nil, false
+	}
+	for _, c := range chats {
+		if c.ID == skip {
+			continue
+		}
+		if c.MessageID != "" {
+			polls = append(polls, c)
+			continue
+		}
+		id, errText := client.Chief(chiefText(c.Task, titles[c.Task], c.Text))
+		if errText != "" {
+			return nil, false
+		}
+		if ib.UpdateChat(c.ID, id, "queued", "") != nil {
+			return nil, false
+		}
+	}
+	return polls, true
 }

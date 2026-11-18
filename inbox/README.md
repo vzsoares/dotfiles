@@ -37,10 +37,10 @@ its asking sessions, visible notes (with replies), and in the thread screen
 (`o` on its row; `enter` folds it) the full timeline, closed decisions and your `c` chats to chief included.
 Notes without a task sit in `No task`; `zen-inbox refile <note> <task|->` or `T` on
 a note moves one in or out. `c` on a thread binds the message as `[#task title] …`
-and stores it in the `chats` table (schema v10). Every poll sends a chat
+and stores it in the `chats` table (schema v10). Every 15 s a pass sends a chat
 that never got a message id and tracks the status of all undelivered ones, in order.
-The top Inbox row (`enter`) lists the unread notes and open decisions flat; finishing
-one opens the next. Expanded threads (`threads_open`) whose task has nothing left are dropped from the state file.
+The top Inbox row is always shown (`Inbox · all clear` at zero); `enter` lists the unread notes and open decisions flat; finishing
+one opens the next. Expanded threads (`threads_open`) whose task has nothing left are dropped from the state file, except from an empty snapshot.
 
 ## Layout
 

@@ -205,6 +205,12 @@ func (d *drv) poll() {
 	}
 }
 
+// pollPass is a poll that also runs the chat delivery pass.
+func (d *drv) pollPass() {
+	d.m.passAt = time.Time{}
+	d.poll()
+}
+
 func (d *drv) pollKeep() { d.send(tickMsg{}) }
 
 func (d *drv) view() string { return d.m.View() }

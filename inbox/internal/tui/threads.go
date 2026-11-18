@@ -216,8 +216,8 @@ func (m *Model) listRows() []listRow {
 		return m.inboxRows(room)
 	}
 	var out []listRow
-	if label := m.inboxLabel(); label != "" {
-		out = append(out, listRow{item{pyfmt.Clip(label, room), "i:"}, gInbox, &unreadStyle})
+	if m.loaded {
+		out = append(out, listRow{item{pyfmt.Clip(m.inboxLabel(), room), "i:"}, gInbox, &unreadStyle})
 	}
 	for _, b := range m.snap.undelivered {
 		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s) · " +
@@ -243,11 +243,16 @@ func (m *Model) listRows() []listRow {
 	return out
 }
 
-// inboxLabel is the Inbox row's text, "" when nothing waits.
+// inboxCount is how many decisions and unread notes wait in the Inbox.
+func (m *Model) inboxCount() (decisions, notes int) {
+	return len(m.snap.open), inbox.Unread(m.snap.notes)
+}
+
+// inboxLabel is the Inbox row's text.
 func (m *Model) inboxLabel() string {
-	d, n := len(m.snap.open), inbox.Unread(m.snap.notes)
+	d, n := m.inboxCount()
 	if d+n == 0 {
-		return ""
+		return "Inbox · all clear"
 	}
 	return "Inbox · " + plural(d, "decision") + " · " + plural(n, "note")
 }
@@ -366,6 +371,7 @@ func (m *Model) saveState() {
 
 // pruneThreadsOpen forgets expanded threads whose task has no open ask,
 // visible note or thread left, so the saved state does not grow forever.
+// An empty snapshot prunes nothing: it may be a transient empty read.
 func (m *Model) pruneThreadsOpen() {
 	if len(m.threadsOpen) == 0 {
 		return
@@ -379,6 +385,9 @@ func (m *Model) pruneThreadsOpen() {
 	}
 	for _, t := range m.threads() {
 		live[t.task] = true
+	}
+	if len(live) == 0 {
+		return
 	}
 	pruned := false
 	for task := range m.threadsOpen {

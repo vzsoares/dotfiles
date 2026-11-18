@@ -102,8 +102,9 @@ message.
   (`all clear` when none). The list shows labelled groups, most urgent first:
   `Failed delivery` (retry rows with the reason), `Threads` (one per task, see
   Threads below), `No task` (notes without a task), then `Held` (answers waiting for the session's
-  open asks; not selectable). With nothing listed, `Nothing waiting for you` and
-  `last item closed <age> ago` (latest decision close or note read) sit centred.
+  open asks; not selectable). The `Inbox · all clear` row is always first; its
+  empty list shows `All clear · nothing to act on` and `last item closed <age> ago`
+  (latest decision close or note read) centred.
   The list footer is one row of keys for the row under the cursor (`enter open` /
   `a answer` on a session, `enter retry` on a failure, `enter open · m read|unread ·
   f reply` on a note) plus `r retry`, `c chief`, `M all read`, `? help`, `q quit`;

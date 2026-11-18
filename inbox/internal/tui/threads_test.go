@@ -724,3 +724,35 @@ func TestListFinishingADecisionOpensTheNextUnansweredRow(t *testing.T) {
 		t.Fatalf("no row left, want the list: screen %d\n%s", d.m.scr, d.view())
 	}
 }
+
+func TestEmptySnapshotKeepsThreadsOpen(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.m.threadsOpen["843"] = true
+	d.poll()
+	if !d.m.threadsOpen["843"] {
+		t.Fatalf("empty snapshot pruned threadsOpen: %v", d.m.threadsOpen)
+	}
+}
+
+func TestInboxRowAtZeroIsFirstAndOpensAnEmptyList(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.pollKeep()
+	rows := d.m.listItems()
+	if len(rows) != 1 || rows[0].value != "i:" || d.m.focusedRow() != "i:" {
+		t.Fatalf("rows %v focus %q:\n%s", rows, d.m.focusedRow(), d.view())
+	}
+	d.has("› Inbox · all clear")
+	d.rawKeys("enter")
+	if !d.m.inboxOpen || len(d.m.listItems()) != 0 {
+		t.Fatalf("empty Inbox did not open:\n%s", d.view())
+	}
+	d.has("All clear · nothing to act on")
+	d.pollKeep()
+	if !d.m.inboxOpen {
+		t.Fatal("a refresh closed the empty Inbox list")
+	}
+	d.rawKeys("esc")
+	if d.m.inboxOpen || d.m.focusedRow() != "i:" {
+		t.Fatalf("esc did not leave the Inbox list:\n%s", d.view())
+	}
+}

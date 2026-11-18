@@ -1,4 +1,6 @@
 cockpit · ✕ delivery failed · spec-s1 · r retry                        quota n/a
+  Inbox · all clear
+
 Failed delivery · 1
 › retry spec-s1: 1 answer(s) · failed
 
@@ -7,6 +9,4 @@ Failed delivery · 1
 
 
 
-
-
-enter retry · c chief · ? help · q quit
+↑↓ · enter retry · c chief · ? help · q quit

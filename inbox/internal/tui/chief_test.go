@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func (d *drv) newline() { d.keys("enter") }
@@ -114,8 +115,8 @@ func TestQueuedChatsAreAllDeliveredInOrder(t *testing.T) {
 	d.keys("c", "one", "ctrl+d")
 	d.keys("c", "two", "ctrl+d")
 	d.am.chiefStatus = "delivered"
-	d.poll()
-	d.poll()
+	d.pollPass()
+	d.pollPass()
 	for id := int64(1); id <= 2; id++ {
 		if c, _ := d.ib.Chat(id); c.Status != "delivered" {
 			t.Fatalf("chat %d is %q", id, c.Status)
@@ -131,14 +132,14 @@ func TestChatWithoutMessageIDIsSentOnNextPoll(t *testing.T) {
 		}
 	}
 	d.am.chiefErr = "chief is gone"
-	d.poll()
+	d.pollPass()
 	if len(d.am.chiefs) != 0 {
 		t.Fatalf("sent %q", d.am.chiefs)
 	}
 	d.am.chiefErr = ""
 	d.am.chiefStatus = "delivered"
-	d.poll()
-	d.poll()
+	d.pollPass()
+	d.pollPass()
 	if len(d.am.chiefs) != 2 || d.am.chiefs[0] != "one" || d.am.chiefs[1] != "two" {
 		t.Fatalf("sent %q", d.am.chiefs)
 	}
@@ -146,5 +147,31 @@ func TestChatWithoutMessageIDIsSentOnNextPoll(t *testing.T) {
 		if c, _ := d.ib.Chat(id); c.Status != "delivered" || c.MessageID != "42" {
 			t.Fatalf("chat %d: %+v", id, c)
 		}
+	}
+}
+
+func TestChatPassRunsOnATimerNotEveryRefresh(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	at := d.m.now().Add(time.Hour)
+	d.m.now = func() time.Time { return at }
+	if _, err := d.ib.AddChat("", "one"); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	if len(d.am.chiefs) != 1 {
+		t.Fatalf("first refresh sent %q", d.am.chiefs)
+	}
+	if _, err := d.ib.AddChat("", "two"); err != nil {
+		t.Fatal(err)
+	}
+	at = at.Add(chiefPassEvery - time.Second)
+	d.poll()
+	if len(d.am.chiefs) != 1 {
+		t.Fatalf("refresh inside the interval sent %q", d.am.chiefs)
+	}
+	at = at.Add(time.Second)
+	d.poll()
+	if len(d.am.chiefs) != 2 {
+		t.Fatalf("refresh after the interval sent %q", d.am.chiefs)
 	}
 }

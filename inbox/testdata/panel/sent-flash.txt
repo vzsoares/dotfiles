@@ -1,12 +1,12 @@
 cockpit · all clear                                quota n/a
 » sent 7.1 to spec-s1
-
-
-
-                  Nothing waiting for you
-                  last item closed 0s ago
+› Inbox · all clear
 
 
 
 
-c chief · ? help · q quit
+
+
+
+
+enter open · c chief · ? help · q quit

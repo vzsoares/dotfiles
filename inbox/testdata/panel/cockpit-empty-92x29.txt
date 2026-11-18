@@ -1,18 +1,5 @@
 cockpit · all clear                                                                quota n/a
-
-
-
-
-
-
-
-
-
-
-
-
-                                  Nothing waiting for you
-                                  last item closed 5m ago
+› Inbox · all clear
 
 
 
@@ -26,4 +13,17 @@ cockpit · all clear                                                            
 
 
 
-c chief · ? help · q quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+enter open · c chief · ? help · q quit

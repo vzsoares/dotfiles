@@ -315,7 +315,7 @@ func (m *Model) header() (string, lipgloss.Style) {
 	if n := len(m.snap.held); n > 0 {
 		parts = append(parts, strconv.Itoa(n)+" held")
 	}
-	if len(parts) == 1 && m.inboxLabel() == "" {
+	if d, n := m.inboxCount(); len(parts) == 1 && d+n == 0 {
 		parts = append(parts, "all clear")
 	}
 	return pyfmt.Clip(strings.Join(parts, " · "), m.w), headerStyle
@@ -391,7 +391,7 @@ func (m *Model) viewList() frame {
 // emptySections centres the nothing-waiting message in the rows left above
 // the footer.
 func (m *Model) emptySections(used int) []section {
-	msg := []string{"Nothing waiting for you"}
+	msg := []string{"All clear · nothing to act on"}
 	if !m.loaded {
 		msg = []string{"loading…"}
 	} else if m.snap.lastClosed != "" {
