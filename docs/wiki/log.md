@@ -110,3 +110,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-18] feature | Many replies per note (#857)
 Schema v9 adds `note_replies`; a note takes any number of replies, delivered as `Reply 2 to your note …` from the second on, listed in order on the note screen. A reply waits while the previous one is sending or failed.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-18] feature | Board rules: checklist tasks, weekly sweep, rolling sink task (#839)
+`zen-board` gains `wontdo` (Status + Conclusion Date + note), `checklist` (append or `--check` a to-do; prints open count and oldest age) and `stale --days N`. Prod-gated and Human Only steps collect in one checklist task per repo / project+kind; chief files the prod release ask at 5 open items or a 14-day-old one. `zen-telemetry` keeps sinks on one rolling task (`sink-task`, `entry add|close`; report `checklist` closes an entry at a 50% week-over-week drop). The Monday `board-sweep` zen-report job has chief file one cockpit Won't Do/fold ask from `zen-board stale`.
+Pages updated: architecture/agent-telemetry.md

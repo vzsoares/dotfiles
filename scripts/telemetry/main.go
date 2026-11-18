@@ -6,6 +6,8 @@
 //	zen-telemetry report [--days 7] [--slow 30s] [--json] [--due]
 //	zen-telemetry filed <week> <sink-key> <task-id>
 //	zen-telemetry mark-done <week>
+//	zen-telemetry sink-task [<task-id> [--fold <task-id>]...]
+//	zen-telemetry entry add|close <sink-key>
 //
 // Storage: $ZEN_FLOW_DB, else <vault>/config/zen-flow.db (vault from
 // ~/.claude/second-brain.json). Exit codes: 0 ok, 1 error, 2 usage,
@@ -18,8 +20,18 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
+
+type multiFlag []string
+
+func (m *multiFlag) String() string { return strings.Join(*m, ",") }
+
+func (m *multiFlag) Set(v string) error {
+	*m = append(*m, strings.TrimPrefix(v, "#"))
+	return nil
+}
 
 var weekRe = regexp.MustCompile(`^\d{4}-W\d{2}$`)
 
@@ -28,13 +40,16 @@ func main() {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, `usage: zen-telemetry <hook | import | report | filed | mark-done> [flags]
+	fmt.Fprintln(w, `usage: zen-telemetry <hook | import | report | filed | mark-done | sink-task | entry> [flags]
   hook                                   record one hook payload from stdin; always exits 0
   import [--days 31] [--dry-run]         one-time import from ~/.claude/projects transcripts
   report [--days 7] [--slow 30s] [--json] [--due]
                                          time-sink report; --due exits 10 if this week is done
   filed <week> <sink-key> <task-id>      record a task filed for a sink
-  mark-done <week>                       close the week's review`)
+  mark-done <week>                       close the week's review
+  sink-task [<task-id> [--fold <id>]...] print or set the rolling sink task; --fold
+                                         opens entries for the sinks filed as <id>
+  entry add|close <sink-key>             mark a sink's checklist item open or ticked`)
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
@@ -94,6 +109,37 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now time.Time
 			return 2
 		}
 		if err := runMarkDone(home, args[1], now); err != nil {
+			return fail(err)
+		}
+		return 0
+	case "sink-task":
+		fs := flag.NewFlagSet("sink-task", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		var fold multiFlag
+		fs.Var(&fold, "fold", "fold the sinks filed as this task id (repeatable)")
+		if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
+			if fs.Parse(args[2:]) != nil || fs.NArg() != 0 {
+				return 2
+			}
+			if err := runSinkTask(home, strings.TrimPrefix(args[1], "#"), fold, stdout, now); err != nil {
+				return fail(err)
+			}
+			return 0
+		}
+		if len(args) != 1 {
+			usage(stderr)
+			return 2
+		}
+		if err := runSinkTask(home, "", nil, stdout, now); err != nil {
+			return fail(err)
+		}
+		return 0
+	case "entry":
+		if len(args) != 3 || (args[1] != "add" && args[1] != "close") || args[2] == "" {
+			usage(stderr)
+			return 2
+		}
+		if err := runEntry(home, args[1], args[2], stdout, now); err != nil {
 			return fail(err)
 		}
 		return 0

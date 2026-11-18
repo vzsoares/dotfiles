@@ -1,7 +1,7 @@
 ---
 title: Agent Tool Telemetry — zen-telemetry
 category: architecture
-updated: 2026-11-10
+updated: 2026-11-18
 related: [decision-inbox, overview]
 ---
 
@@ -31,6 +31,7 @@ and Manjaro). `./link-bin` runs `go build` into `scripts/telemetry/bin/` (gitign
 | `tool_sessions` | name, group, role, model, repo per session (import and report fill it) |
 | `telemetry_filed` | tasks chief filed per `(week, sink_key)` |
 | `telemetry_weeks` | ISO weeks whose review is done |
+| `telemetry_entries` | sinks with an open (or ticked) item on the rolling sink task |
 | `telemetry_meta` | telemetry's own schema version |
 
 The db is shared with zen-inbox, which owns `PRAGMA user_version` and creates its
@@ -89,6 +90,10 @@ fills missing session metadata, then prints:
    name), a suggested title, a `markdown` body with its job comparison, and the tasks
    filed for that key in earlier weeks.
 6. Unmapped tools by total time, so the jobs map can grow.
+7. `checklist`: the rolling sink task (`telemetry_meta` key `sink_task`), up to 3 sinks
+   with no open entry to `append` (each with its checklist `item` text), and open
+   entries to `close` because their agent time fell 50% or more against the previous
+   window of the same length (`prev > 0 && cur*2 <= prev`).
 
 - **Group key:** the tool name, or `bash:<exe>`. Exes listed under `subcommands` in
   jobs.json keep their first argument (`bash:agent-manager wait`).
@@ -103,9 +108,13 @@ fills missing session metadata, then prints:
 ## Chief's weekly step
 
 At its first start each ISO week chief runs `zen-telemetry report --due --json`. On
-exit 10 it skips. Otherwise it files the first 3 sinks with no open task yet as To Do
-tasks under #588's project, records each with `zen-telemetry filed <week> <key> <task>`,
-and runs `zen-telemetry mark-done <week>`, also when there are fewer than 3 sinks.
+exit 10 it skips. Otherwise, on the rolling sink task, it appends each `append` item
+(`zen-board checklist <task> "<item>"`, then `zen-telemetry entry add <key>`) and ticks
+each `close` (`zen-board checklist <task> "<match>" --check`, then `zen-telemetry entry
+close <key>`), then runs `zen-telemetry mark-done <week>`. Items start with `<key> ·`,
+so `--check` never matches a longer key. `zen-telemetry sink-task <id> --fold <old>`
+sets the rolling task and opens entries for the sinks `filed` under an old per-sink
+task (how #760 folds in); `filed` and per-sink tasks are the pre-checklist history.
 
 ## Scale
 

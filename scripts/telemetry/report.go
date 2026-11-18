@@ -51,6 +51,7 @@ type Report struct {
 	Background []KeyCount  `json:"background"`
 	Sinks      []Sink      `json:"sinks"`
 	Unmapped   []KeyTotal  `json:"unmapped"`
+	Checklist  Checklist   `json:"checklist"`
 }
 
 type SlowSection struct {
@@ -224,6 +225,15 @@ func runReport(home string, o reportOpts, stdout io.Writer, now time.Time) (int,
 		return 1, err
 	}
 	rep, err := buildReport(db, rows, jobs, o, week, from, now)
+	if err != nil {
+		return 1, err
+	}
+	prevRows, err := loadRows(db, from.Add(-time.Duration(o.Days)*24*time.Hour), from, jobs)
+	if err != nil {
+		return 1, err
+	}
+	excluded := func(key string) bool { return matchAny(jobs.Exclude, key) }
+	rep.Checklist, err = buildChecklist(db, rep, sinkTotals(rows, excluded), sinkTotals(prevRows, excluded))
 	if err != nil {
 		return 1, err
 	}
@@ -631,6 +641,22 @@ func renderMarkdown(r Report) string {
 			filed = " · filed: " + strings.Join(ids, ", ")
 		}
 		fmt.Fprintf(&b, "%d. `%s`: %s%s\n", i+1, s.Key, s.Title, filed)
+	}
+
+	c := r.Checklist
+	task := "not set (zen-telemetry sink-task <id>)"
+	if c.Task != "" {
+		task = "#" + c.Task
+	}
+	fmt.Fprintf(&b, "\n## Sink checklist\n\nRolling task: %s\n\n", task)
+	for _, a := range c.Append {
+		fmt.Fprintf(&b, "- append: %s\n", a.Item)
+	}
+	for _, x := range c.Close {
+		fmt.Fprintf(&b, "- close: `%s` %s -> %s (-%.1f%%)\n", x.Key, fmtDur(x.PrevMS), fmtDur(x.CurMS), x.DropPct)
+	}
+	if len(c.Append)+len(c.Close) == 0 {
+		b.WriteString("Nothing to change.\n")
 	}
 
 	b.WriteString("\n## Unmapped tools\n\nNot in any job in jobs.json, by total time.\n\n")

@@ -18,7 +18,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
-| `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, add, note, priority, relate. |
+| `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, wontdo, add, note, priority, relate, checklist, stale. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees, `branch-model` drift and `hooks-path` repos that skip the global pre-push hook. |
 | `lock.sh` | `zen-lock` | `zen-lock <name> [--wait SECS] -- <cmd>` runs cmd holding `~/.cache/zen/<name>.lock` (mkdir, owner file, released on exit/INT/TERM; stale owner taken over; a takeover guard left by a killed waiter expires after 60 s or when its pid dies; exit 75 on timeout). `status <name>` (also reports a leftover guard), `break <name>` (also removes it). Tests: `bash scripts/test_lock.sh`. |
 | `resume-watch.sh` | `zen-resume-watch` | Always-on watcher in chief's `resume-watch` terminal: every minute revives a dead, unarchived `chief` (at most once per 5 min); every 5 min sends `agent-manager send` "limit has reset" to running claude sessions whose screen shows a usage limit, once a haiku probe passes (re-probed every 10 min; a passing probe at first sight ignores the screen); a failed send is retried at the next 3 scans without a probe, then dropped. `--once` runs one pass; `ZEN_RESUME_PROBE_WAIT` sets the probe interval; `ZEN_RESUME_STATE=<dir>` keeps the seen/pending state across runs. Tests: `bash scripts/test_resume_watch.sh`. |
@@ -31,7 +31,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `doc.sh` | `zen-doc` | Adds PDFs/docs to the second-brain vault as Markdown (markitdown/docling) and refreshes the qmd index. |
 | `wrapup.sh` | `zen-wrapup` | SessionEnd hook: digests the transcript and runs the `wrapup` skill headless (memories, vault session log, consolidation). |
 | `chief.py` | `zen-chief` | `zen-chief "<message>"` queues a message to the one live, unarchived session named `chief` (`agent-manager send --from zenha`) and prints the message id; `--status <id>` prints queued/held/delivered/dropped/answered; `--json`. Exit 1: no live chief, several, or agent-manager refused. The `zen-inbox watch` panel (`c`) runs it. Tests: `uv run scripts/test_chief.py`. |
-| `report.py` | `zen-report` | Chief's scheduled routines (06h/12h/18h work reports, Monday survey), run by the `launchd/` agent `local.zen.report` every 15 min. `tick` delivers each due job through `zen-chief "[zen-report] <job> <slot>: <prompt>"`; `status [--json]`; `run <job> [--force]`. Schedule: `zen.json` `report.jobs` (machine override in `~/.config/zen/config.json`). A daily slot is due until `window_until`, only the latest runs after a wake (the rest `stale`), an undelivered one is `missed` with a banner. State, `report.log`, `launchd.log` in `~/.cache/zen/report/`; `ZEN_REPORT_NOW` pins the clock. Install: `launchd/link` (macOS; `--uninstall`). Tests: `uv run scripts/test_report.py`. |
+| `report.py` | `zen-report` | Chief's scheduled routines (06h/12h/18h work reports, Monday survey and board sweep), run by the `launchd/` agent `local.zen.report` every 15 min. `tick` delivers each due job through `zen-chief "[zen-report] <job> <slot>: <prompt>"`; `status [--json]`; `run <job> [--force]`. Schedule: `zen.json` `report.jobs` (machine override in `~/.config/zen/config.json`). A daily slot is due until `window_until`, only the latest runs after a wake (the rest `stale`), an undelivered one is `missed` with a banner. State, `report.log`, `launchd.log` in `~/.cache/zen/report/`; `ZEN_REPORT_NOW` pins the clock. Install: `launchd/link` (macOS; `--uninstall`). Tests: `uv run scripts/test_report.py`. |
 | `bell.sh` | `zen-bell` | Plays a feedback sound / desktop notification, unless the terminal is focused. `--chief` (Stop hook): acts only when `$AGENT_MANAGER_SESSION_ID` is the unarchived `chief` session, and then banners even with `bell.enabled=false` (no sound). Tests: `bash scripts/test_bell.sh`. |
 | `config.sh` | `zen-config` | Reads personal settings from `zen.json` (+ untracked `~/.config/zen/config.json`). |
 | `run.sh` | — | Fuzzy picker that lists & runs the scripts in this dir (and aliases). |
@@ -201,14 +201,21 @@ zen-board add <title> --project P [--inbox] [--human-only]   # prints the new ID
 zen-board priority <task> low|medium|none         # refuses High and tasks already High (exit 2)
 zen-board relate <task> <task>...                 # adds to Related Tasks, keeps old links
 zen-board note <task> <text>                      # appends **YYYY-MM-DD:** text
+zen-board wontdo <task> --note TEXT               # Won't Do + Conclusion Date, then the note
+zen-board checklist <task> <item> [--check]       # append a to-do (or tick the open one
+                                                  #   starting with <item>); prints open
+                                                  #   count and oldest open item's age
+zen-board stale [--days 14] [--json]              # In Progress/To Do/Blocked whose newest
+                                                  #   dated note or checklist item (or
+                                                  #   creation) is N+ days old
 ```
 `<task>` is `570`, `#570`, a page URL or a page UUID. `--json` lists `related` as
 page UUIDs (no dashes) and `priority` as null when unset. Calls the Notion REST API
 (`Notion-Version: 2025-09-03`) on the vault's `board.tasks_data_source`; every ID
 comes from the vault `config/zen-flow.json`. `NOTION_TOKEN` is read from the env,
 else from the `export NOTION_TOKEN=` line in `~/.zshrc.local`. Exit 0 ok · 1 API ·
-2 usage or not found · 3 token/config missing. Block, reopen, triage and Won't Do
-stay on the Notion MCP (zen-flow skill).
+2 usage or not found · 3 token/config missing. Block, reopen and triage stay on the
+Notion MCP (zen-flow skill).
 ### zen-telemetry
 ```
 zen-telemetry hook                              # PostToolUse/PostToolUseFailure hook; reads stdin, always exits 0
@@ -216,6 +223,9 @@ zen-telemetry import [--days 31] [--dry-run]    # one-time import from ~/.claude
 zen-telemetry report [--days 7] [--slow 30s] [--json] [--due]   # --due: exit 10 if this week is done
 zen-telemetry filed <week> <sink-key> <task-id> # chief records a filed task
 zen-telemetry mark-done <week>                  # chief closes the week
+zen-telemetry sink-task [<id> [--fold <id>]...] # print/set the rolling sink task; --fold
+                                                #   opens entries for an old task's sinks
+zen-telemetry entry add|close <sink-key>        # a sink's checklist item was appended/ticked
 ```
 A Go module in `scripts/telemetry/` (modernc sqlite, no cgo), built by `./link-bin` to
 `scripts/telemetry/bin/` (gitignored), because it runs on every tool call. It logs

@@ -245,7 +245,7 @@ func TestReportMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	md := out.String()
-	order := []string{"## Calls over 30.0s", "## Time per tool", "## Same-job comparisons", "Background runs", "## Time-sink candidates", "## Unmapped tools"}
+	order := []string{"## Calls over 30.0s", "## Time per tool", "## Same-job comparisons", "Background runs", "## Time-sink candidates", "## Sink checklist", "## Unmapped tools"}
 	last := -1
 	for _, h := range order {
 		i := strings.Index(md, h)

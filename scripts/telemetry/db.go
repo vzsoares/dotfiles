@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS telemetry_filed (
 	filed_at TEXT NOT NULL,
 	PRIMARY KEY (week, sink_key)
 );
+CREATE TABLE IF NOT EXISTS telemetry_entries (
+	sink_key  TEXT PRIMARY KEY,
+	added_at  TEXT NOT NULL,
+	closed_at TEXT NOT NULL DEFAULT ''
+);
 INSERT OR IGNORE INTO telemetry_meta (key, value) VALUES ('schema_version', '` + schemaVersion + `');
 `
 

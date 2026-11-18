@@ -17,7 +17,7 @@ import importlib.util
 import json
 import sys
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -519,6 +519,161 @@ def test_relate_skips_self_and_refuses_truncated_links(fake: Fake) -> None:
     assert code == board.EXIT_API
     assert "too many" in err
     assert len(fake.calls) == 3
+
+
+# == wontdo / checklist / stale ============================================= #
+
+
+def days_ago(n: int) -> str:
+    return (date.today() - timedelta(days=n)).isoformat()
+
+
+def todo(text_: str, checked: bool = False, age: int = 0, bid: str = "b") -> Json:
+    return {
+        "id": bid,
+        "type": "to_do",
+        "created_time": f"{days_ago(age)}T10:00:00.000Z",
+        "to_do": {"rich_text": [{"plain_text": text_}], "checked": checked},
+    }
+
+
+def para(text_: str) -> Json:
+    return {"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": text_}]}}
+
+
+def test_wontdo_sets_status_date_then_note(fake: Fake) -> None:
+    fake.push(results(page(12, board.TODO)))
+    fake.push(page(12, board.WONT_DO))
+    fake.push({})
+    code, out, _ = run("wontdo", "12", "--note", "folded into #697")
+    assert code == 0
+    assert out.startswith(f"#12  {board.WONT_DO}")
+    _, path, body = fake.calls[1]
+    assert path == f"/pages/{PAGE}"
+    assert body["properties"] == {
+        board.STATUS: {"select": {"name": board.WONT_DO}},
+        board.CONCLUSION: {"date": {"start": TODAY}},
+    }
+    assert fake.calls[2][1] == f"/blocks/{PAGE}/children"
+    assert note_text(fake.calls[2][2])[0] == [f"{TODAY}:", " folded into #697"]
+
+
+def test_wontdo_needs_a_note_before_any_call(fake: Fake) -> None:
+    assert run("wontdo", "12")[0] == board.EXIT_USAGE
+    assert run("wontdo", "12", "--note", "  ")[0] == board.EXIT_USAGE
+    assert fake.calls == []
+
+
+def test_checklist_appends_and_reports_open_count_and_oldest(fake: Fake) -> None:
+    fake.push(results(page(697, board.TODO)))
+    fake.push({})
+    fake.push(page(697, board.TODO))
+    fake.push(
+        results(
+            todo("old", age=20),
+            todo("done", checked=True, age=40),
+            para(f"{TODAY}: note"),
+            cursor="c2",
+        )
+    )
+    fake.push(results(todo("new item", age=0)))
+    code, out, _ = run("checklist", "697", "new item")
+    assert (code, out.strip()) == (0, "#697  open 2  oldest 20d")
+    _, path, body = fake.calls[1]
+    assert path == f"/blocks/{PAGE}/children"
+    (block,) = board.arr(body["children"])
+    to_do = board.obj(board.obj(block).get("to_do"))
+    assert to_do["checked"] is False
+    assert board.obj(board.arr(to_do["rich_text"])[0])["text"] == {
+        "content": "new item"
+    }
+    assert fake.calls[4][1].endswith("start_cursor=c2")
+
+
+def test_checklist_json_on_empty_list(fake: Fake) -> None:
+    fake.push(results(page(697, board.TODO)))
+    fake.push({})
+    fake.push(page(697, board.TODO))
+    fake.push(results())
+    code, out, _ = run("checklist", "697", "x", "--json")
+    assert code == 0
+    assert json.loads(out) == {"id": 697, "open": 0, "oldest_days": None, "checked": ""}
+
+
+def test_checklist_check_ticks_the_open_match(fake: Fake) -> None:
+    fake.push(results(page(900, board.TODO)))
+    fake.push(
+        results(
+            todo("bash:python3 done", checked=True, bid="b0"),
+            todo("bash:python3 · 2h", age=8, bid="b1"),
+            todo("bash:for · 1h", age=3, bid="b2"),
+        )
+    )
+    fake.push({})
+    fake.push(page(900, board.TODO))
+    fake.push(results(todo("bash:for · 1h", age=3, bid="b2")))
+    code, out, _ = run("checklist", "900", "bash:python3", "--check", "--json")
+    assert code == 0
+    assert json.loads(out) == {
+        "id": 900,
+        "open": 1,
+        "oldest_days": 3,
+        "checked": "bash:python3 · 2h",
+    }
+    assert fake.calls[2][:2] == ("PATCH", "/blocks/b1")
+    assert fake.calls[2][2] == {"to_do": {"checked": True}}
+
+
+def test_checklist_check_without_match_exits_2(fake: Fake) -> None:
+    fake.push(results(page(900, board.TODO)))
+    fake.push(results(todo("bash:for", checked=True)))
+    assert run("checklist", "900", "bash:for", "--check")[0] == board.EXIT_USAGE
+
+
+def created(n: int) -> str:
+    return f"{days_ago(n)}T00:00:00.000Z"
+
+
+def test_stale_filters_by_newest_dated_note(fake: Fake) -> None:
+    fresh = page(1, board.TODO, page_id="01" * 16, created=created(60))
+    stale_ = page(2, board.BLOCKED, page_id="02" * 16, created=created(60))
+    silent = page(3, board.IN_PROGRESS, page_id="03" * 16, created=created(30))
+    young = page(4, board.TODO, page_id="04" * 16, created=created(3))
+    fake.push(results(fresh, stale_, silent, young))
+    fake.push(results(para(f"{days_ago(40)}: old"), para(f"{days_ago(2)}: new")))
+    fake.push(
+        results(
+            para(f"{days_ago(20)}: last"),
+            para(f"see {days_ago(1)}: not a dated note"),
+            todo(f"{days_ago(1)}: a to-do, not a note", age=25),
+        )
+    )
+    fake.push(results())
+    code, out, _ = run("stale", "--days", "14", "--json")
+    assert code == 0
+    rows = json.loads(out)
+    assert [(r["id"], r["last_note"], r["age_days"]) for r in rows] == [
+        (3, None, 30),
+        (2, days_ago(20), 20),
+    ]
+    names = statuses_in(fake.calls[0][2]["filter"])
+    assert names == [board.IN_PROGRESS, board.TODO, board.BLOCKED]
+    assert len(fake.calls) == 4  # the young page is never fetched
+
+
+def test_stale_counts_a_new_checklist_item_as_activity(fake: Fake) -> None:
+    fake.push(results(page(697, board.TODO, created=created(40))))
+    fake.push(results(para(f"{days_ago(30)}: old"), todo("step", age=2)))
+    assert run("stale", "--days", "14")[1].strip() == "nothing stale"
+
+
+def test_stale_boundary_is_inclusive(fake: Fake) -> None:
+    fake.push(results(page(5, board.TODO, created=created(30))))
+    fake.push(results(para(f"{days_ago(14)}: x")))
+    assert run("stale", "--days", "14")[1].startswith("#5")
+    fake.push(results(page(5, board.TODO, created=created(30))))
+    fake.push(results(para(f"{days_ago(13)}: x")))
+    assert run("stale", "--days", "14")[1].strip() == "nothing stale"
 
 
 # == Token and config ======================================================== #

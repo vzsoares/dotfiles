@@ -4,3 +4,4 @@ tmp
 .claude/settings.local.json
 .DS_Store
 scripts/telemetry/bin/
+scripts/telemetry/telemetry

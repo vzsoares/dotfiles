@@ -37,6 +37,10 @@
       {
         "id": "survey", "at": "09:07", "weekday": "mon", "window_until": "next-week",
         "prompt": "Run the weekly refresh of the uncensored-model value survey."
+      },
+      {
+        "id": "board-sweep", "at": "09:15", "weekday": "mon", "window_until": "next-week",
+        "prompt": "Weekly board sweep: run `zen-board stale --days 14 --json` and file ONE cockpit zen-inbox ask listing every stale task (number, title, age, last note) with a Won't Do / fold / keep choice per task. Nothing stale: no ask. Apply the answers with `zen-board wontdo <id> --note` or a fold note."
       }
     ]
   },

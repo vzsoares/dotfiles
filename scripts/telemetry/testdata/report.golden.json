@@ -413,5 +413,26 @@
       "calls": 2,
       "total_ms": 1500
     }
-  ]
+  ],
+  "checklist": {
+    "task": "",
+    "append": [
+      {
+        "key": "bash:bun",
+        "total_ms": 105000,
+        "item": "bash:bun · 1m45s over 7 days (2026-W46)"
+      },
+      {
+        "key": "bash:curl",
+        "total_ms": 60000,
+        "item": "bash:curl · 1m00s over 7 days (2026-W46)"
+      },
+      {
+        "key": "bash:agent-manager wait",
+        "total_ms": 31000,
+        "item": "bash:agent-manager wait · 31.0s over 7 days (2026-W46)"
+      }
+    ],
+    "close": []
+  }
 }

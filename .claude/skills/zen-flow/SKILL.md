@@ -46,9 +46,9 @@ Never write project names or Notion IDs into this file or any other public repo 
 |---|---|
 | *(empty)* | Inbox — untriaged idea. Leave alone unless triaging. |
 | `🧱 To Do` | Committed, not started |
-| `In Progress` | Being worked on now |
+| `In Progress` | A live session is working it now; otherwise it goes back to `🧱 To Do` |
 | `✅ Done` | Finished — always set `Conclusion Date` = today |
-| `🗑️ Won't Do` | Dropped |
+| `🗑️ Won't Do` | Dropped — always set `Conclusion Date` = today (`zen-board wontdo`) |
 | `Blocked` | **Blocked on someone else** (a colleague, a partner, an external approval). The task page says who and since when. Not the user's own pending steps — those are `🧱 To Do` + `Human Only`. |
 
 ### Priority
@@ -69,11 +69,10 @@ The relation is two-way, so one write links both pages.
   visual and device checks, steps on another machine, messages or calls to people,
   creating or typing secrets and API keys, logins to outside dashboards and apps,
   purchases, irreversible destruction (any drop or delete of data or stacks), CMS edits
-  that need the backoffice UI. When a session
-  leaves such steps behind, create one task per step with this tag so the board says
-  what to do next. One task with a checklist is fine when the steps share a kind or a
-  release (device checks, a prod rollout); append new items to an open checklist task
-  instead of creating a new one.
+  that need the backoffice UI. Human Only steps a session leaves behind append to
+  one open checklist task per project and kind (device checks, secrets, a prod
+  rollout) with `zen-board checklist <id> "<step>"`; never one task per step. Create
+  the checklist task only when none is open for that project and kind.
 - `Human Approval` — a step an agent can run from this machine with credentials it
   already has, once the user approves: pushes, remote branch deletes, edits to
   `.claude/settings.json` or permissions, tool installs, `gh` repo settings, prod
@@ -85,18 +84,39 @@ The relation is two-way, so one write links both pages.
   ask's commands in it.
 - `Has Data` — the task page carries data/notes worth reading before starting.
 
+### Checklist tasks
+
+Three kinds of work collect in one open task each instead of a task per item; items
+are to-do blocks added with `zen-board checklist <id> "<item>"`, which prints the open
+count and the oldest open item's age.
+
+1. **Prod release** — prod-gated steps (a push, tag, release or deploy to
+   `prod`/`main`/`master`) append to the repo's open "Next <repo> prod release
+   (checklist)" task; create it only when none is open. When
+   it holds 5+ open items or its oldest open item is 14+ days old, chief files the prod
+   release ask (Write permissions).
+2. **Human Only** — one per project and kind (Tags).
+3. **Telemetry sinks** — one rolling task (Telemetry).
+
+Weekly sweep: the `board-sweep` zen-report job (Monday) has chief run `zen-board stale
+--days 14 --json` and file ONE cockpit ask listing every open task with no dated note
+for 14 days, each with Won't Do / fold / keep. Nothing stale, no ask.
+
 ### Operations
 
-**check, next, start, done, add and note run `zen-board` first** (Bash; see
+**check, next, start, done, wontdo, add and note run `zen-board` first** (Bash; see
 `scripts/README.md`): `zen-board check`, `next`, `start <id>`,
-`done <id> --note "…"`, `add "<title>" --project <name or group> [--inbox]
+`done <id> --note "…"`, `wontdo <id> --note "<why>"` (Status + Conclusion Date + note),
+`checklist <id> "<item>" [--check]` (append, or tick the open item starting with
+`<item>`), `stale --days N --json` (open tasks whose newest dated note or checklist
+item, or creation, is N+ days old), `add "<title>" --project <name or group> [--inbox]
 [--human-only] [--human-approval] [--priority low|medium] [--related <id>]...`
 (prints the new ID),
 `priority <id> low|medium|none`, `relate <id> <id>...` (adds to the existing links,
 never drops one), `note <id> "…"`. It reads the IDs from the vault
 config and `NOTION_TOKEN` from the env or `~/.zshrc.local`. When it exits non-zero
 (1 API, 2 not found, 3 token/config missing), fall back to the MCP steps below.
-Triage, block, reopen, title/body edits and Won't Do stay on MCP.
+Triage, block, reopen and title/body edits stay on MCP.
 
 - **check** — list open tasks (In Progress, To Do, Blocked, empty) with Priority, grouped by project:
   ```sql
@@ -113,7 +133,8 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
   separately ("waiting on …") and never recommended; nudge if blocked for more than a week.
 - **block** — set `Status` = `Blocked` and append "Aguardando <quem> desde <data>" to the
   page. When the user says the blocker cleared, move it back to `In Progress`.
-- **start** — set `Status` = `In Progress`.
+- **start** — set `Status` = `In Progress`, only while a live session works it; when
+  that session ends or parks the task, set it back to `🧱 To Do`.
 - **done** — set `Status` = `✅ Done` and `date:Conclusion Date:start` = today (ISO date),
   then **note** with the release tag and commits.
 - **add** — create a page in the Tasks data source with title, `☢️ Projeto` (ask if
@@ -123,6 +144,8 @@ Triage, block, reopen, title/body edits and Won't Do stay on MCP.
 - **relate** — `zen-board relate <id> <id>...` links tasks in Related Tasks. On MCP,
   read the existing relation first and write the union.
 - **triage** — walk Inbox items one at a time; for each propose To Do / Won't Do / leave.
+- **wontdo** — `zen-board wontdo <id> --note "<why>"`: `Status` = `🗑️ Won't Do` and
+  `Conclusion Date` = today, then the note. Never Won't Do without the date.
 - **id** — a task's numeric `userDefined:ID`; create-pages doesn't return it and
   `zen-commit --task` needs it. Query with params `["%<page id: 32 hex, no dashes>%"]`:
   ```sql
@@ -196,7 +219,11 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   so in one line. It never waits on sessions, merges or cuts dev releases; a prod
   action it runs only after an approved ask (Write permissions). After an agent-manager restart it revives the
   orchestrator and the watcher. At its first start each ISO week it runs the telemetry
-  review (see Telemetry). Its chat holds only replies to what the user says there, plus
+  review (see Telemetry). It keeps the checklist tasks (Board → Checklist tasks): it
+  appends each Human Only and prod-gated step from the orchestrator's line to the open
+  checklist task, files the prod release ask when that task reaches 5 open items or a
+  14-day-old item, and answers the Monday `board-sweep` routine with one cockpit ask.
+  It keeps In Progress true: a task whose session is gone goes back to To Do. Its chat holds only replies to what the user says there, plus
   the start-of-session sweep findings, board recommendation and approvals. It leaves a
   `zen-inbox note` (Decision inbox) only for what the user asked to hear back about,
   one per approved task when it finishes (from the orchestrator's line: task, tag,
@@ -221,6 +248,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   chief's chat, then adopts the worker chief starts (zen-await, merge as usual). A stuck Sonnet worker gets one
   relaunch on Opus on the same branch; anything else becomes a gate in the inbox
   (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
+  It passes a worker's Human Only and prod-gated steps to chief for the checklist
+  tasks and never files a task per step.
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
   trailer), never pushes or releases (a prod push it needs goes in its final
   message), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
@@ -236,7 +265,7 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 - `zen-await <session>...` (orchestrator, run_in_background): waits until a worker
   stops; 0 done marker, 10 escalation, 11 idle, 20 dead, 124 timeout.
 - `zen-report tick|status|run <job>` (launchd agent, every 15 min): queues chief's scheduled
-  routines (06h/12h/18h reports, Monday survey) via `zen-chief`; the schedule lives in
+  routines (06h/12h/18h reports, Monday survey and board sweep) via `zen-chief`; the schedule lives in
   zen.json `report.jobs`.
 - `zen-gate [--base dev]` (worker, before `WORKER_DONE`): banned ways to get green
   in the branch diff; exceptions in `.zen-gate-allow`.
@@ -265,11 +294,14 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 A `PostToolUse`/`PostToolUseFailure` hook (`zen-telemetry hook`, async) logs every tool
 call of an agent-manager session into `zen-flow.db` (`tool_*` tables; secrets redacted,
 MCP inputs as key names only). Chief, at its first start each ISO week, runs
-`zen-telemetry report --due --json`: exit 10 means done, skip. Otherwise it files the
-first 3 `sinks` with no open task yet as To Do tasks under #588's project (title = the
-sink's `title`, body = its `markdown`), records each with `zen-telemetry filed <week>
-<sink key> <task id>`, then runs `zen-telemetry mark-done <week>`, also when there
-are fewer than 3 sinks or no data. The same-job map is `scripts/telemetry/jobs.json`.
+`zen-telemetry report --due --json`: exit 10 means done, skip. Sinks live in one rolling
+task (`zen-telemetry sink-task` prints its id; set it with `zen-telemetry sink-task <id>
+[--fold <old task id>]`, which opens entries for the sinks filed under the old task and
+prints them). From the report's `checklist`: each `append` item goes on the rolling task
+with `zen-board checklist <task> "<item>"`, then `zen-telemetry entry add <key>`; each
+`close` (agent time down 50%+ on the week before) is ticked with `zen-board checklist
+<task> "<match>" --check`, then `zen-telemetry entry close <key>`. Then it runs
+`zen-telemetry mark-done <week>`, also when there is nothing to change or no data. The same-job map is `scripts/telemetry/jobs.json`.
 
 ### Decision inbox
 

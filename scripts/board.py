@@ -30,6 +30,9 @@
 #      zen-board priority <task> low|medium|none [--json]
 #      zen-board relate <task> <task>... [--json]
 #      zen-board note <task> <text> [--json]
+#      zen-board wontdo <task> --note TEXT [--json]
+#      zen-board checklist <task> <item> [--check] [--json]
+#      zen-board stale [--days N] [--json]
 #
 #  OPTIONS
 #      <task>         570, #570, a Notion page URL, or a page UUID.
@@ -40,7 +43,11 @@
 #                     both tags are set.
 #      --priority P   add: set Priority (low or medium; High is the user's).
 #      --related T    add: link T in Related Tasks (repeatable).
-#      --note TEXT    done: append a dated note after the status change.
+#      --note TEXT    done: append a dated note after the status change;
+#                     wontdo: required, the reason.
+#      --check        checklist: tick the open item starting with <item>
+#                     instead of appending one.
+#      --days N       stale: notes older than N days (default 14) count as stale.
 #      --json         Print the outcome as JSON.
 #
 #  DESCRIPTION
@@ -55,6 +62,11 @@
 #      priority  sets Low, Medium or none; refuses High, and refuses to change
 #              a task that is already High (exit 2)
 #      relate  links the tasks in Related Tasks, keeping the existing links
+#      wontdo  Status = Won't Do and Conclusion Date = today, then the note
+#      checklist  appends a to-do item; prints the task, its open items and
+#              the oldest open item's age in days
+#      stale   In Progress, To Do and Blocked tasks whose newest dated note or
+#              checklist item (or creation, with none) is N or more days old
 #
 #      NOTION_TOKEN comes from the env, else from ~/.zshrc.local. Board and
 #      project IDs come from the vault config/zen-flow.json, never this repo.
@@ -109,6 +121,7 @@ IN_PROGRESS = "In Progress"
 TODO = "🧱 To Do"
 BLOCKED = "Blocked"
 DONE = "✅ Done"
+WONT_DO = "🗑️ Won't Do"
 INBOX = ""
 HUMAN_ONLY = "Human Only"
 HUMAN_APPROVAL = "Human Approval"
@@ -487,6 +500,134 @@ def append_note(client: Notion, page_id: str, note: str) -> None:
     client.request("PATCH", f"/blocks/{page_id}/children", {"children": [block]})
 
 
+def conclude(client: Notion, cfg: Config, page_id: str, status: str) -> Task:
+    props: Json = {
+        STATUS: {"select": {"name": status}},
+        CONCLUSION: {"date": {"start": date.today().isoformat()}},
+    }
+    return set_status(client, cfg, page_id, props)
+
+
+def children(client: Notion, page_id: str) -> list[Json]:
+    blocks: list[Json] = []
+    cursor = ""
+    while True:
+        path = f"/blocks/{page_id}/children?page_size=100"
+        if cursor:
+            path += f"&start_cursor={cursor}"
+        res = client.request("GET", path)
+        blocks.extend(obj(b) for b in arr(res.get("results")))
+        cursor = text(res.get("next_cursor"))
+        if res.get("has_more") is not True or not cursor:
+            return blocks
+
+
+def plain(block: Json) -> str:
+    body = obj(block.get(text(block.get("type"))))
+    return "".join(
+        text(obj(t).get("plain_text")) or text(obj(obj(t).get("text")).get("content"))
+        for t in arr(body.get("rich_text"))
+    )
+
+
+def day_of(iso: str) -> date | None:
+    try:
+        return date.fromisoformat(iso[:10])
+    except ValueError:
+        return None
+
+
+@dataclass
+class Checklist:
+    id: int | None
+    open: int
+    oldest_days: int | None
+    checked: str
+
+
+def open_items(blocks: list[Json]) -> list[Json]:
+    return [
+        b
+        for b in blocks
+        if b.get("type") == "to_do" and obj(b.get("to_do")).get("checked") is not True
+    ]
+
+
+def checklist_item(
+    client: Notion, cfg: Config, page_id: str, item: str, check: bool
+) -> Checklist:
+    checked = ""
+    if check:
+        match = next(
+            (
+                b
+                for b in open_items(children(client, page_id))
+                if plain(b).startswith(item)
+            ),
+            None,
+        )
+        if match is None:
+            raise BoardError(EXIT_USAGE, f"no open item starting with {item!r}")
+        checked = plain(match)
+        client.request(
+            "PATCH", f"/blocks/{text(match.get('id'))}", {"to_do": {"checked": True}}
+        )
+    else:
+        rich_text = [{"type": "text", "text": {"content": item}}]
+        block = {
+            "object": "block",
+            "type": "to_do",
+            "to_do": {"rich_text": rich_text, "checked": False},
+        }
+        client.request("PATCH", f"/blocks/{page_id}/children", {"children": [block]})
+    task = parse_task(client.request("GET", f"/pages/{page_id}"), cfg)
+    items = open_items(children(client, page_id))
+    days = [d for d in (day_of(text(b.get("created_time"))) for b in items) if d]
+    oldest = (date.today() - min(days)).days if days else None
+    return Checklist(task.id, len(items), oldest, checked)
+
+
+DATED = re.compile(r"(\d{4}-\d{2}-\d{2}):")
+STALE_STATUSES = [IN_PROGRESS, TODO, BLOCKED]
+
+
+def newest_note(blocks: list[Json]) -> date | None:
+    """Newest dated note, or checklist item added, so a live checklist isn't stale."""
+    dates = [
+        d
+        for b in blocks
+        if b.get("type") == "paragraph" and (m := DATED.match(plain(b)))
+        for d in [day_of(m.group(1))]
+        if d
+    ] + [
+        d
+        for b in blocks
+        if b.get("type") == "to_do"
+        for d in [day_of(text(b.get("created_time")))]
+        if d
+    ]
+    return max(dates) if dates else None
+
+
+def stale_tasks(client: Notion, cfg: Config, days: int) -> list[tuple[Task, str, int]]:
+    """(task, newest note date or "", age in days), oldest first."""
+    status_filter: Json = {
+        "or": [{"property": STATUS, "select": {"equals": s}} for s in STALE_STATUSES]
+    }
+    today = date.today()
+    out: list[tuple[Task, str, int]] = []
+    for task in (parse_task(p, cfg) for p in query(client, cfg, status_filter)):
+        created = day_of(task.created) or today
+        # A note can't predate the page, so a young page can't be stale.
+        if (today - created).days < days:
+            continue
+        note = newest_note(children(client, task.page_id))
+        age = (today - (note or created)).days
+        if age >= days:
+            out.append((task, note.isoformat() if note else "", age))
+    return sorted(out, key=lambda t: -t[2])
+
+
 def agent_priority(value: str) -> str:
     """Option name for `value`; "" clears. High is the user's to set."""
     key = value.strip().lower()
@@ -648,15 +789,7 @@ def done(
     try:
         client, cfg = connect()
         page_id = resolve(client, cfg, task)
-        updated = set_status(
-            client,
-            cfg,
-            page_id,
-            {
-                STATUS: {"select": {"name": DONE}},
-                CONCLUSION: {"date": {"start": date.today().isoformat()}},
-            },
-        )
+        updated = conclude(client, cfg, page_id, DONE)
         if note:
             append_note(client, page_id, note)
     except BoardError as exc:
@@ -737,6 +870,74 @@ def note_(task: str, body: str, as_json: bool = JSON_OPT) -> None:
         emit({"page_id": page_id, "note": body})
     else:
         print(f"noted {task}")
+
+
+@app.command()
+def wontdo(
+    task: str,
+    note: str = typer.Option(..., "--note", help="Why it is dropped."),
+    as_json: bool = JSON_OPT,
+) -> None:
+    """Set Status = Won't Do and Conclusion Date = today, then append --note."""
+    if not note.strip():
+        raise fail(BoardError(EXIT_USAGE, "--note must say why"))
+    try:
+        client, cfg = connect()
+        page_id = resolve(client, cfg, task)
+        updated = conclude(client, cfg, page_id, WONT_DO)
+        append_note(client, page_id, note)
+    except BoardError as exc:
+        raise fail(exc) from exc
+    emit(updated.to_json()) if as_json else print(updated.line())
+
+
+@app.command()
+def checklist(
+    task: str,
+    item: str,
+    check: bool = typer.Option(False, "--check", help="Tick the open item."),
+    as_json: bool = JSON_OPT,
+) -> None:
+    """Append a to-do item (or --check one); print open count and oldest age."""
+    if not item.strip():
+        raise fail(BoardError(EXIT_USAGE, "item is empty"))
+    try:
+        client, cfg = connect()
+        page_id = resolve(client, cfg, task)
+        result = checklist_item(client, cfg, page_id, item, check)
+    except BoardError as exc:
+        raise fail(exc) from exc
+    if as_json:
+        emit(asdict(result))
+        return
+    num = f"#{result.id}" if result.id is not None else "#?"
+    oldest = f"{result.oldest_days}d" if result.oldest_days is not None else "-"
+    print(f"{num}  open {result.open}  oldest {oldest}")
+
+
+@app.command()
+def stale(
+    days: int = typer.Option(14, "--days", min=1, help="Age threshold in days."),
+    as_json: bool = JSON_OPT,
+) -> None:
+    """List open tasks with no dated note or checklist item in N days."""
+    try:
+        client, cfg = connect()
+        rows = stale_tasks(client, cfg, days)
+    except BoardError as exc:
+        raise fail(exc) from exc
+    if as_json:
+        emit(
+            [
+                {**t.to_json(), "last_note": note or None, "age_days": age}
+                for t, note, age in rows
+            ]
+        )
+        return
+    for t, note, age in rows:
+        print(f"{t.line()}  ({age}d, {'note ' + note if note else 'no note'})")
+    if not rows:
+        print("nothing stale")
 
 
 if __name__ == "__main__":

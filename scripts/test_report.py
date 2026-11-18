@@ -143,6 +143,28 @@ def test_survey_window(env: dict[str, str]) -> None:
     assert len(sent(env, "survey")) == 2
 
 
+def test_board_sweep_is_weekly_on_monday(env: dict[str, str]) -> None:
+    seed(
+        env,
+        {"board-sweep": {"slot": "2026-11-16T09:15", "result": "sent", "id": "m0"}},
+    )
+    rows = {
+        row["job"]: row
+        for row in json.loads(zr(env, f"{WED}T10:00:00", "status", "--json").stdout)
+    }
+    assert rows["board-sweep"]["next"] == "2026-11-23T09:15"
+    zr(env, f"{WED}T10:00:00", "tick")
+    assert sent(env, "board-sweep") == []
+    zr(env, "2026-11-23T09:10:00", "tick")
+    assert sent(env, "board-sweep") == []
+    zr(env, "2026-11-23T09:20:00", "tick")
+    zr(env, "2026-11-24T09:20:00", "tick")
+    msgs = sent(env, "board-sweep")
+    assert len(msgs) == 1
+    assert msgs[0].startswith("[zen-report] board-sweep 2026-11-23T09:15: ")
+    assert "zen-board stale --days 14 --json" in msgs[0]
+
+
 def test_no_live_chief_retries_then_missed(env: dict[str, str]) -> None:
     down = Path(env["FAKE_BIN"]) / "chief_down"
     down.write_text("")
