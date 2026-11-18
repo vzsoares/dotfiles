@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -89,6 +90,29 @@ func (m *Model) openNote(id string) {
 			return
 		}
 	}
+}
+
+// nextUnreadNote is the list row right after n when it is an unread note and
+// n was opened from the list.
+func (m *Model) nextUnreadNote(n inbox.Note) (inbox.Note, bool) {
+	if m.noteFrom != scList {
+		return inbox.Note{}, false
+	}
+	items := m.listItems()
+	at := slices.IndexFunc(items, func(it item) bool { return it.value == "n:"+noteValue(n) })
+	if at < 0 || at+1 >= len(items) {
+		return inbox.Note{}, false
+	}
+	id, ok := strings.CutPrefix(items[at+1].value, "n:")
+	if !ok {
+		return inbox.Note{}, false
+	}
+	for _, c := range m.snap.notes {
+		if noteValue(c) == id && c.Unread() {
+			return c, true
+		}
+	}
+	return inbox.Note{}, false
 }
 
 // leaveNote goes back to the list or the thread the note was opened from.
@@ -203,7 +227,12 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 	case "T":
 		return m, m.openRefile(n, scNote)
 	case "enter":
+		next, hasNext := m.nextUnreadNote(n)
 		cmd := m.leaveNote("", false)
+		if hasNext {
+			m.refocus("n:" + noteValue(next))
+			m.openNote(noteValue(next))
+		}
 		if n.Unread() {
 			return m, tea.Batch(cmd, m.markCmd(n.ID, false, true))
 		}

@@ -431,3 +431,40 @@ func TestOneLineRowsDropMarkdownMarkers(t *testing.T) {
 		t.Fatalf("jump list keeps markers:\n%s", jump)
 	}
 }
+
+func TestNoteEnterOpensNextUnreadElseReturnsToList(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	a := d.addNote("", "Alpha", "")
+	b := d.addNote("", "Beta", "")
+	c := d.addNote("", "Gamma", "")
+	if err := d.ib.MarkNotes([]int64{a.ID}, true); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	var order []int64
+	for _, it := range d.m.listItems() {
+		if id, ok := strings.CutPrefix(it.value, "n:"); ok {
+			n, _ := strconv.ParseInt(id, 10, 64)
+			order = append(order, n)
+		}
+	}
+	if len(order) != 3 || order[2] != a.ID {
+		t.Fatalf("list order %v, a=%d b=%d c=%d", order, a.ID, b.ID, c.ID)
+	}
+	d.m.refocus("n:" + strconv.FormatInt(order[0], 10))
+	d.keys("enter")
+	if d.m.scr != scNote || d.m.note.ID != order[0] {
+		t.Fatalf("not on the first note:\n%s", d.view())
+	}
+	d.keys("enter")
+	if d.m.scr != scNote || d.m.note.ID != order[1] {
+		t.Fatalf("next unread did not open:\n%s", d.view())
+	}
+	d.keys("enter")
+	if d.m.scr != scList {
+		t.Fatalf("next read note should return to the list:\n%s", d.view())
+	}
+	if n, _ := d.ib.Note(order[0]); n.Unread() {
+		t.Fatal("first note not marked read")
+	}
+}
