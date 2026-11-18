@@ -162,12 +162,12 @@ func (ib *Inbox) AddNote(in NoteInput) (Note, error) {
 	defer ib.mu.Unlock()
 	var id int64
 	err := ib.immediate(func() error {
-		if err := ib.exec("DELETE FROM notes WHERE read_at != '' AND read_at < ?"+
-			" AND delivery NOT IN ('sending', 'failed')",
-			Stamp(Now().Add(-KeepFor))); err != nil {
+		pruned := " FROM notes WHERE read_at != '' AND read_at < ? AND delivery NOT IN ('sending', 'failed')"
+		cutoff := Stamp(Now().Add(-KeepFor))
+		if err := ib.exec("DELETE FROM note_replies WHERE note_id IN (SELECT id"+pruned+")", cutoff); err != nil {
 			return err
 		}
-		if err := ib.exec("DELETE FROM note_replies WHERE note_id NOT IN (SELECT id FROM notes)"); err != nil {
+		if err := ib.exec("DELETE"+pruned, cutoff); err != nil {
 			return err
 		}
 		res, err := ib.conn.ExecContext(ctx, "INSERT INTO notes (task, session_id, session_name, title, body,"+
@@ -204,13 +204,17 @@ func (ib *Inbox) selNotes(where string, args ...any) ([]Note, error) {
 	if err := rows.Err(); err != nil || len(out) == 0 {
 		return out, err
 	}
-	return out, ib.loadReplies(out, where, args)
+	return out, ib.loadReplies(out)
 }
 
-// loadReplies fills Replies for the notes selNotes matched with where.
-func (ib *Inbox) loadReplies(ns []Note, where string, args []any) error {
-	rows, err := ib.conn.QueryContext(ctx, "SELECT note_id, text, replied_at FROM note_replies"+
-		" WHERE note_id IN (SELECT id FROM notes WHERE "+where+") ORDER BY id", args...)
+// loadReplies fills Replies for ns.
+func (ib *Inbox) loadReplies(ns []Note) error {
+	ids := make([]any, len(ns))
+	for i, n := range ns {
+		ids[i] = n.ID
+	}
+	rows, err := ib.conn.QueryContext(ctx, "SELECT note_id, text, replied_at FROM note_replies WHERE note_id IN (?"+
+		strings.Repeat(", ?", len(ns)-1)+") ORDER BY id", ids...)
 	if err != nil {
 		return err
 	}
