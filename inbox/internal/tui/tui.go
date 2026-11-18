@@ -1528,8 +1528,13 @@ func (m *Model) undeliveredName(sid string) string {
 }
 
 func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
-	if ok, cmd := m.keyThreadRow(k); ok && !m.inboxOpen {
-		return m, cmd
+	if m.inboxOpen && (k == "enter" || k == "a" || k == "f") {
+		m.inboxAt = m.cursor
+	}
+	if !m.inboxOpen {
+		if ok, cmd := m.keyThreadRow(k); ok {
+			return m, cmd
+		}
 	}
 	switch k {
 	case "q", "esc":
@@ -1580,9 +1585,6 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		kind, sid, _ := strings.Cut(items[m.cursor].value, ":")
-		if m.inboxOpen {
-			m.inboxAt = m.cursor
-		}
 		switch kind {
 		case "i":
 			m.inboxOpen, m.cursor = true, 0
