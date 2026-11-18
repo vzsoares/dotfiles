@@ -372,7 +372,7 @@ func (e Exec) Popup(sessionID string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+		if msg, _, _ := strings.Cut(strings.TrimSpace(stderr.String()), "\n"); msg != "" {
 			return errors.New(msg)
 		}
 		return err
