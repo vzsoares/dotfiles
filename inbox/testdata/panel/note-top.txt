@@ -2,19 +2,19 @@ cockpit · ✉ 1 unread                               quota n/a
 n1 · #707 · chief · 0s ● unread
 Long report
 
-Part 0
+## Part 0
 lorem ipsum dolor sit amet consectetur adipiscing elit sed
 do eiusmod lorem ipsum dolor sit amet con
 
-Part 1
+## Part 1
 lorem ipsum dolor sit amet consectetur adipiscing elit sed
 do eiusmod lorem ipsum dolor sit amet con
 
-Part 2
+## Part 2
 lorem ipsum dolor sit amet consectetur adipiscing elit sed
 do eiusmod lorem ipsum dolor sit amet con
 
-Part 3
+## Part 3
 ↓ 106 more
 ↑↓ · enter read · back · m mark · f reply · esc back
 ? help · ^u/^d scroll

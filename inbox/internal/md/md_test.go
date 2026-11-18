@@ -1,6 +1,7 @@
 package md
 
 import (
+	"errors"
 	"io"
 	"regexp"
 	"slices"
@@ -52,8 +53,8 @@ func TestInlineCodeHidesBackticksAndColoursOnlyTheCode(t *testing.T) {
 	if strings.Contains(ansi.Strip(out), "`") {
 		t.Fatalf("backticks kept: %q", out)
 	}
-	if !strings.Contains(out, "\x1b[36mgo vet") {
-		t.Fatalf("code not coloured: %q", out)
+	if !strings.Contains(out, "\x1b[36;100mgo vet") {
+		t.Fatalf("code not coloured and tinted: %q", out)
 	}
 	if !strings.HasPrefix(out, "run ") {
 		t.Fatalf("prose took a colour: %q", out)
@@ -75,13 +76,13 @@ func TestFencedGoGetsTokenColours(t *testing.T) {
 	}
 }
 
-func TestFenceWithoutKnownLanguageGetsOneColour(t *testing.T) {
+func TestFenceWithoutKnownLanguageGetsOneColourInsideAGreyBox(t *testing.T) {
 	for _, fence := range []string{"```", "```nosuchlang"} {
 		out := strings.Join(colour().Lines(fence+"\nplain block here\n```", 60), "\n")
 		if !strings.Contains(ansi.Strip(out), "plain block here") {
 			t.Fatalf("%s: %q", fence, out)
 		}
-		if got := colours(t, out); !slices.Equal(got, []string{"36"}) {
+		if got := colours(t, out); !slices.Equal(got, []string{"36", "90"}) {
 			t.Errorf("%s: colours %v in %q", fence, got, out)
 		}
 	}
@@ -151,5 +152,55 @@ func TestCacheKeysOnRevFieldAndWidth(t *testing.T) {
 	}
 	if got := r.Cached(k, "changed"); ansi.Strip(got[0]) != "changed" {
 		t.Fatalf("new text under the same key: %q", got)
+	}
+}
+
+func TestFencedBlockIsBoxedToItsWidestLine(t *testing.T) {
+	text := "Run:\n\n```sh\nzen-inbox list\n\necho done\n```\n\nthen wait."
+	got := plain().Lines(text, 40)
+	want := []string{
+		"Run:",
+		"",
+		"╭────────────────╮",
+		"│ zen-inbox list │",
+		"│                │",
+		"│ echo done      │",
+		"╰────────────────╯",
+		"",
+		"then wait.",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got\n%s", strings.Join(got, "\n"))
+	}
+	for _, l := range colour().Lines(text, 40) {
+		if strings.ContainsAny(ansi.Strip(l), fenceOpen+fenceClose) {
+			t.Fatalf("sentinel leaked: %q", l)
+		}
+	}
+}
+
+func TestFencedBlockInAQuoteKeepsTheBar(t *testing.T) {
+	got := plain().Lines("> see\n>\n> ```\n> inside\n> ```", 30)
+	want := []string{"│ see", "│", "│ ╭────────╮", "│ │ inside │", "│ ╰────────╯"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got\n%s", strings.Join(got, "\n"))
+	}
+}
+
+func TestNarrowPaneLeavesCodeUnboxed(t *testing.T) {
+	got := plain().Lines("```\nabcdef\n```", 10)
+	if !slices.Equal(got, []string{"abcdef"}) {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestRenderFailureFallsBackToRawText(t *testing.T) {
+	r := colour()
+	r.fail = errors.New("boom")
+	text := "**bold** and `code` " + strings.Repeat("w", 30)
+	got := r.Lines(text, 20)
+	want := []string{"**bold** and `code`", strings.Repeat("w", 20), strings.Repeat("w", 10)}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%q", got)
 	}
 }

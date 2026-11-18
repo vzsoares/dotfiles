@@ -17,6 +17,19 @@ into place, so concurrent first runs are safe. Nothing built lands in the repo.
 The SQLite driver is `modernc.org/sqlite` (pure Go), so the same build works on
 macOS arm64 and Manjaro amd64.
 
+## Writing for the cockpit
+
+Note bodies, briefs, and an ask's question, context and options render as
+markdown in a ~92x29 pane (titles and list rows stay one plain line):
+
+- Open with a **bold lead line**: the outcome or the call, in one sentence.
+- Then short bullets, one fact each; no walls of text.
+- Commands, paths, IDs and flags in `code spans`.
+- Fenced blocks for anything to copy, every line 70 chars or less.
+- Headings (`##`) only in long notes; tables for comparisons.
+- An ask: a one-sentence question, then short options that each carry their
+  consequence (`-o "Keep glamour: no new code"`).
+
 ## Layout
 
 ```
@@ -26,7 +39,7 @@ internal/inbox      store: schema v8, IDs, guarded transitions, flush, message,
 internal/guard      refuses prod answers from inside an agent session (env, ps walk)
 internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell)
 internal/view       text for list rows, context blocks and question screens
-internal/md         glamour markdown for the panel: ANSI-16 style, hardwrap, cache
+internal/md         glamour markdown for the panel: ANSI-16 style, boxed code, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
 internal/tui        the watch panel (list, session, review all, walk, review, talk, notes)
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity

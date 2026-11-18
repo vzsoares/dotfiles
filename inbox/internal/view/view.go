@@ -221,9 +221,9 @@ func SessionLines(ds []inbox.Decision, sessions am.Sessions, width int, at time.
 // Painter renders one field's markdown at k.Width for the panel.
 type Painter func(k md.Key, text string) []string
 
-// painted renders text at width less the prefix width, then prefixes the
+// Painted renders text at width less the prefix width, then prefixes the
 // first line with first and the others with rest.
-func painted(p Painter, k md.Key, text string, width int, first, rest string) []string {
+func Painted(p Painter, k md.Key, text string, width int, first, rest string) []string {
 	width = max(width, MinWidth)
 	k.Width = max(width-max(lipgloss.Width(first), lipgloss.Width(rest)), 1)
 	lines := p(k, text)
@@ -245,7 +245,7 @@ func painted(p Painter, k md.Key, text string, width int, first, rest string) []
 }
 
 func PanelQuestionLines(d inbox.Decision, width int, p Painter) []string {
-	return painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "question"}, d.Question, width,
+	return Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "question"}, d.Question, width,
 		d.ID+QuestionTags(d)+"  ", "  ")
 }
 
@@ -253,7 +253,7 @@ func PanelContextLines(d inbox.Decision, width int, p Painter) []string {
 	if pyfmt.Blank(d.Context) {
 		return nil
 	}
-	return painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "context"}, d.Context, width, "│ ", "│ ")
+	return Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "context"}, d.Context, width, "│ ", "│ ")
 }
 
 // PanelOptionLines puts RecMark after the recommended option's last line,
@@ -263,7 +263,7 @@ func PanelOptionLines(d inbox.Decision, width int, p Painter) []string {
 	for _, o := range d.Options {
 		first := o.Letter + ") "
 		rest := strings.Repeat(" ", lipgloss.Width(first))
-		lines := painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "option " + o.Letter}, o.Text, width, first, rest)
+		lines := Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "option " + o.Letter}, o.Text, width, first, rest)
 		if o.Letter == d.Rec {
 			last := len(lines) - 1
 			if lipgloss.Width(lines[last])+lipgloss.Width(RecMark) <= max(width, MinWidth) {
@@ -288,7 +288,7 @@ func PanelBriefText(b Brief, width int, p Painter) []string {
 	if pyfmt.Blank(b.Text) {
 		return nil
 	}
-	return painted(p, md.Key{ID: "#" + b.Task, Field: "brief"}, b.Text, width, "  ", "  ")
+	return Painted(p, md.Key{ID: "#" + b.Task, Field: "brief"}, b.Text, width, "  ", "  ")
 }
 
 func PanelContextBlock(b Brief, width int, p Painter) []string {
@@ -514,6 +514,21 @@ type Staged struct {
 	Rev                int64
 }
 
+// PanelReviewLines is d's question then " → " and its staged answer, which
+// goes under the question when it does not fit on its last line.
+func PanelReviewLines(d inbox.Decision, s *Staged, width int, p Painter) []string {
+	out := PanelQuestionLines(d, width, p)
+	k := md.Key{ID: d.ID, Rev: d.Rev, Field: "staged"}
+	text := StagedText(d, s)
+	last := len(out) - 1
+	if a := Painted(p, k, text, width, "", ""); len(a) == 1 &&
+		lipgloss.Width(out[last])+3+lipgloss.Width(a[0]) <= max(width, MinWidth) {
+		out[last] += " → " + a[0]
+		return out
+	}
+	return append(out, Painted(p, k, text, width, "  → ", "    ")...)
+}
+
 func StagedText(d inbox.Decision, s *Staged) string {
 	switch {
 	case s == nil:
@@ -556,10 +571,10 @@ func NoteHead(n inbox.Note, at time.Time) string {
 func PanelNoteLines(n inbox.Note, width int, p Painter) []string {
 	out := Wrap(n.Title, width, "")
 	if !pyfmt.Blank(n.Body) {
-		out = append(append(out, ""), painted(p, md.Key{ID: n.Label(), Field: "note"}, n.Body, width, "", "")...)
+		out = append(append(out, ""), Painted(p, md.Key{ID: n.Label(), Field: "note"}, n.Body, width, "", "")...)
 	}
 	if n.Reply != "" {
-		out = append(append(out, ""), WrapRest("↩ replied: "+n.Reply, width, "", "  ")...)
+		out = append(append(out, ""), Painted(p, md.Key{ID: n.Label(), Field: "reply"}, n.Reply, width, "↩ replied: ", "  ")...)
 	}
 	return out
 }

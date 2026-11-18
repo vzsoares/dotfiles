@@ -1,0 +1,20 @@
+856.1  Keep [1mglamour[0m as the only renderer for [36;100mmd.Lines[0m?[0m
+│ [1m[0m[1m[0m[1mLead:[0m both options render every field.[0m
+│
+│ [35;1m[0m[35;1m[0m[35;1m## [0m[35;1mTrade-off[0m
+│  Option                     │ Cost
+│ ────────────────────────────┼───────────────────────────
+│  glamour                    │ none
+│  own                        │ ~300 lines
+│
+│ [90m╭───────────────────────────────╮[0m
+│ [90m│[0m [36m[0m[36m[0m[36mlines[0m[36m [0m[36m:=[0m[36m [0m[36mr[0m[36m.[0m[36mLines[0m[36m([0m[36mtext[0m[36m,[0m[36m [0m[36mwidth[0m[36m)[0m [90m│[0m
+│ [90m╰───────────────────────────────╯[0m
+│
+│ [3m[0m[3m[0m│ [3mcrush does the same; see [0m[34;4;1;3mcrush[0m
+│ [0m[90;4;3m[0m[90;4;3m[0m│ [90;4;3mhttps://github.com/charmbracelet/crush[0m[3m.[0m
+│
+│ 1. [3mkeep[0m the cache[0m
+│ 2. drop the shim
+a) Keep glamour: no new code  ← rec
+b) Own renderer: [36;100m~300[0m lines to maintain[0m

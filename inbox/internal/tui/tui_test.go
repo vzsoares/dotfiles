@@ -1067,7 +1067,7 @@ func TestPaintedScreensFit(t *testing.T) {
 		check()
 		d.keys("enter")
 		check()
-		if !strings.Contains(d.view(), "\x1b[36m") {
+		if !strings.Contains(d.view(), "\x1b[36;100m") {
 			t.Errorf("%v: session screen has no code colour:\n%s", sz, d.view())
 		}
 		d.keys("ctrl+d")

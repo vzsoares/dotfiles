@@ -502,8 +502,8 @@ func (m *Model) viewFree() frame {
 func (m *Model) viewReview() frame {
 	entries := m.entries()
 	banner := m.banner()
-	full := reviewLines(entries, m.w, -1)
-	compact := reviewLines(entries, m.w, m.w/2)
+	full := reviewLines(entries, m.w, m.paint)
+	compact := reviewLines(entries, m.w, nil)
 	help := 0
 	if m.showHelp {
 		help = len(helpLines(scReview, m.w))
@@ -633,7 +633,7 @@ func (m *Model) viewAll() frame {
 		lines = append(lines, view.PanelContextLines(d, w, m.paint)...)
 		lines = append(lines, view.PanelOptionLines(d, w, m.paint)...)
 		if mark, text := m.draftText(d); text != "" {
-			lines = append(lines, view.WrapRest(mark+" draft: "+text, w, "", "  ")...)
+			lines = append(lines, view.Painted(m.paint, md.Key{ID: d.ID, Rev: d.Rev, Field: "draft"}, text, w, mark+" draft: ", "  ")...)
 		}
 		if i == m.cursor {
 			cur = len(body)

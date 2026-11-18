@@ -308,6 +308,19 @@ listed until `zen-inbox retry <session>`.
   Enter` (agent-manager refuses `terminal send` to an un-nested terminal from inside a
   session). `resume-watch` must be un-nested so it outlives chief.
 
+#### Writing for the cockpit
+
+Note bodies, briefs, and an ask's question, context and options render as
+markdown in a ~92x29 pane (titles and list rows stay one plain line):
+
+- Open with a **bold lead line**: the outcome or the call, in one sentence.
+- Then short bullets, one fact each; no walls of text.
+- Commands, paths, IDs and flags in `code spans`.
+- Fenced blocks for anything to copy, every line 70 chars or less.
+- Headings (`##`) only in long notes; tables for comparisons.
+- An ask: a one-sentence question, then short options that each carry their
+  consequence (`-o "Keep glamour: no new code"`).
+
 The user never reviews diffs. A worker is done only on `WORKER_DONE <id>`; then the
 orchestrator:
 

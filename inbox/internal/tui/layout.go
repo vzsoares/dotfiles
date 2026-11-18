@@ -131,13 +131,16 @@ func fitText(variants [][]string, items, rows int) (text []string, menuH int) {
 	return variants[len(variants)-1], 1
 }
 
-func reviewLines(entries []entry, width int, questionWidth int) []string {
+// reviewLines paints each question and answer when p is set; without it each
+// is one row with the question clipped to half the width.
+func reviewLines(entries []entry, width int, p view.Painter) []string {
 	out := []string{"Review: Send records these answers.", ""}
 	for _, e := range entries {
-		q := e.d.Question
-		if questionWidth >= 0 {
-			q = pyfmt.Clip(q, questionWidth)
+		if p != nil {
+			out = append(out, view.PanelReviewLines(e.d, e.staged, width, p)...)
+			continue
 		}
+		q := pyfmt.Clip(e.d.Question, width/2)
 		head := e.d.ID
 		if q != "" {
 			head += "  " + q

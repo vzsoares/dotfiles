@@ -1,0 +1,22 @@
+Cache move
+
+[1m[0m[1m[0m[1mThe cache move is done; one call is yours.[0m
+
+[35;1m[0m[35;1m[0m[35;1m## [0m[35;1mWhat[0m[35;1m changed[0m
+[35m[0m[35m[0m[35m• [0m[36;100mzen-inbox watch[0m reads from [3mSQLite[0m now[0m
+[35m[0m[35m[0m[35m• [0mthe old [1mJSON[0m file is gone[0m
+
+[90m╭──────────────────────────────────────╮[0m
+[90m│[0m [36m[0m[36m[0m[36mzen-inbox list --json [0m[36m|[0m[36m jq [0m[32m'.[0].id'[0m [90m│[0m
+[90m╰──────────────────────────────────────╯[0m
+
+ Store                        │ Reads                       │ Writes
+──────────────────────────────┼─────────────────────────────┼─────────────────────────────
+ SQLite                       │ 2ms                         │ 5ms
+ JSON                         │ 40ms                        │ 90ms
+
+[3m[0m[3m[0m│ [3mWrites still go through one[0m[3m lock.[0m
+
+Spec: [34;4;1mthe note[0m [90;4mhttps://example.com/856[0m.[0m
+
+↩ replied: thanks, [1mship it[0m

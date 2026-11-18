@@ -1,8 +1,8 @@
 cockpit · 2 open                   quota n/a
 Review: Send records these answers.
 
-7.1  Which storage should the cache use? →
-    a: redis
+7.1  Which storage should the cache use?
+  → a: redis
 7.2  Second? → b: b
 › Send
   Change one
