@@ -398,3 +398,10 @@ Remote steps are prod actions or Human Approval: pushing `dev` and `prod` goes t
 an approved ask; the GitHub default branch (`dev`) and branch protection on `prod` are
 `gh` repo settings, so Human Approval. After the default branch changes, `git remote set-head origin -a`
 refreshes the local `origin/HEAD` that `zen-sweep` checks.
+
+## Paid API models (pi)
+
+pi runs pay-per-use API models (Featherless, abliteration.ai; keys in `~/.zshrc.local`).
+Agents never start pi, spawn a pi session, or call those APIs on their own: each use is a
+`zen-inbox ask <task> --prod run --repo dotfiles --cmd "<exact command>"` that the user
+approves in the cockpit, then chief runs it. The user's own pi use needs no ask.
