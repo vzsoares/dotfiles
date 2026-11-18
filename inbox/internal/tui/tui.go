@@ -511,7 +511,7 @@ func (m *Model) livePass() {
 			p.notes = append(p.notes, d.ID+" asked; added to the walk")
 		}
 	}
-	m.visited[m.sid] = slices.Clone(p.order)
+	m.remember()
 	switch m.scr {
 	case scWalk, scFree, scFull, scConfirm:
 		if curGone {
@@ -573,8 +573,16 @@ func (m *Model) startPass() {
 		}
 	}
 	inbox.SortIDs(m.p.order)
-	m.visited[m.sid] = slices.Clone(m.p.order)
+	m.remember()
 	m.advance()
+}
+
+// remember keeps the pass's decisions for the session's next list, less
+// those this panel recorded itself.
+func (m *Model) remember() {
+	m.visited[m.sid] = slices.DeleteFunc(slices.Clone(m.p.order), func(id string) bool {
+		return slices.Contains(m.p.recorded, id)
+	})
 }
 
 // draft is d's draft: the pass's staged answer, else the stored one; stale
@@ -598,6 +606,8 @@ func (m *Model) draftText(d inbox.Decision) (string, string) {
 		return "○", ""
 	case s.Kind == "skip":
 		return "–", tagStale("skipped", stale)
+	case stale && s.Kind == "pick" && d.OptionText(s.Option) == "":
+		return "●", tagStale(s.Option+": (option removed)", stale)
 	}
 	return "●", tagStale(view.StagedText(d, &s), stale)
 }
@@ -616,7 +626,7 @@ func (m *Model) progress(sid string) (drafted, open int) {
 			continue
 		}
 		open++
-		if s, ok := m.drafts[d.ID]; ok && s.Rev == d.Rev {
+		if _, ok, stale := m.draft(d); ok && !stale {
 			drafted++
 		}
 	}
@@ -1310,6 +1320,7 @@ func (m *Model) listItems() []item {
 	rows, prod := m.askRows()
 	for _, r := range rows {
 		label := view.RowLabel(r, at)
+		// shortcut: spliced after RowLabel's "n open" part since view is out of #838's scope; move into RowLabel if it changes.
 		if k, n := m.progress(r.SessionID); k > 0 {
 			open := " · " + strconv.Itoa(n) + " open · "
 			label = strings.Replace(label, open, open+strconv.Itoa(k)+"/"+strconv.Itoa(n)+" drafted · ", 1)
@@ -1733,6 +1744,7 @@ func (m *Model) keyAll(k string) (tea.Model, tea.Cmd) {
 			if m.p != nil && slices.Contains(m.p.order, id) && !m.p.gone[id] {
 				m.show(id)
 			}
+			return m, m.loadCmd(false)
 		}
 	case "t":
 		m.startTalk(scAll)
