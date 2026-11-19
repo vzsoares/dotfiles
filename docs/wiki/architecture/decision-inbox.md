@@ -45,8 +45,9 @@ message.
    on the agent's session, then a multi-select resolves the decisions it settled (as
    `talk`, optional note); the rest stay open. A talk returns to where it started
    (the walk, the session menu, or Review all); the popup is checked before the agent is told.
-5. **flush** — when the session's last open decision closes (answer, resolve or
-   withdraw), its held answers are sent as one message:
+5. **flush** — when the session's last open non-prod decision in a task closes (answer,
+   resolve or withdraw), that task's held answers are sent as one message; open asks in
+   other tasks and open `--prod` asks never hold them (#871):
 
    ```
    [zen-inbox] Answers to your decisions:
@@ -102,7 +103,7 @@ message.
   (`all clear` when none). The list shows labelled groups, most urgent first:
   `Failed delivery` (retry rows with the reason), `Threads` (one per task, see
   Threads below), `No task` (notes without a task), then `Held` (answers waiting for the session's
-  open asks; not selectable). The `Inbox · all clear` row is always first; its
+  open asks in the same task; not selectable; the thread header shows `held: N open`). The `Inbox · all clear` row is always first; its
   empty list shows `All clear · nothing to act on` and `last item closed <age> ago`
   (latest decision close or note read) centred.
   The list footer is one row of keys for the row under the cursor (`enter open` /
@@ -385,7 +386,7 @@ before sending, so concurrent closers send the batch exactly once.
 archived or missing, non-zero send, refusal) keeps the answers with the error, exits 3,
 and stays listed in the watcher until `zen-inbox retry <session>`.
 `retry` also picks up a `sending` claim older than 60 s (a send that died; sends
-time out at 30 s) and `held` answers whose session has nothing left open (closed but
+time out at 30 s) and `held` answers whose session has nothing left open in that task (closed but
 never flushed).
 
 ### Stuck paste (#610)

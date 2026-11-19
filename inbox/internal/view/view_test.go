@@ -144,3 +144,18 @@ func TestNoteLabelsAndLines(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestHeldLinesPerTaskAndProdNeverHolds(t *testing.T) {
+	h := dec("7.1", "7", "s1", "x", false)
+	same := dec("7.2", "7", "s1", "x", false)
+	other := dec("8.1", "8", "s1", "x", false)
+	prod := dec("9.1", "9", "s1", "x", false)
+	prod.Prod = &inbox.ProdAction{}
+	if got := HeldLines([]inbox.Decision{h}, []inbox.Decision{other, prod}); len(got) != 0 {
+		t.Fatalf("other tasks and prod asks must not hold: %q", got)
+	}
+	got := HeldLines([]inbox.Decision{h}, []inbox.Decision{same, other, prod})
+	if len(got) != 1 || got[0] != "spec-s1: 7.1 held until 7.2" {
+		t.Fatalf("%q", got)
+	}
+}

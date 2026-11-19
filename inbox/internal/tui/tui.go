@@ -954,6 +954,7 @@ func (m *Model) sendCmd() tea.Cmd {
 	w, sessions := m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		msg := sentMsg{res: prior}
+		task := ""
 		for _, id := range ids {
 			s := byID[id]
 			if s.Kind == "skip" {
@@ -971,6 +972,9 @@ func (m *Model) sendCmd() tea.Cmd {
 			switch {
 			case err == nil:
 				msg.recorded = append(msg.recorded, id)
+				if d, gerr := ib.Get(id); gerr == nil {
+					task = d.Task
+				}
 				if res != nil {
 					msg.res = res
 				}
@@ -984,7 +988,7 @@ func (m *Model) sendCmd() tea.Cmd {
 				msg.notes = append(msg.notes, id+" already "+status)
 			}
 		}
-		if flash, err := ib.Describe(msg.res, sid, name); err == nil {
+		if flash, err := ib.Describe(msg.res, sid, task, name); err == nil {
 			msg.flash = flash
 		} else {
 			msg.flash = err.Error()
@@ -1143,7 +1147,11 @@ func (m *Model) resolveCmd(note string) tea.Cmd {
 	return func() tea.Msg {
 		var resolved, notes []string
 		var result *inbox.Delivery
+		task := ""
 		for _, id := range ids {
+			if d, gerr := ib.Get(id); gerr == nil {
+				task = d.Task
+			}
 			res, err := ib.Resolve(id, note)
 			if err != nil {
 				notes = append(notes, err.Error())
@@ -1159,7 +1167,7 @@ func (m *Model) resolveCmd(note string) tea.Cmd {
 			flash = append(flash, "resolved "+strings.Join(resolved, ", "))
 		}
 		if result != nil {
-			if d, err := ib.Describe(result, sid, name); err == nil {
+			if d, err := ib.Describe(result, sid, task, name); err == nil {
 				flash = append(flash, d)
 			}
 		}
@@ -1633,7 +1641,7 @@ func (m *Model) retryCmd(sid string) tea.Cmd {
 		flash := ""
 		if err != nil {
 			flash = err.Error()
-		} else if flash, err = ib.Describe(res, sid, ""); err != nil {
+		} else if flash, err = ib.Describe(res, sid, "", ""); err != nil {
 			flash = err.Error()
 		}
 		ok := err == nil && res != nil && res.OK

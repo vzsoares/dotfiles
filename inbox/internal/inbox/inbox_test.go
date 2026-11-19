@@ -468,7 +468,7 @@ func TestFollowupKeepsDeliverySentAndDescribes(t *testing.T) {
 		if d := get(t, ib, "7.1"); d.Delivery != "sent" || d.DeliveryError != "" {
 			t.Fatalf("%q: %+v", outcome, d)
 		}
-		if got, err := ib.Describe(res, "s1", "spec-s1"); err != nil || got != want {
+		if got, err := ib.Describe(res, "s1", "7", "spec-s1"); err != nil || got != want {
 			t.Fatalf("%q: %q %v", outcome, got, err)
 		}
 	}
@@ -494,7 +494,7 @@ func TestAnswerInsideAskingSessionSendsNothing(t *testing.T) {
 	if d := get(t, ib, "7.1"); d.Delivery != "sent" || d.DeliveryError != "" {
 		t.Fatalf("%+v", d)
 	}
-	if got, _ := ib.Describe(res, "s1", ""); !strings.HasPrefix(got, "recorded 7.1") {
+	if got, _ := ib.Describe(res, "s1", "7", ""); !strings.HasPrefix(got, "recorded 7.1") {
 		t.Fatal(got)
 	}
 }
@@ -628,5 +628,61 @@ func TestOpenConcurrentColdStarts(t *testing.T) {
 			})
 		}
 		wg.Wait()
+	}
+}
+
+func TestAnswerHeldPerTaskNotPerSession(t *testing.T) {
+	ib, fake, _ := open(t)
+	a1 := ask(t, ib, "7", "s1", false, "A1?")
+	a2 := ask(t, ib, "7", "s1", false, "A2?")
+	b1 := ask(t, ib, "8", "s1", false, "B1?")
+	res, err := ib.Answer(a1, p("a"), nil, "", nil)
+	if err != nil || res != nil || len(fake.sends) != 0 {
+		t.Fatalf("same-task ask still open must hold: %v %v %v", res, err, fake.sends)
+	}
+	if got, _ := ib.Describe(res, "s1", "7", ""); got != "held until "+a2 {
+		t.Fatal(got)
+	}
+	res, err = ib.Answer(a2, p("b"), nil, "", nil)
+	if err != nil || res == nil || !res.OK || strings.Join(res.IDs, ",") != a1+","+a2 || len(fake.sends) != 1 {
+		t.Fatalf("task 7 answers go out while task 8 stays open: %+v %v %v", res, err, fake.sends)
+	}
+	if d := get(t, ib, b1); d.Status != "open" {
+		t.Fatal(d.Status)
+	}
+	if b, _ := ib.Undelivered(); len(b) != 0 {
+		t.Fatal(b)
+	}
+}
+
+func TestOpenProdAskNeverHolds(t *testing.T) {
+	ib, fake, _ := open(t)
+	prod := askProd(t, ib, "s1")
+	task := ask(t, ib, "680", "s1", false, "Q?")
+	res, err := ib.Answer(task, p("a"), nil, "", nil)
+	if err != nil || res == nil || !res.OK || len(fake.sends) != 1 {
+		t.Fatalf("%+v %v %v", res, err, fake.sends)
+	}
+	if d := get(t, ib, prod); d.Status != "open" {
+		t.Fatal(d.Status)
+	}
+}
+
+func TestHeldBehindOpenAskIsNotUndelivered(t *testing.T) {
+	ib, _, _ := open(t)
+	a1 := ask(t, ib, "7", "s1", false, "A1?")
+	ask(t, ib, "7", "s1", false, "A2?")
+	if err := ib.CloseRaw(a1, "answered", "pick", "a", "", "held"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := ib.Undelivered(); len(b) != 0 {
+		t.Fatal(b)
+	}
+	b1 := ask(t, ib, "8", "s1", false, "B1?")
+	if err := ib.CloseRaw(b1, "answered", "pick", "a", "", "held"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := ib.Undelivered(); len(b) != 1 || b[0].Decisions[0].ID != b1 {
+		t.Fatal(b)
 	}
 }

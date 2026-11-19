@@ -26,6 +26,7 @@ type thread struct {
 	notes  []inbox.Note
 	prod   bool
 	open   int
+	held   int
 	newest string
 }
 
@@ -67,8 +68,10 @@ func (m *Model) threads() []thread {
 		byTask[task] = &thread{task: task, title: m.snap.titles[task]}
 		return byTask[task]
 	}
+	waiting := view.HeldWaiting(m.snap.held, m.snap.open)
 	for _, r := range rows {
 		t := get(r.First)
+		t.held += len(waiting[[2]string{r.SessionID, r.First}])
 		t.rows = append(t.rows, r)
 		t.prod = t.prod || prod[r.SessionID]
 		for _, d := range m.snap.open {
@@ -184,7 +187,7 @@ func (m *Model) threadRows(room int) []listRow {
 			continue
 		}
 		open := m.threadsOpen[t.task]
-		head := view.ThreadHead{Task: t.task, Title: t.title, Expanded: open, Prod: t.prod, Open: t.open,
+		head := view.ThreadHead{Task: t.task, Title: t.title, Expanded: open, Prod: t.prod, Open: t.open, Held: t.held,
 			Unread: t.unread(), Items: t.open + len(t.notes), Newest: t.newest}
 		var st *lipgloss.Style
 		switch {

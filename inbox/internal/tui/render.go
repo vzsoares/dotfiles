@@ -380,7 +380,7 @@ func (m *Model) viewList() frame {
 		}
 	}
 	if len(held) > 0 {
-		body = group(body, "Held · sent when the session's asks close", &bannerStyle)
+		body = group(body, "Held · sent when the task's asks close", &bannerStyle)
 		for _, h := range held {
 			body = append(body, section{lines: view.WrapRest("  "+h, m.w, "", "    "), style: &readStyle})
 		}

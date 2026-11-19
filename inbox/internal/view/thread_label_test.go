@@ -21,3 +21,10 @@ func TestThreadLabelNamesTheTaskAndCutsOnlyTheTitle(t *testing.T) {
 		t.Fatalf("untitled %q", got)
 	}
 }
+
+func TestThreadLabelShowsHeld(t *testing.T) {
+	got := ThreadLabel(ThreadHead{Task: "7", Open: 3, Held: 2, Items: 3}, time.Now(), 92)
+	if !strings.Contains(got, "3 open · held: 2 open") {
+		t.Fatal(got)
+	}
+}

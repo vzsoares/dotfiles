@@ -421,30 +421,45 @@ func StatusLines(held, open []inbox.Decision, undelivered []inbox.Batch) []strin
 	return lines
 }
 
-// HeldLines is one "name: ids held until ids" per session whose answers wait
-// for its open decisions.
-func HeldLines(held, open []inbox.Decision) []string {
-	var lines []string
-	var order []string
-	heldIDs := map[string][]string{}
-	names := map[string]string{}
-	for _, d := range held {
-		if _, ok := heldIDs[d.SessionID]; !ok {
-			order = append(order, d.SessionID)
+// HeldWaiting maps each (session, task) whose answers are held to the open
+// non-prod asks it waits on; prod asks never hold.
+func HeldWaiting(held, open []inbox.Decision) map[[2]string][]string {
+	out := map[[2]string][]string{}
+	for _, h := range held {
+		k := [2]string{h.SessionID, h.Task}
+		if _, ok := out[k]; ok {
+			continue
 		}
-		heldIDs[d.SessionID] = append(heldIDs[d.SessionID], d.ID)
-		names[d.SessionID] = d.SessionName
-	}
-	for _, sid := range order {
-		var waiting []string
+		out[k] = nil
 		for _, d := range open {
-			if d.SessionID == sid {
-				waiting = append(waiting, d.ID)
+			if d.SessionID == h.SessionID && d.Task == h.Task && d.Prod == nil {
+				out[k] = append(out[k], d.ID)
 			}
 		}
-		if len(waiting) > 0 {
-			lines = append(lines, fmt.Sprintf("%s: %s held until %s", names[sid],
-				strings.Join(heldIDs[sid], ", "), strings.Join(waiting, ", ")))
+	}
+	return out
+}
+
+// HeldLines is one "name #task: ids held until ids" per session and task
+// whose answers wait for open asks of that same task.
+func HeldLines(held, open []inbox.Decision) []string {
+	var lines []string
+	var order [][2]string
+	heldIDs := map[[2]string][]string{}
+	names := map[string]string{}
+	for _, d := range held {
+		k := [2]string{d.SessionID, d.Task}
+		if _, ok := heldIDs[k]; !ok {
+			order = append(order, k)
+		}
+		heldIDs[k] = append(heldIDs[k], d.ID)
+		names[d.SessionID] = d.SessionName
+	}
+	waiting := HeldWaiting(held, open)
+	for _, k := range order {
+		if w := waiting[k]; len(w) > 0 {
+			lines = append(lines, fmt.Sprintf("%s: %s held until %s", names[k[0]],
+				strings.Join(heldIDs[k], ", "), strings.Join(w, ", ")))
 		}
 	}
 	return lines
@@ -611,7 +626,9 @@ type ThreadHead struct {
 	Task, Title         string
 	Expanded, Prod      bool
 	Open, Unread, Items int
-	Newest              string
+	// Held is how many open asks hold this thread's answered ones back.
+	Held   int
+	Newest string
 }
 
 // ThreadLabel is ▸/▾ #task, the title, PROD, the counts and the age of the
@@ -627,6 +644,9 @@ func ThreadLabel(h ThreadHead, at time.Time, room int) string {
 	}
 	if h.Open > 0 {
 		rest = append(rest, strconv.Itoa(h.Open)+" open")
+	}
+	if h.Held > 0 {
+		rest = append(rest, "held: "+strconv.Itoa(h.Held)+" open")
 	}
 	if h.Unread > 0 {
 		rest = append(rest, strconv.Itoa(h.Unread)+" unread")

@@ -100,8 +100,8 @@ func (a *App) open() (*inbox.Inbox, error) {
 }
 
 // report prints a close's outcome and returns its exit code.
-func (a *App) report(ib *inbox.Inbox, res *inbox.Delivery, sid string) error {
-	msg, err := ib.Describe(res, sid, "")
+func (a *App) report(ib *inbox.Inbox, res *inbox.Delivery, sid, task string) error {
+	msg, err := ib.Describe(res, sid, task, "")
 	if err != nil {
 		return err
 	}
@@ -300,7 +300,7 @@ func (a *App) withdraw() *cobra.Command {
 				a.out(res.Message)
 				return nil
 			}
-			return a.report(ib, res, d.SessionID)
+			return a.report(ib, res, d.SessionID, d.Task)
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "withdraw another session's")
@@ -473,7 +473,7 @@ func (a *App) answer() *cobra.Command {
 				}
 				return nil
 			}
-			return a.report(ib, res, d.SessionID)
+			return a.report(ib, res, d.SessionID, d.Task)
 		},
 	}
 	cmd.Flags().String("text", "", "free-text answer")
@@ -506,7 +506,7 @@ func (a *App) resolve() *cobra.Command {
 			if res == nil {
 				return nil
 			}
-			return a.report(ib, res, d.SessionID)
+			return a.report(ib, res, d.SessionID, d.Task)
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "what the talk settled")
@@ -532,7 +532,7 @@ func (a *App) retry() *cobra.Command {
 			}
 			var rep error
 			if !noAnswers {
-				rep = a.report(ib, res, res.SessionID)
+				rep = a.report(ib, res, res.SessionID, "")
 			}
 			replies, rerr := ib.RetryNotes(args[0])
 			failed := false

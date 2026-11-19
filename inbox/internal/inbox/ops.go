@@ -328,7 +328,7 @@ func (ib *Inbox) Withdraw(id, caller string, force bool) (*Delivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ib.flush(d.SessionID, caller == d.SessionID)
+	return ib.flush(d.SessionID, d.Task, caller == d.SessionID)
 }
 
 // Answer records a pick (letter) or free text; rev, when given, refuses the
@@ -349,7 +349,7 @@ func (ib *Inbox) Answer(id string, letter, text *string, note string, rev *int64
 	if err != nil {
 		return nil, err
 	}
-	return ib.Flush(d.SessionID)
+	return ib.Flush(d.SessionID, d.Task)
 }
 
 func (ib *Inbox) Resolve(id, note string) (*Delivery, error) {
@@ -357,7 +357,7 @@ func (ib *Inbox) Resolve(id, note string) (*Delivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ib.Flush(d.SessionID)
+	return ib.Flush(d.SessionID, d.Task)
 }
 
 func (ib *Inbox) claim(ids []string) error {
@@ -413,18 +413,19 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 	return res, nil
 }
 
-// Flush sends a session's held answers once none of its decisions are open.
-func (ib *Inbox) Flush(sid string) (*Delivery, error) { return ib.flush(sid, false) }
+// Flush sends a session's held answers for one task once none of its
+// non-prod asks in that task are open.
+func (ib *Inbox) Flush(sid, task string) (*Delivery, error) { return ib.flush(sid, task, false) }
 
-func (ib *Inbox) flush(sid string, self bool) (*Delivery, error) {
+func (ib *Inbox) flush(sid, task string, self bool) (*Delivery, error) {
 	ib.mu.Lock()
 	var held []string
 	err := ib.immediate(func() error {
-		open, err := ib.openIDs(sid)
+		open, err := ib.openIDs(sid, task)
 		if err != nil || len(open) > 0 {
 			return err
 		}
-		ds, err := ib.sel("session_id = ? AND delivery = 'held'", sid)
+		ds, err := ib.sel("session_id = ? AND task = ? AND delivery = 'held'", sid, task)
 		if err != nil || len(ds) == 0 {
 			return err
 		}
@@ -471,10 +472,12 @@ func (ib *Inbox) handBack(sid string, ids []string) (*Delivery, error) {
 	return &Delivery{SessionID: sid, IDs: ids, OK: true, Message: msg}, nil
 }
 
-// Failed, crashed mid-send, or held with nothing left open (closed but never flushed).
-const undeliveredSQL = "(delivery = 'failed' OR (delivery = 'sending' AND updated_at < ?)" +
+// Failed, crashed mid-send, or held with nothing left open in its session and
+// task (closed but never flushed); prod asks never hold.
+var undeliveredSQL = "(delivery = 'failed' OR (delivery = 'sending' AND updated_at < ?)" +
 	" OR (delivery = 'held' AND NOT EXISTS (SELECT 1 FROM decisions o" +
-	" WHERE o.session_id = decisions.session_id AND o.status = 'open')))"
+	" WHERE o.session_id = decisions.session_id AND o.task = decisions.task" +
+	" AND o.status = 'open' AND " + notProd("o.id") + ")))"
 
 func staleCutoff() string { return Stamp(Now().Add(-StaleSeconds * time.Second)) }
 
@@ -546,9 +549,9 @@ func FollowupText(f, sid string) string {
 }
 
 // Describe is the one-line outcome of a close or a retry.
-func (ib *Inbox) Describe(res *Delivery, sid, name string) (string, error) {
+func (ib *Inbox) Describe(res *Delivery, sid, task, name string) (string, error) {
 	if res == nil {
-		waiting, err := ib.OpenIDs(sid)
+		waiting, err := ib.OpenIDs(sid, task)
 		if err != nil {
 			return "", err
 		}

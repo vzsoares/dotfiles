@@ -566,15 +566,22 @@ func ids(ds []Decision) []string {
 	return out
 }
 
-func (ib *Inbox) openIDs(sid string) ([]string, error) {
-	ds, err := ib.sessionOpen(sid)
+// notProd is SQL true when the decision id column names a non-prod ask.
+func notProd(col string) string {
+	return "NOT EXISTS (SELECT 1 FROM prod_actions p WHERE p.decision_id = " + col + ")"
+}
+
+// openIDs are the open non-prod asks of one session in one task: the ones
+// that hold that thread's answers.
+func (ib *Inbox) openIDs(sid, task string) ([]string, error) {
+	ds, err := ib.sel("session_id = ? AND task = ? AND status = 'open' AND "+notProd("decisions.id"), sid, task)
 	return ids(ds), err
 }
 
-func (ib *Inbox) OpenIDs(sid string) ([]string, error) {
+func (ib *Inbox) OpenIDs(sid, task string) ([]string, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
-	out, err := ib.openIDs(sid)
+	out, err := ib.openIDs(sid, task)
 	return out, dbErr(err)
 }
 
