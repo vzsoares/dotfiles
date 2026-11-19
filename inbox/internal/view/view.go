@@ -440,7 +440,7 @@ func HeldWaiting(held, open []inbox.Decision) map[[2]string][]string {
 	return out
 }
 
-// HeldLines is one "name #task: ids held until ids" per session and task
+// HeldLines is one "name: ids held until ids" per session and task
 // whose answers wait for open asks of that same task.
 func HeldLines(held, open []inbox.Decision) []string {
 	var lines []string

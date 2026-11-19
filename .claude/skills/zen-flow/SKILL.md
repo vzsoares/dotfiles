@@ -318,7 +318,7 @@ prod asks with action, repo and command or sha; enter there walks from the marke
 `t` first picks the decisions to talk about (none marked means all), sends the agent
 one `agent-manager send ... --from zen-inbox` message naming them, then opens the popup;
 the talk closes nothing by itself.
-Answers are held until the asking session has no open decision, then go out as one
+Answers are held until the asking session has no open non-prod decision in the same task, then go out as one
 `agent-manager send <session> ... --from zen-inbox` message. A failed delivery stays
 listed until `zen-inbox retry <session>`.
 
