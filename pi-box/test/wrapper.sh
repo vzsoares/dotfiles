@@ -27,11 +27,11 @@ if [ "$1" = ps ]; then
 fi
 printf '%s\n' "$@" >"$FAKE_LOG"
 echo "CRAWL_DELAY_MS=${CRAWL_DELAY_MS-unset}" >>"$FAKE_LOG"
-echo "PIBOX_VENICE_API_KEY=${PIBOX_VENICE_API_KEY-unset}" >>"$FAKE_LOG"
+echo "VENICE_API_KEY=${VENICE_API_KEY-unset}" >>"$FAKE_LOG"
 FAKE
 chmod +x "$TMP/bin/docker"
 export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/ps"
-unset PIBOX_VENICE_API_KEY PIBOX_ABLITERATION_API_KEY CRAWL_DELAY_MS FAKE_RUNNING
+unset VENICE_API_KEY CRAWL_DELAY_MS FAKE_RUNNING
 W="$HOME/pi-box/work"
 
 run_in() { # dir, args... -> exit code; stdout in $TMP/out
@@ -81,12 +81,12 @@ check "exec runs the command instead of pi" $?
 
 # env allowlist
 printf 'CRAWL_DELAY_MS="1500"\nSECRET_TOKEN=x\n' >"$HOME/pi-box/config.env"
-SECRET_TOKEN=leak AWS_PROFILE=prod PIBOX_VENICE_API_KEY=k1 run_in "$W/t1" --version
+SECRET_TOKEN=leak AWS_PROFILE=prod VENICE_API_KEY=k1 run_in "$W/t1" --version
 check "runs docker" $?
 ! grep -Eq 'SECRET_TOKEN|AWS_PROFILE|leak' "$TMP/log" &&
-  ! grep -vx 'PIBOX_VENICE_API_KEY=k1' "$TMP/log" | grep -q k1
+  ! grep -vx 'VENICE_API_KEY=k1' "$TMP/log" | grep -q k1
 check "unlisted names and values stay out of the docker args" $?
-grep -qx 'PIBOX_VENICE_API_KEY' "$TMP/log" && grep -qx 'PIBOX_VENICE_API_KEY=k1' "$TMP/log"
+grep -qx 'VENICE_API_KEY' "$TMP/log" && grep -qx 'VENICE_API_KEY=k1' "$TMP/log"
 check "a set key passes by name only" $?
 grep -qx 'CRAWL_DELAY_MS=1500' "$TMP/log"
 check "config.env value passes, quotes stripped" $?
@@ -94,7 +94,7 @@ CRAWL_DELAY_MS=10 run_in "$W/t1"
 grep -qx 'CRAWL_DELAY_MS=10' "$TMP/log"
 check "host env overrides config.env" $?
 run_in "$W/t1"
-! grep -qx 'PIBOX_ABLITERATION_API_KEY' "$TMP/log"
+! grep -qx 'VENICE_API_KEY' "$TMP/log"
 check "an unset key is not passed" $?
 
 # doctor: offline, from any cwd, no workspace mounts

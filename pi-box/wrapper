@@ -15,7 +15,7 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SRC_DIR="$(dirname "$SELF")"
 
 # Passed from the host env when set; never a value on the command line.
-PASS_ENV=(PIBOX_VENICE_API_KEY PIBOX_ABLITERATION_API_KEY TERM COLORTERM LANG)
+PASS_ENV=(VENICE_API_KEY TERM COLORTERM LANG)
 # Read from ~/pi-box/config.env; the host env overrides per run.
 CONFIG_ENV=(
   CRAWL_DELAY_MS CRAWL_CONCURRENCY CRAWL_MAX_PAGES CRAWL_RESPECT_ROBOTS
