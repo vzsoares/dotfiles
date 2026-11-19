@@ -5,6 +5,7 @@ Review: Send records these answers.
   → a: redis
 7.2  Second? → b: b
 › Send
+  Send with note
   Change one
   Cancel
 
@@ -19,6 +20,5 @@ Review: Send records these answers.
 
 
 
-
-↑↓ · enter · ← prev · l list · esc cancel
-? help
+↑↓ · enter · n note · ← prev · l list
+esc cancel · ? help

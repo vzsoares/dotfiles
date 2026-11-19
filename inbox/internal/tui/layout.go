@@ -160,24 +160,25 @@ var spare = map[string]bool{"t talk": true, "v full": true, "T refile": true, "c
 // Footer labels stay short so the walk's keys fit in two rows at 40 columns;
 // ? adds the longer explanation. The list builds its own from the cursor.
 var footers = map[screen][]key{
-	scSession:   {{"↑↓", ""}, {"enter", ""}, {"r", "review"}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
-	scWalk:      {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"y", "copy"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
-	scReview:    {{"↑↓", ""}, {"enter", ""}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
-	scJump:      {{"↑↓", ""}, {"enter", "open"}, {"esc", "back"}, {"?", "help"}},
-	scFree:      {{"ctrl+d", "send"}, {"esc", "keep"}},
-	scFreeBlank: {{"ctrl+d", "send"}, {"esc", "back"}},
-	scFull:      {{"↑↓", "scroll"}, {"esc", "back"}},
-	scAll:       {{"↑↓", "move"}, {"enter", "walk"}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
-	scTalkWho:   {{"↑↓", ""}, {"space", "mark"}, {"enter", "talk"}, {"esc", "back"}},
-	scTalkPick:  {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
-	scTalkNote:  {{"enter", "done"}, {"esc", "no note"}},
-	scConfirm:   {{"y", "approve"}, {"n/esc", "back"}},
-	scNote:      {{"↑↓", ""}, {"enter", "read · back"}, {"m", "mark"}, {"f", "reply"}, {"T", "refile"}, {"y", "copy"}, {"esc", "back"}, {"?", "help"}},
-	scReply:     {{"ctrl+d", "send"}, {"esc", "back"}},
-	scChief:     {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
-	scThread:    {{"↑↓", ""}, {"tab", "next"}, {"enter", "open"}, {"f", "reply"}, {"a", "answer"}, {"m", "read"}, {"c", "chief"}, {"T", "refile"}, {"esc", "back"}, {"?", "help"}},
-	scRefile:    {{"enter", "save"}, {"esc", "cancel"}},
-	scLocked:    {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
+	scSession:    {{"↑↓", ""}, {"enter", ""}, {"r", "review"}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
+	scWalk:       {{"↑↓", ""}, {"enter", ""}, {"a-d", "pick"}, {"f", "free"}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"y", "copy"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
+	scReview:     {{"↑↓", ""}, {"enter", ""}, {"n", "note"}, {"←", "prev"}, {"l", "list"}, {"esc", "cancel"}, {"?", "help"}},
+	scJump:       {{"↑↓", ""}, {"enter", "open"}, {"esc", "back"}, {"?", "help"}},
+	scFree:       {{"ctrl+d", "send"}, {"esc", "keep"}},
+	scFreeBlank:  {{"ctrl+d", "send"}, {"esc", "back"}},
+	scFull:       {{"↑↓", "scroll"}, {"esc", "back"}},
+	scAll:        {{"↑↓", "move"}, {"enter", "walk"}, {"t", "talk"}, {"esc", "back"}, {"?", "help"}},
+	scTalkWho:    {{"↑↓", ""}, {"space", "mark"}, {"enter", "talk"}, {"esc", "back"}},
+	scTalkPick:   {{"↑↓", ""}, {"space", "mark"}, {"enter", "done"}, {"esc", "none"}},
+	scTalkNote:   {{"enter", "done"}, {"esc", "no note"}},
+	scReviewNote: {{"enter", "send"}, {"esc", "back"}},
+	scConfirm:    {{"y", "approve"}, {"n/esc", "back"}},
+	scNote:       {{"↑↓", ""}, {"enter", "read · back"}, {"m", "mark"}, {"f", "reply"}, {"T", "refile"}, {"y", "copy"}, {"esc", "back"}, {"?", "help"}},
+	scReply:      {{"ctrl+d", "send"}, {"esc", "back"}},
+	scChief:      {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
+	scThread:     {{"↑↓", ""}, {"tab", "next"}, {"enter", "open"}, {"f", "reply"}, {"a", "answer"}, {"m", "read"}, {"c", "chief"}, {"T", "refile"}, {"esc", "back"}, {"?", "help"}},
+	scRefile:     {{"enter", "save"}, {"esc", "cancel"}},
+	scLocked:     {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
@@ -194,7 +195,7 @@ var helps = map[screen]string{
 	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything, y then a number copies that code block. ← or shift+tab goes back a question, → forward, esc or l lists them all. Answers are kept as drafts, even across leaving and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
 	scJump: "Every decision of this session: ○ open, ● drafted, – skipped; changed: review means it was amended after you drafted it, so it is asked again before Send." +
 		" Dimmed ones closed meanwhile. enter opens one on its draft; esc goes back to the cockpit list.",
-	scReview:  "Send records the staged answers; Change one or l lists the questions to jump to one; ← goes back to the last.",
+	scReview:  "Send records the staged answers; n or Send with note adds one note to every answer, delivered once; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
 	scNote:    "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. y then a number copies that code block.",
@@ -247,7 +248,7 @@ func packKeys(keys []key, width int) [][]key {
 // scrollKey is the scroll hint; ctrl+u/d edit text on the input screens,
 // so only pgup/dn scroll there.
 func scrollKey(s screen) key {
-	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReply || s == scChief || s == scRefile {
+	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReviewNote || s == scReply || s == scChief || s == scRefile {
 		return key{"pgup/dn", "scroll"}
 	}
 	return key{"^u/^d", "scroll"}

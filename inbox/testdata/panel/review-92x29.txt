@@ -1,0 +1,29 @@
+cockpit                                                                            quota n/a
+Review: Send records these answers.
+
+7.1  Which way? → a: left
+7.2  Which way? → b: right
+7.3  Which way? → a: left
+› Send
+  Send with note
+  Change one
+  Cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter · n note · ← prev · l list · esc cancel · ? help

@@ -36,7 +36,7 @@ message.
    free text (a textarea, `ctrl+d` sends, `esc` keeps the text as a draft), `s` skip, `t` talk, `v` view full, `esc`
    the session's decision list; `?` toggles help and the footer always lists the screen's keys. Answers are
    staged with the decision's `rev` and kept as drafts (see Drafts under Panel); a
-   review screen offers Send / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
+   review screen offers Send / Send with note (`n`: one note for the batch, stored on every answer, printed once after the answers in the delivered message; empty = plain send, esc back) / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
    its new text, a staged answer to it goes stale and is asked again before the
    review, one answered elsewhere shows `answered elsewhere: <answer>` and leaves the
    walk (the db records no answerer, so it names the answer), and new questions join

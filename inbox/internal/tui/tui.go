@@ -49,6 +49,7 @@ const (
 	scTalkWho
 	scTalkPick
 	scTalkNote
+	scReviewNote
 	scConfirm
 	// scLocked and scFreeBlank are never m.scr: they name the footer of a walk
 	// on a locked prod ask and of an empty free-text box.
@@ -628,7 +629,7 @@ func (m *Model) livePass() {
 		if curGone {
 			m.advance()
 		}
-	case scReview, scJump:
+	case scReview, scReviewNote, scJump:
 		fromWalk := m.scr == scJump && m.jumpFrom == scWalk
 		if len(m.entries()) == 0 || (!fromWalk && m.next() != "") {
 			m.advance()
@@ -946,7 +947,7 @@ func sendingText(n int, name string) string {
 	return "Sending " + strconv.Itoa(n) + noun + " to " + name + "…"
 }
 
-func (m *Model) sendCmd() tea.Cmd {
+func (m *Model) sendCmd(note string) tea.Cmd {
 	byID := maps.Clone(m.p.staged)
 	ids := slices.Collect(maps.Keys(byID))
 	inbox.SortIDs(ids)
@@ -967,7 +968,7 @@ func (m *Model) sendCmd() tea.Cmd {
 				text = &s.Text
 			}
 			rev := s.Rev
-			res, err := ib.Answer(id, letter, text, "", &rev)
+			res, err := ib.Answer(id, letter, text, note, &rev)
 			var ie *inbox.Error
 			switch {
 			case err == nil:
@@ -1331,7 +1332,7 @@ func (m *Model) menuLen() int {
 }
 
 var sessionMenu = []item{{"Answer", "answer"}, {"Review all", "all"}, {"Talk", "talk"}, {"Back", "back"}}
-var reviewMenu = []item{{"Send", "send"}, {"Change one", "change"}, {"Cancel", "cancel"}}
+var reviewMenu = []item{{"Send", "send"}, {"Send with note", "note"}, {"Change one", "change"}, {"Cancel", "cancel"}}
 
 func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
@@ -1362,6 +1363,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyFull(msg)
 	case scTalkNote:
 		return m.keyNote(msg)
+	case scReviewNote:
+		return m.keyReviewNote(msg)
 	case scReply:
 		return m.keyReply(msg)
 	case scChief:
@@ -1423,7 +1426,7 @@ func (m *Model) scrollBy(k string) int {
 	case "pgup":
 		return -half
 	}
-	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReply || m.scr == scChief || m.scr == scRefile {
+	if m.scr == scFree || m.scr == scTalkNote || m.scr == scReviewNote || m.scr == scReply || m.scr == scChief || m.scr == scRefile {
 		return 0
 	}
 	if m.scr == scThread {
@@ -1824,11 +1827,17 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 		m.step(-1)
 	case "l":
 		choice = "change"
+	case "n":
+		choice = "note"
 	}
 	switch choice {
 	case "send":
 		m.busy = sendingText(m.p.answers(), m.sname)
-		return m, m.sendCmd()
+		return m, m.sendCmd("")
+	case "note":
+		m.ti.Reset()
+		m.scr = scReviewNote
+		return m, m.ti.Focus()
 	case "change":
 		m.openJump()
 	case "cancel":
@@ -1968,6 +1977,21 @@ func (m *Model) keyNote(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.resolveCmd(m.ti.Value())
 	case "esc":
 		return m, m.resolveCmd("")
+	}
+	var cmd tea.Cmd
+	m.ti, cmd = m.ti.Update(msg)
+	return m, cmd
+}
+
+// keyReviewNote reads one note for the whole batch; empty sends plain.
+func (m *Model) keyReviewNote(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.busy = sendingText(m.p.answers(), m.sname)
+		return m, m.sendCmd(strings.TrimSpace(m.ti.Value()))
+	case "esc":
+		m.scr, m.cursor = scReview, 0
+		return m, nil
 	}
 	var cmd tea.Cmd
 	m.ti, cmd = m.ti.Update(msg)

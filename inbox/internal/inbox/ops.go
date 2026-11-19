@@ -3,6 +3,7 @@ package inbox
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -575,7 +576,9 @@ func (ib *Inbox) Describe(res *Delivery, sid, task, name string) (string, error)
 // ------------------------------------------------------------------ message --
 
 // AnswerLine renders one answer; width < 0 keeps the question whole.
-func AnswerLine(d Decision, width int) string {
+func AnswerLine(d Decision, width int) string { return answerLine(d, width, true) }
+
+func answerLine(d Decision, width int, withNote bool) string {
 	answer := "free text: " + d.AnswerText
 	if d.AnswerKind == "pick" {
 		answer = d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
@@ -589,10 +592,27 @@ func AnswerLine(d Decision, width int) string {
 		head += " " + question
 	}
 	line := head + " → " + answer
-	if d.Note != "" {
+	if withNote && d.Note != "" {
 		return line + "\n  Note: " + d.Note
 	}
 	return line
+}
+
+// sharedNotes are the notes on two or more answers, in first-seen order; the
+// message prints each once after the answers (a batch's "send with note").
+func sharedNotes(ds []Decision) []string {
+	count := map[string]int{}
+	var order []string
+	for _, d := range ds {
+		if d.Note == "" {
+			continue
+		}
+		if count[d.Note] == 0 {
+			order = append(order, d.Note)
+		}
+		count[d.Note]++
+	}
+	return slices.DeleteFunc(order, func(n string) bool { return count[n] < 2 })
 }
 
 // BuildMessage clips, then drops, questions to stay under the send limit,
@@ -601,11 +621,15 @@ func BuildMessage(answers []Decision, limit int) string {
 	budget := limit - SendMargin
 	ordered := append([]Decision(nil), answers...)
 	SortByID(ordered)
+	shared := sharedNotes(ordered)
 	var msg string
 	for _, width := range []int{-1, 200, 120, 80, 40, 20, 0} {
 		lines := []string{Header}
 		for _, d := range ordered {
-			lines = append(lines, AnswerLine(d, width))
+			lines = append(lines, answerLine(d, width, !slices.Contains(shared, d.Note)))
+		}
+		for _, n := range shared {
+			lines = append(lines, "Note: "+n)
 		}
 		msg = strings.Join(lines, "\n")
 		if len(msg) <= budget {

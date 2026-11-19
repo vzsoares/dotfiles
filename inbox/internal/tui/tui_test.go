@@ -489,7 +489,7 @@ func dump(d *drv) []inbox.Decision {
 }
 
 func TestCancelAndBackRecordNothing(t *testing.T) {
-	for _, script := range [][]string{{"a", "s", "esc", "esc"}, {"a", "esc", "esc"}, {"a", "a", "down", "down", "enter"}} {
+	for _, script := range [][]string{{"a", "s", "esc", "esc"}, {"a", "esc", "esc"}, {"a", "a", "down", "down", "down", "enter"}} {
 		d := newDrv(t, 92, 29)
 		d.ask("7", "s1", "Which way?", "left", "right")
 		d.ask("7", "s1", "Which way?", "left", "right")
@@ -510,7 +510,7 @@ func TestChangeOneRewalksOnlyThatQuestion(t *testing.T) {
 	d.ask("7", "s1", "First?", "x", "y")
 	d.ask("7", "s1", "Second?", "x", "y")
 	d.openWalk()
-	d.keys("a", "a", "down", "enter")
+	d.keys("a", "a", "down", "down", "enter")
 	if d.m.scr != scJump {
 		t.Fatal("not on change")
 	}
