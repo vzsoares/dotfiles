@@ -1,17 +1,18 @@
 # AWS
-# `aws login` leaves a login_session only the AWS CLI reads; Terraform's AWS
-# provider (v5) fails with "No valid credential sources". aws-use also exports
-# the session as short-lived keys, so every tool in the shell uses it.
+# `aws login` leaves a login_session only the AWS CLI reads, and the keys it
+# vends last 15 min. Profiles used by SDKs (Terraform) wrap the -login profile:
+#   credential_process = aws configure export-credentials \
+#     --profile <name>-login --format process
+# so every tool refreshes keys for the whole login session (~12h).
+# Exported keys would override the profile and freeze, so aws-use only sets it.
 aws-use() {
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_CREDENTIAL_EXPIRATION
   export AWS_PROFILE="$1"
-  local creds
-  if ! creds=$(aws configure export-credentials --profile "$1" --format env 2>/dev/null); then
+  if ! aws configure export-credentials --profile "$1" >/dev/null 2>&1; then
     echo "aws-use: no session for $1 — run its -go alias (aws login) first" >&2
     return 1
   fi
-  eval "$creds"
-  echo "aws-use: $1, keys valid until ${AWS_CREDENTIAL_EXPIRATION:-unknown}"
+  echo "aws-use: $1 (keys auto-refresh until the aws login session ends)"
 }
 
 alias aws-approva-dev="aws-use approva-dev"
