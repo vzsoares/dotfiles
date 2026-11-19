@@ -46,7 +46,11 @@ echo "linked $ROOT/shim/pi"
 # The profile stores PATH as a literal: re-run after PATH changes.
 if command -v agent-manager >/dev/null; then
   path=":$PATH:"
-  path="${path//:$ROOT\/shim:/:}"
+  for shim in "$ROOT/shim" "$ROOT/shim/"; do
+    while [[ "$path" = *":$shim:"* ]]; do
+      path="${path//:$shim:/:}"
+    done
+  done
   path="${path#:}"
   agent-manager env set pi-box "PATH=$ROOT/shim:${path%:}" \
     "PI_CODING_AGENT_DIR=$ROOT/agent" >/dev/null

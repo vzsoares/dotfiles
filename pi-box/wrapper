@@ -122,6 +122,10 @@ else
       shift 2
       continue
     fi
+    if [[ "$1" = --extension=*/agent-manager/hooks/agent-manager-pi.ts ]]; then
+      shift
+      continue
+    fi
     args+=("$1")
     shift
   done

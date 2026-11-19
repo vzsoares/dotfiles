@@ -37,7 +37,7 @@ grep -qx "create-group pi-box --directory $R/work" "$TMP/am.log"
 check "creates the pi-box group" $?
 
 : >"$TMP/am.log"
-PATH="$R/shim:$base:$R/shim" bash "$LINK" >/dev/null
+PATH="$R/shim:$R/shim/:$R/shim:$base:$R/shim" bash "$LINK" >/dev/null
 grep -qx "env set pi-box PATH=$R/shim:$base PI_CODING_AGENT_DIR=$R/agent" "$TMP/am.log"
 check "a re-run keeps one shim entry" $?
 ! grep -q create-group "$TMP/am.log"

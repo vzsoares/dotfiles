@@ -290,6 +290,27 @@ def test_pi_transcript_path(projects: Path) -> None:
     assert zen_await.transcript_path(other, projects) is None
 
 
+def test_pi_transcript_path_symlinked_dir(projects: Path, tmp_path: Path) -> None:
+    real = tmp_path / "real-898"
+    real.mkdir()
+    link = tmp_path / "link-898"
+    link.symlink_to(real)
+    path = projects / zen_await.pi_slug(str(real)) / "t_agent-pi1.jsonl"
+    path.parent.mkdir(parents=True)
+    path.write_text("")
+    session = {**_pi_session(), "directory": str(link)}
+    assert zen_await.transcript_path(session, projects) == path
+
+
+def test_pi_transcript_path_host_pi(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    host = tmp_path / ".pi" / "agent" / "sessions"
+    path = _write_pi(host, [])
+    assert zen_await.transcript_path(_pi_session()) == path
+
+
 def test_pi_done_marker(projects: Path) -> None:
     _write_pi(
         projects,

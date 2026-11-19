@@ -103,7 +103,8 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 
 - **zen-await** loops `agent-manager wait` and reads the last `end_turn` text from
   `~/.claude/projects/<slug>/<agent_session_id>.jsonl`; a `pi` session's last `stop`
-  message comes from `~/pi-box/agent/sessions/--<dir>--/*_<agent_session_id>.jsonl`. `WORKER_DONE <id>` /
+  message comes from `~/pi-box/agent/sessions/--<dir>--/*_<agent_session_id>.jsonl`
+  (host pi: `~/.pi/agent/sessions`). `WORKER_DONE <id>` /
   `SPEC_READY <id>` = done; `failing · tried · cause · needs` = escalation. Agents run
   it from Bash with `run_in_background`; `--new` ignores a message already there.
   A live worker with no reply yet is waited on for up to 10m, then reported idle; an

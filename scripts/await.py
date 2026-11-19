@@ -35,9 +35,10 @@
 #      Loops `agent-manager wait --timeout 5m` on every watched session and
 #      returns on the first one that stops working. Its transcript is read from
 #      ~/.claude/projects/<slug>/<agent_session_id>.jsonl (a pi session: from
-#      ~/pi-box/agent/sessions/--<dir>--/*_<agent_session_id>.jsonl) and the
-#      last end_turn text is classified. Meant for agents: run it from Bash with
-#      run_in_background, so the wait costs no turns.
+#      ~/pi-box/agent/sessions/--<dir>--/*_<agent_session_id>.jsonl, else
+#      ~/.pi/agent/sessions) and the last end_turn text is classified. Meant
+#      for agents: run it from Bash with run_in_background, so the wait costs
+#      no turns.
 #      A live session that is not waiting and has no end_turn yet (a worker
 #      still reading its spec) keeps being waited on; after 10m without a reply
 #      it returns idle. A session that is archived, not running, dead or errored
@@ -67,6 +68,7 @@ from __future__ import annotations
 import glob
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -202,14 +204,23 @@ def transcript_path(
     if not isinstance(directory, str) or not isinstance(agent_id, str):
         return None
     if is_pi(session):
-        # Only boxed pi runs under agent-manager; its agent dir is ~/pi-box/agent.
-        base = (
-            root if root is not None else Path.home() / "pi-box" / "agent" / "sessions"
+        # Boxed pi (pi-box env profile) first, then host pi. The box names the
+        # dir after the physical cwd (pwd -P).
+        bases = (
+            [root]
+            if root is not None
+            else [
+                Path.home() / "pi-box" / "agent" / "sessions",
+                Path.home() / ".pi" / "agent" / "sessions",
+            ]
         )
-        found = sorted(
-            (base / pi_slug(directory)).glob(f"*_{glob.escape(agent_id)}.jsonl")
-        )
-        return found[-1] if found else None
+        pattern = f"*_{glob.escape(agent_id)}.jsonl"
+        for base in bases:
+            for d in dict.fromkeys([directory, os.path.realpath(directory)]):
+                found = sorted((base / pi_slug(d)).glob(pattern))
+                if found:
+                    return found[-1]
+        return None
     base = root if root is not None else Path.home() / ".claude" / "projects"
     return base / project_slug(directory) / f"{agent_id}.jsonl"
 

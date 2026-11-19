@@ -84,6 +84,9 @@ hook="/Users/x/Library/Application Support/agent-manager/hooks/agent-manager-pi.
 PIBOX_DRY_RUN=1 run_in "$W/t1" --session-id abc -e "$hook" --extension ./mine.ts
 grep -q -- "pi-box pi --session-id abc --extension ./mine.ts \$" "$TMP/out"
 check "drops agent-manager's pi hook, keeps other extensions" $?
+PIBOX_DRY_RUN=1 run_in "$W/t1" "--extension=$hook" --continue
+grep -q -- "pi-box pi --continue \$" "$TMP/out"
+check "drops agent-manager's pi hook given as --extension=" $?
 mkdir -p "$TMP/shim"
 ln -s "$WRAPPER" "$TMP/shim/pi"
 (cd "$W/t1" && PIBOX_DRY_RUN=1 PATH="$TMP/shim:$PATH" pi --continue) >"$TMP/out" 2>"$TMP/err"
