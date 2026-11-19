@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$HOME/pi-box"
 
 for d in "$ROOT" "$ROOT/work" "$ROOT/in" "$ROOT/in/cookies" "$ROOT/agent" \
-  "$ROOT/agent/skills"; do
+  "$ROOT/agent/skills" "$ROOT/shim"; do
   if [ -L "$d" ]; then
     echo "pi-box/link: $d is a symlink; the wrapper refuses it" >&2
     exit 1
@@ -38,5 +38,23 @@ for skill in "$SCRIPT_DIR"/skills/*/; do
   echo "copied $ROOT/agent/skills/$name/SKILL.md"
 done
 FORCE='' copy "$SCRIPT_DIR/config.env.example" "$ROOT/config.env"
+
+ln -sfn "$SCRIPT_DIR/wrapper" "$ROOT/shim/pi"
+echo "linked $ROOT/shim/pi"
+
+# agent-manager launches pi through the profile's PATH, so the shim wins.
+# The profile stores PATH as a literal: re-run after PATH changes.
+if command -v agent-manager >/dev/null; then
+  path=":$PATH:"
+  path="${path//:$ROOT\/shim:/:}"
+  path="${path#:}"
+  agent-manager env set pi-box "PATH=$ROOT/shim:${path%:}" \
+    "PI_CODING_AGENT_DIR=$ROOT/agent" >/dev/null
+  echo "set agent-manager env profile pi-box"
+  if ! agent-manager groups --json | grep -q '"path": *"pi-box"'; then
+    agent-manager create-group pi-box --directory "$ROOT/work" >/dev/null
+    echo "created agent-manager group pi-box"
+  fi
+fi
 
 echo "next: pi-box build   (then: mkdir -p $ROOT/work/<id> && cd there && pi-box)"

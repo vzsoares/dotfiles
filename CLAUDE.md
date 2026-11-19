@@ -49,7 +49,9 @@ nvim/         # neovim config (lua)
 pi-box/       # pi inside a Docker box (no host repos, secrets or services):
               #   Dockerfile, entrypoint (egress rules, drops to host uid),
               #   wrapper (pi-box on PATH via link-bin), agent/ templates
-              #   that ./link copies into ~/pi-box -- see its README
+              #   that ./link copies into ~/pi-box, plus the shim/pi and
+              #   agent-manager env profile + group that box agent-manager's
+              #   pi -- see its README
 tmux/         # tmux config
 typst/        # long-form writing (books, TCC): tinymist LSP in nvim +
               #   a book template with citations, figures and quotes.

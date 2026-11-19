@@ -34,8 +34,9 @@
 #  DESCRIPTION
 #      Loops `agent-manager wait --timeout 5m` on every watched session and
 #      returns on the first one that stops working. Its transcript is read from
-#      ~/.claude/projects/<slug>/<agent_session_id>.jsonl and the last end_turn
-#      text is classified. Meant for agents: run it from Bash with
+#      ~/.claude/projects/<slug>/<agent_session_id>.jsonl (a pi session: from
+#      ~/pi-box/agent/sessions/--<dir>--/*_<agent_session_id>.jsonl) and the
+#      last end_turn text is classified. Meant for agents: run it from Bash with
 #      run_in_background, so the wait costs no turns.
 #      A live session that is not waiting and has no end_turn yet (a worker
 #      still reading its spec) keeps being waited on; after 10m without a reply
@@ -63,6 +64,7 @@
 
 from __future__ import annotations
 
+import glob
 import importlib.util
 import json
 import re
@@ -183,6 +185,15 @@ def project_slug(directory: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", directory)
 
 
+def pi_slug(directory: str) -> str:
+    """pi's session dir name for a cwd (session-manager getDefaultSessionDirPath)."""
+    return "--" + re.sub(r"[/\\:]", "-", re.sub(r"^[/\\]", "", directory)) + "--"
+
+
+def is_pi(session: dict[str, object]) -> bool:
+    return session.get("tool") == "pi"
+
+
 def transcript_path(
     session: dict[str, object], root: Path | None = None
 ) -> Path | None:
@@ -190,6 +201,15 @@ def transcript_path(
     agent_id = session.get("agent_session_id")
     if not isinstance(directory, str) or not isinstance(agent_id, str):
         return None
+    if is_pi(session):
+        # Only boxed pi runs under agent-manager; its agent dir is ~/pi-box/agent.
+        base = (
+            root if root is not None else Path.home() / "pi-box" / "agent" / "sessions"
+        )
+        found = sorted(
+            (base / pi_slug(directory)).glob(f"*_{glob.escape(agent_id)}.jsonl")
+        )
+        return found[-1] if found else None
     base = root if root is not None else Path.home() / ".claude" / "projects"
     return base / project_slug(directory) / f"{agent_id}.jsonl"
 
@@ -251,6 +271,29 @@ def last_end_turn(path: Path) -> tuple[str, str]:
     return "", ""
 
 
+def last_pi_stop(path: Path) -> tuple[str, str]:
+    """Return (entry id, text) of the last pi assistant message that ended its turn."""
+    if not path.exists():
+        return "", ""
+    for rec in reversed(_records(path)):
+        msg = rec.get("message")
+        if (
+            rec.get("type") == "message"
+            and isinstance(msg, dict)
+            and msg.get("role") == "assistant"
+            and msg.get("stopReason") == "stop"
+        ):
+            return str(rec.get("id", "")), _text_of(msg).strip()
+    return "", ""
+
+
+def last_reply(session: dict[str, object], root: Path | None = None) -> tuple[str, str]:
+    path = transcript_path(session, root)
+    if path is None:
+        return "", ""
+    return last_pi_stop(path) if is_pi(session) else last_end_turn(path)
+
+
 # --------------------------------------------------------------------------- #
 # agent-manager                                                                #
 # --------------------------------------------------------------------------- #
@@ -259,8 +302,7 @@ def last_end_turn(path: Path) -> tuple[str, str]:
 def event_for(session: dict[str, object], root: Path | None = None) -> Event:
     name = str(session.get("name") or session.get("id"))
     status = str(session.get("status", ""))
-    path = transcript_path(session, root)
-    _, text = last_end_turn(path) if path else ("", "")
+    _, text = last_reply(session, root)
     state, task_id = classify(text)
     if not is_live(session) and state != "done":
         state = "dead"
@@ -328,8 +370,7 @@ def await_sessions(
     silent: dict[str, float] = {}
     if new_only:
         for s in sessions:
-            path = transcript_path(s, root)
-            seen[str(s["id"])] = last_end_turn(path)[0] if path else ""
+            seen[str(s["id"])] = last_reply(s, root)[0]
 
     procs: dict[str, subprocess.Popen[str]] = {}
     try:
@@ -367,8 +408,7 @@ def await_sessions(
                     if state == "unknown":
                         continue
                     current = found if found is not None else {**s, "running": False}
-                path = transcript_path(current, root)
-                uuid = last_end_turn(path)[0] if path else ""
+                uuid = last_reply(current, root)[0]
                 stale = is_live(current) and current.get("status") != "waiting"
                 if new_only and stale and uuid == seen.get(sid, ""):
                     time.sleep(poll * 5)

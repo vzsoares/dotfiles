@@ -234,6 +234,104 @@ def test_event_for_waiting_is_idle(projects: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# pi sessions (~/pi-box/agent/sessions)                                         #
+# --------------------------------------------------------------------------- #
+
+PI_DIR = "/Users/me/pi-box/work/898"
+
+
+def _pi_message(entry_id: str, role: str, text: str, stop: str = "stop") -> str:
+    message: dict[str, object] = {
+        "role": role,
+        "content": [{"type": "text", "text": text}],
+        "timestamp": 1733234402000,
+    }
+    if role == "assistant":
+        message.update(provider="venice", model="glm", stopReason=stop)
+    return json.dumps(
+        {
+            "type": "message",
+            "id": entry_id,
+            "parentId": None,
+            "timestamp": "2026-11-19T20:00:00.000Z",
+            "message": message,
+        }
+    )
+
+
+def _pi_session(status: str = "finished") -> dict[str, object]:
+    return {**_session(PI_DIR, status=status, sid="pi1"), "tool": "pi"}
+
+
+def _write_pi(root: Path, lines: list[str]) -> Path:
+    path = (
+        root
+        / "--Users-me-pi-box-work-898--"
+        / "2026-11-19T20-00-00-000Z_agent-pi1.jsonl"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = json.dumps(
+        {"type": "session", "version": 3, "id": "agent-pi1", "cwd": PI_DIR}
+    )
+    path.write_text("\n".join([header, *lines]) + "\n")
+    return path
+
+
+def test_pi_slug_matches_pi() -> None:
+    assert (
+        zen_await.pi_slug("/Users/me/pi-box/work/a:b") == "--Users-me-pi-box-work-a-b--"
+    )
+
+
+def test_pi_transcript_path(projects: Path) -> None:
+    path = _write_pi(projects, [])
+    assert zen_await.transcript_path(_pi_session(), projects) == path
+    other = {**_pi_session(), "agent_session_id": "agent-nope"}
+    assert zen_await.transcript_path(other, projects) is None
+
+
+def test_pi_done_marker(projects: Path) -> None:
+    _write_pi(
+        projects,
+        [
+            _pi_message("a1", "user", "do task 898"),
+            _pi_message("a2", "assistant", "fetching", stop="toolUse"),
+            _pi_message("a3", "toolResult", "WORKER_DONE 1"),
+            _pi_message("a4", "assistant", "RESULT.md written\nWORKER_DONE 898"),
+        ],
+    )
+    ev = zen_await.event_for(_pi_session(), projects)
+    assert (ev.state, ev.task_id, ev.exit_code) == ("done", "898", 0)
+
+
+def test_pi_without_marker_is_idle(projects: Path) -> None:
+    _write_pi(
+        projects,
+        [
+            _pi_message("a1", "assistant", "WORKER_DONE 1", stop="error"),
+            _pi_message("a2", "assistant", "half way on 898"),
+            _pi_message("a3", "assistant", "still going", stop="toolUse"),
+        ],
+    )
+    assert zen_await.last_reply(_pi_session(), projects) == ("a2", "half way on 898")
+    ev = zen_await.event_for(_pi_session(), projects)
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+
+
+def test_pi_without_transcript_dead(projects: Path) -> None:
+    ev = zen_await.event_for(_pi_session(status="dead"), projects)
+    assert (ev.state, ev.exit_code) == ("dead", 20)
+
+
+def test_await_pi_session(projects: Path, fake_am: Path) -> None:
+    s = _pi_session()
+    _write_pi(projects, [_pi_message("a1", "assistant", "WORKER_DONE 898")])
+    (fake_am / "wait.json").write_text(json.dumps({"reached": True, "session": s}))
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert (ev.state, ev.task_id) == ("done", "898")
+
+
+# --------------------------------------------------------------------------- #
 # await_sessions (fake agent-manager)                                           #
 # --------------------------------------------------------------------------- #
 

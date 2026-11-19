@@ -26,6 +26,31 @@ PIBOX_DRY_RUN=1 pi-box             # print the docker command only
 The wrapper exits 2 unless the cwd is under `~/pi-box/work/<task-id>/`, and 3
 when a container for that task id is already running.
 
+## agent-manager
+
+`./pi-box/link` also links `~/pi-box/shim/pi` to the wrapper and, when
+agent-manager is installed, sets the `pi-box` env profile
+(`PATH=~/pi-box/shim:<your PATH>`, `PI_CODING_AGENT_DIR=~/pi-box/agent`) and
+creates the `pi-box` group (directory `~/pi-box/work`). A session launched
+under the profile resolves `pi` to the shim, so it runs boxed:
+
+```
+agent-manager spawn --tool pi --env pi-box --group pi-box \
+  --directory ~/pi-box/work/<task-id> --model <model> --prompt "…"
+```
+
+Model, effort, `--session-id`, resume (`--session`), revive (`--continue`) and
+fork args pass through. The wrapper drops agent-manager's pi session hook
+(`-e …/agent-manager-pi.ts`): it calls the host `agent-manager`, which the
+box has no access to. The id is still known from `--session-id`. `zen-await`
+reads boxed sessions from `~/pi-box/agent/sessions`.
+
+The profile stores PATH as a literal, so re-run `./pi-box/link` after PATH
+changes. A freshly spawned pane does not source `~/.zshrc.local`, so
+`VENICE_API_KEY` reaches the box only when it is in the profile (or in the
+pane's own shell, as on revive inside a live pane). A session outside the
+profile runs host pi.
+
 ## Boundary
 
 | What | How |
@@ -56,6 +81,7 @@ Update the Python lock with `uv pip compile requirements.in
 
 ```
 bash pi-box/test/wrapper.sh                           # fake docker, no container
+bash pi-box/test/link.sh                              # temp HOME, fake agent-manager
 zen-lock core-heavy -- bash pi-box/test/boundary.sh   # real image, no model call
 zen-lock core-heavy -- pi-box doctor                  # toolkit, offline
 ```

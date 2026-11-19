@@ -6,6 +6,9 @@
 #   pi-box build              build the image from this directory
 #   pi-box doctor             offline toolkit check in a throwaway container
 #
+# ~/pi-box/shim/pi links here, so the agent-manager pi-box env profile boxes
+# every pi it launches.
+#
 # PIBOX_DRY_RUN=1 prints the docker command instead of running it.
 
 set -e
@@ -110,7 +113,18 @@ if [ "${1:-}" = exec ]; then
   [ "$#" -gt 0 ] || die 2 "usage: pi-box exec <cmd...>"
   args+=("$@")
 else
-  args+=(pi "$@")
+  args+=(pi)
+  while [ "$#" -gt 0 ]; do
+    # agent-manager's session hook runs the host agent-manager, which the box
+    # neither has nor may reach; --session-id already carries the id.
+    if [[ "$1" = -e || "$1" = --extension ]] &&
+      [[ "${2:-}" = */agent-manager/hooks/agent-manager-pi.ts ]]; then
+      shift 2
+      continue
+    fi
+    args+=("$1")
+    shift
+  done
 fi
 
 if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then

@@ -79,6 +79,17 @@ PIBOX_DRY_RUN=1 run_in "$W/t1" exec bash -c 'echo hi'
 grep -q -- "pi-box bash -c echo\\\\ hi \$" "$TMP/out"
 check "exec runs the command instead of pi" $?
 
+# agent-manager launch: its host-side session hook is dropped, other -e kept
+hook="/Users/x/Library/Application Support/agent-manager/hooks/agent-manager-pi.ts"
+PIBOX_DRY_RUN=1 run_in "$W/t1" --session-id abc -e "$hook" --extension ./mine.ts
+grep -q -- "pi-box pi --session-id abc --extension ./mine.ts \$" "$TMP/out"
+check "drops agent-manager's pi hook, keeps other extensions" $?
+mkdir -p "$TMP/shim"
+ln -s "$WRAPPER" "$TMP/shim/pi"
+(cd "$W/t1" && PIBOX_DRY_RUN=1 PATH="$TMP/shim:$PATH" pi --continue) >"$TMP/out" 2>"$TMP/err"
+grep -q -- "pi-box pi --continue \$" "$TMP/out"
+check "the shim named pi on PATH runs the wrapper" $?
+
 # env allowlist
 printf 'CRAWL_DELAY_MS="1500"\nSECRET_TOKEN=x\n' >"$HOME/pi-box/config.env"
 SECRET_TOKEN=leak AWS_PROFILE=prod VENICE_API_KEY=k1 run_in "$W/t1" --version
