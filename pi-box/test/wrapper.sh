@@ -21,6 +21,7 @@ mkdir -p "$TMP/bin" "$TMP/home/pi-box/work/t1/sub" "$TMP/home/pi-box/agent" \
 cat >"$TMP/bin/docker" <<'FAKE'
 #!/usr/bin/env bash
 if [ "$1" = ps ]; then
+  printf '%s\n' "$@" >"$FAKE_PS"
   [ -n "$FAKE_RUNNING" ] && echo abc123
   exit 0
 fi
@@ -29,7 +30,7 @@ echo "CRAWL_DELAY_MS=${CRAWL_DELAY_MS-unset}" >>"$FAKE_LOG"
 echo "PIBOX_VENICE_API_KEY=${PIBOX_VENICE_API_KEY-unset}" >>"$FAKE_LOG"
 FAKE
 chmod +x "$TMP/bin/docker"
-export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log"
+export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/ps"
 unset PIBOX_VENICE_API_KEY PIBOX_ABLITERATION_API_KEY CRAWL_DELAY_MS FAKE_RUNNING
 W="$HOME/pi-box/work"
 
@@ -54,6 +55,12 @@ run_in "$W/t1"
 expect_rc 2 "refuses a symlinked agent dir (exit 2)"
 rm "$HOME/pi-box/agent"
 mv "$HOME/pi-box/agent.real" "$HOME/pi-box/agent"
+mv "$HOME/pi-box/in" "$HOME/pi-box/in.real"
+ln -s "$HOME/pi-box/in.real" "$HOME/pi-box/in"
+run_in "$W/t1"
+expect_rc 2 "refuses a symlinked in dir (exit 2)"
+rm "$HOME/pi-box/in"
+mv "$HOME/pi-box/in.real" "$HOME/pi-box/in"
 
 # pass-through and mounts
 PIBOX_DRY_RUN=1 run_in "$W/t1/sub" --provider venice -m glm --thinking high --session 's 1'
@@ -93,6 +100,10 @@ check "an unset key is not passed" $?
 # one live container per task
 FAKE_RUNNING=1 run_in "$W/t1"
 expect_rc 3 "refuses a second container on the same task (exit 3)"
+mkdir -p "$W/a.b"
+FAKE_RUNNING=1 run_in "$W/a.b"
+grep -q 'name=^pi-box-a\\.b\$' "$TMP/ps"
+check "ps filter escapes dots in the task id" $?
 
 echo
 if [ "$FAILS" -gt 0 ]; then

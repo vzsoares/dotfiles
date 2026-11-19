@@ -11,8 +11,8 @@ unset PIBOX_UID PIBOX_GID
 case "$uid$gid" in
   *[!0-9]* | "") echo "pi-box: bad PIBOX_UID/PIBOX_GID" >&2; exit 2 ;;
 esac
-if [ "$uid" = 0 ]; then
-  echo "pi-box: refusing to run as root" >&2
+if [ "$uid" = 0 ] || [ "$gid" = 0 ]; then
+  echo "pi-box: refusing to run as root or the root group" >&2
   exit 2
 fi
 
@@ -24,12 +24,12 @@ while read -r ns; do
 done < <(awk '$1 == "nameserver" && $2 !~ /:/ { print $2 }' /etc/resolv.conf)
 iptables -A OUTPUT -o lo -j ACCEPT
 for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 \
-  100.64.0.0/10 0.0.0.0/8; do
+  100.64.0.0/10 0.0.0.0/8 224.0.0.0/4 240.0.0.0/4; do
   iptables -A OUTPUT -d "$net" -j REJECT --reject-with icmp-port-unreachable
 done
 if [ -e /proc/net/if_inet6 ]; then
   ip6tables -A OUTPUT -o lo -j ACCEPT
-  for net in fc00::/7 fe80::/10; do
+  for net in fc00::/7 fe80::/10 ff00::/8; do
     ip6tables -A OUTPUT -d "$net" -j REJECT
   done
 fi

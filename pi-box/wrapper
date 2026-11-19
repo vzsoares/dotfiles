@@ -45,6 +45,7 @@ ROOT="$(real_dir "$HOME/pi-box")" || die 2 "$HOME/pi-box is missing or a symlink
 for d in work agent; do
   real_dir "$ROOT/$d" >/dev/null || die 2 "$ROOT/$d is missing or a symlink"
 done
+[ ! -L "$ROOT/in" ] || die 2 "$ROOT/in is a symlink"
 
 cwd="$(pwd -P)"
 case "$cwd/" in
@@ -104,7 +105,8 @@ if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then
   exit 0
 fi
 
-if [ -n "$(docker ps -q --filter "name=^${name}\$")" ]; then
+# The name filter is a regex; a task id may contain dots.
+if [ -n "$(docker ps -q --filter "name=^${name//./\\.}\$")" ]; then
   die 3 "a pi-box container for '$id' is already running"
 fi
 exec docker "${args[@]}"
