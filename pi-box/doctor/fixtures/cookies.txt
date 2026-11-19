@@ -1,0 +1,3 @@
+# Netscape HTTP Cookie File
+.example.com	TRUE	/	TRUE	1893456000	sid	abc123
+#HttpOnly_.example.com	TRUE	/	FALSE	0	tok	xyz

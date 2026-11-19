@@ -4,6 +4,7 @@
 #   pi-box [pi args...]       pi with every argument passed through
 #   pi-box exec <cmd...>      a command in the box instead of pi
 #   pi-box build              build the image from this directory
+#   pi-box doctor             offline toolkit check in a throwaway container
 #
 # PIBOX_DRY_RUN=1 prints the docker command instead of running it.
 
@@ -41,6 +42,19 @@ if [ "${1:-}" = build ]; then
   exec docker build -t "$IMAGE" "$SRC_DIR"
 fi
 
+if [ "${1:-}" = doctor ]; then
+  # No network and no workspace: the checks use fixtures baked into the image.
+  args=(run --rm --network none --user "$(id -u):$(id -g)" --cap-drop ALL
+    --security-opt no-new-privileges --memory 2g --shm-size 512m
+    -e HOME=/home/pi --entrypoint /opt/pi-box/doctor/doctor.sh "$IMAGE")
+  if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then
+    printf '%q ' docker "${args[@]}"
+    echo
+    exit 0
+  fi
+  exec docker "${args[@]}"
+fi
+
 ROOT="$(real_dir "$HOME/pi-box")" || die 2 "$HOME/pi-box is missing or a symlink; run pi-box/link"
 for d in work agent; do
   real_dir "$ROOT/$d" >/dev/null || die 2 "$ROOT/$d is missing or a symlink"
@@ -60,7 +74,7 @@ name="pi-box-$id"
 
 args=(run --rm -i --name "$name" --hostname pi-box
   --cap-drop ALL --cap-add NET_ADMIN --cap-add SETUID --cap-add SETGID
-  --security-opt no-new-privileges --memory 2g
+  --security-opt no-new-privileges --memory 2g --shm-size 512m
   -v "$ws:$ws" -v "$ROOT/agent:/home/pi/.pi/agent"
   -w "$cwd" -e PIBOX_UID -e PIBOX_GID)
 if real_dir "$ROOT/in" >/dev/null; then

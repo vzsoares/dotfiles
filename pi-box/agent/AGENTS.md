@@ -13,6 +13,21 @@ You run inside an isolated container. Nothing here needs approval.
   are reachable. Private networks and the host gateway are blocked; the public
   internet is open.
 
+## Toolkit
+
+Skills hold tested recipes; read the one that fits before improvising.
+
+- `fetch`: one URL to clean text (curl, httpx, trafilatura).
+- `crawl`: many pages (crawl4ai); depth, page cap, delay, robots.
+- `browser`: JavaScript-heavy pages and logins (headless Chromium, Playwright).
+- `extract`: parse saved files (htmlq, jq, rg, fd, sqlite3, pandoc, pandas).
+- `media`: yt-dlp and ffmpeg.
+
+Defaults arrive as env: `CRAWL_DELAY_MS`, `CRAWL_CONCURRENCY`,
+`CRAWL_MAX_PAGES`, `CRAWL_RESPECT_ROBOTS`, `CRAWL_USER_AGENT`, and proxy vars.
+Logins come only from cookie files in `in/cookies/<site>.txt`; never look for
+or read a browser profile.
+
 ## Output contract
 
 - Put every deliverable in `out/` inside the task folder.

@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Netscape cookies.txt -> Playwright storageState JSON (stdout)."""
+import json
+import sys
+
+
+def parse(lines):
+    cookies = []
+    for raw in lines:
+        line = raw.rstrip("\r\n")
+        http_only = line.startswith("#HttpOnly_")
+        if http_only:
+            line = line[len("#HttpOnly_"):]
+        if not line.strip() or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) != 7:
+            continue
+        domain, _, path, secure, expires, name, value = parts
+        cookies.append(
+            {
+                "name": name,
+                "value": value,
+                "domain": domain,
+                "path": path,
+                "expires": int(expires) if expires.isdigit() and int(expires) > 0 else -1,
+                "httpOnly": http_only,
+                "secure": secure.upper() == "TRUE",
+                "sameSite": "Lax",
+            }
+        )
+    return {"cookies": cookies, "origins": []}
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit("usage: pi-box-cookies2state <cookies.txt>")
+    with open(sys.argv[1], encoding="utf-8") as f:
+        json.dump(parse(f), sys.stdout, indent=2)
+    print()

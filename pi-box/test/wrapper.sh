@@ -97,6 +97,17 @@ run_in "$W/t1"
 ! grep -qx 'PIBOX_ABLITERATION_API_KEY' "$TMP/log"
 check "an unset key is not passed" $?
 
+# doctor: offline, from any cwd, no workspace mounts
+PIBOX_DRY_RUN=1 run_in "$TMP/outside" doctor
+check "doctor runs outside work/" $?
+grep -q -- "--network none " "$TMP/out" && grep -q -- "--cap-drop ALL " "$TMP/out" &&
+  grep -q -- "--entrypoint /opt/pi-box/doctor/doctor.sh pi-box \$" "$TMP/out" &&
+  ! grep -q -- " -v " "$TMP/out"
+check "doctor has no network, no caps, no mounts" $?
+PIBOX_DRY_RUN=1 run_in "$W/t1"
+grep -q -- "--shm-size 512m " "$TMP/out"
+check "pi gets a shm size for chromium" $?
+
 # one live container per task
 FAKE_RUNNING=1 run_in "$W/t1"
 expect_rc 3 "refuses a second container on the same task (exit 3)"
