@@ -12,7 +12,7 @@ otherwise, and `--sleep-interval` of `CRAWL_DELAY_MS`/1000 seconds.
 
 ```bash
 yt-dlp -P out -o '%(title).80B [%(id)s].%(ext)s' \
-  --sleep-interval "$(( ${CRAWL_DELAY_MS:-1000} / 1000 ))" \
+  --sleep-interval "$(awk -v ms="${CRAWL_DELAY_MS:-1000}" 'BEGIN { print ms / 1000 }')" \
   --retries 5 "$URL"
 yt-dlp -x --audio-format mp3 -P out "$URL"      # audio only
 yt-dlp --dump-json --skip-download "$URL" > out/meta.json

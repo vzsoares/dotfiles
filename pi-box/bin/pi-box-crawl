@@ -11,7 +11,6 @@ import argparse
 import asyncio
 import json
 import os
-import re
 from pathlib import Path
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -55,9 +54,9 @@ async def main() -> int:
             async for r in await crawler.arun(args.url, config=cfg):
                 if n >= max_pages:
                     break
-                n += 1
-                name = f"{n:04d}.md"
+                name = f"{n + 1:04d}.md"
                 if r.success:
+                    n += 1
                     (out / name).write_text(str(r.markdown), encoding="utf-8")
                 row = {
                     "url": r.url,
@@ -66,8 +65,7 @@ async def main() -> int:
                     "error": None if r.success else r.error_message,
                 }
                 index.write(json.dumps(row) + "\n")
-                print(re.sub(r"\s+", " ", f"{row['status']} {r.url}"))
-                await asyncio.sleep(delay)
+                print(f"{row['status']} {r.url}")
     print(f"{n} pages -> {out}")
     return 0 if n else 1
 

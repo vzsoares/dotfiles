@@ -46,7 +46,7 @@ if [ "${1:-}" = doctor ]; then
   # No network and no workspace: the checks use fixtures baked into the image.
   args=(run --rm --network none --user "$(id -u):$(id -g)" --cap-drop ALL
     --security-opt no-new-privileges --memory 2g --shm-size 512m
-    -e HOME=/home/pi --entrypoint /opt/pi-box/doctor/doctor.sh "$IMAGE")
+    -e HOME=/home/pi -e USER=pi --entrypoint /opt/pi-box/doctor/doctor.sh "$IMAGE")
   if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then
     printf '%q ' docker "${args[@]}"
     echo
