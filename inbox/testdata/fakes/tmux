@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fake tmux. capture-pane prints $FAKE_AM/screens/N for the Nth call (the last
 # screen repeats), after copying $FAKE_AM/sessions.N over sessions.json when
-# present; send-keys argv is saved NUL-separated under $FAKE_AM/keys. Any
+# present; send-keys argv is saved NUL-separated under $FAKE_AM/keys;
+# list-clients prints $FAKE_AM/clients.<socket name>, else $FAKE_AM/clients. Any
 # other call saves its argv to $FAKE_AM/tmux.argv.
 case "$3" in
 capture-pane)
@@ -15,7 +16,8 @@ capture-pane)
     cat "$FAKE_AM/screens/$n"
     ;;
 list-clients)
-    cat "$FAKE_AM/clients" 2>/dev/null
+    own="$FAKE_AM/clients.$(basename "$2")"
+    if [ -f "$own" ]; then cat "$own"; else cat "$FAKE_AM/clients" 2>/dev/null; fi
     ;;
 send-keys)
     mkdir -p "$FAKE_AM/keys"

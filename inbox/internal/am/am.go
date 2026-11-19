@@ -302,8 +302,7 @@ func shellQuote(s string) string {
 // PopupArgv is nil without a tmux server to open the popup on. client must
 // be a terminal client: display-popup on a control-mode one exits 0 and draws
 // nothing.
-func PopupArgv(sessionID, tmuxEnv, client string) []string {
-	socket, _, _ := strings.Cut(tmuxEnv, ",")
+func PopupArgv(sessionID, socket, client string) []string {
 	if socket == "" || client == "" {
 		return nil
 	}
@@ -311,6 +310,15 @@ func PopupArgv(sessionID, tmuxEnv, client string) []string {
 		"tmux", "-S", socket, "display-popup", "-c", client, "-E", "-w", "90%", "-h", "90%",
 		"env -u TMUX " + AttachCommand(sessionID),
 	}
+}
+
+// DefaultSocket is the tmux server a plain `tmux` in a terminal uses.
+func DefaultSocket() string {
+	dir := os.Getenv("TMUX_TMPDIR")
+	if dir == "" {
+		dir = "/tmp"
+	}
+	return filepath.Join(dir, "tmux-"+strconv.Itoa(os.Getuid()), "default")
 }
 
 // PickClient is the most recently active non-control client in `tmux
@@ -333,26 +341,34 @@ func PickClient(out string) string {
 	return best
 }
 
-func (e Exec) popupClient() (string, error) {
-	socket, _, _ := strings.Cut(e.TmuxEnv, ",")
-	if socket == "" {
-		return "", errors.New("not running inside tmux")
-	}
+func listClients(socket string) string {
 	out, err := exec.Command("tmux", "-S", socket, "list-clients", "-F",
 		"#{client_name}\t#{client_control_mode}\t#{client_activity}").Output()
 	if err != nil {
-		return "", fmt.Errorf("tmux list-clients: %w", err)
+		return ""
 	}
-	client := PickClient(string(out))
-	if client == "" {
-		return "", errors.New("no terminal client attached to the tmux server")
+	return string(out)
+}
+
+// popupTarget is the server and terminal client to draw the popup on. A
+// panel inside agent-manager's server sees only its control-mode client, so
+// the terminal attached to the default server is the fallback.
+func (e Exec) popupTarget() (socket, client string, err error) {
+	own, _, _ := strings.Cut(e.TmuxEnv, ",")
+	if own == "" {
+		return "", "", errors.New("not running inside tmux")
 	}
-	return client, nil
+	for _, s := range []string{own, DefaultSocket()} {
+		if c := PickClient(listClients(s)); c != "" {
+			return s, c, nil
+		}
+	}
+	return "", "", errors.New("no terminal client attached to the tmux server")
 }
 
 // CanPopup reports why Popup cannot open, nil when it can.
 func (e Exec) CanPopup(sessionID string) error {
-	if _, err := e.popupClient(); err != nil {
+	if _, _, err := e.popupTarget(); err != nil {
 		return err
 	}
 	if exec.Command("tmux", "-L", Socket, "has-session", "-t", "am_"+sessionID).Run() != nil {
@@ -363,11 +379,11 @@ func (e Exec) CanPopup(sessionID string) error {
 
 // Popup blocks until the popup closes.
 func (e Exec) Popup(sessionID string) error {
-	client, err := e.popupClient()
+	socket, client, err := e.popupTarget()
 	if err != nil {
 		return err
 	}
-	argv := PopupArgv(sessionID, e.TmuxEnv, client)
+	argv := PopupArgv(sessionID, socket, client)
 	var stderr bytes.Buffer
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stderr = &stderr

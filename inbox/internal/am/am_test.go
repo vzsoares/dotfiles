@@ -112,16 +112,16 @@ func TestSessionsUnavailableIsNil(t *testing.T) {
 }
 
 func TestPopupArgvTargetsClient(t *testing.T) {
-	for _, env := range []string{"/tmp/tmux-501/agentmgr,123,4", "/tmp/tmux-501/default,9,0"} {
-		argv := PopupArgv("ab12", env, "/dev/ttys003")
-		want := []string{"tmux", "-S", strings.Split(env, ",")[0], "display-popup", "-c", "/dev/ttys003",
+	for _, socket := range []string{"/tmp/tmux-501/agentmgr", "/tmp/tmux-501/default"} {
+		argv := PopupArgv("ab12", socket, "/dev/ttys003")
+		want := []string{"tmux", "-S", socket, "display-popup", "-c", "/dev/ttys003",
 			"-E", "-w", "90%", "-h", "90%", "env -u TMUX tmux -L agentmgr attach -t am_ab12"}
 		if !slices.Equal(argv, want) {
 			t.Fatal(argv)
 		}
 	}
-	if PopupArgv("ab12", "", "c") != nil || PopupArgv("ab12", "/s,1,2", "") != nil {
-		t.Fatal("no $TMUX or no client should mean no popup")
+	if PopupArgv("ab12", "", "c") != nil || PopupArgv("ab12", "/s", "") != nil {
+		t.Fatal("no socket or no client should mean no popup")
 	}
 	if got := AttachCommand("a b"); got != "tmux -L agentmgr attach -t 'am_a b'" {
 		t.Fatal(got)
@@ -164,6 +164,29 @@ func TestPopupRunsTmuxAndReportsErrors(t *testing.T) {
 	touch(t, filepath.Join(data, "tmux_rc"))
 	if err := e.Popup("ab12"); err == nil {
 		t.Fatal("failed tmux reported success")
+	}
+}
+
+func TestPopupFallsBackToDefaultServer(t *testing.T) {
+	data := fakes(t, live)
+	tmp := t.TempDir()
+	t.Setenv("TMUX_TMPDIR", tmp)
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(data, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("clients.agentmgr", "client-1\t1\t900\n")
+	write("clients.default", "/dev/ttys000\t0\t5\n")
+	e := Exec{TmuxEnv: "/tmp/tmux-501/agentmgr,1,2"}
+	if err := e.Popup("ab12"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(data, "tmux.argv"))
+	argv := strings.Split(string(raw), "\x00")
+	want := []string{"-S", DefaultSocket(), "display-popup", "-c", "/dev/ttys000"}
+	if !slices.Equal(argv[:5], want) || !strings.HasPrefix(want[1], tmp) {
+		t.Fatal(argv)
 	}
 }
 
