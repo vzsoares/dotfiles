@@ -37,6 +37,7 @@ LINKS=(
     "zen-wrapup:scripts/wrapup.sh"
     "zen-diagram:mermaid/src/cli.ts"
     "zen-telemetry:scripts/telemetry/bin/zen-telemetry"
+    "pi-box:pi-box/wrapper"
 )
 
 usage() {

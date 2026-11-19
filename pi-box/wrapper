@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# pi-box: run pi inside the pi-box container, from ~/pi-box/work/<task-id>.
+#
+#   pi-box [pi args...]       pi with every argument passed through
+#   pi-box exec <cmd...>      a command in the box instead of pi
+#   pi-box build              build the image from this directory
+#
+# PIBOX_DRY_RUN=1 prints the docker command instead of running it.
+
+set -e
+
+IMAGE=pi-box
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SRC_DIR="$(dirname "$SELF")"
+
+# Passed from the host env when set; never a value on the command line.
+PASS_ENV=(PIBOX_VENICE_API_KEY PIBOX_ABLITERATION_API_KEY TERM COLORTERM LANG)
+# Read from ~/pi-box/config.env; the host env overrides per run.
+CONFIG_ENV=(
+  CRAWL_DELAY_MS CRAWL_CONCURRENCY CRAWL_MAX_PAGES CRAWL_RESPECT_ROBOTS
+  CRAWL_USER_AGENT HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY
+  http_proxy https_proxy all_proxy no_proxy
+)
+
+die() {
+  echo "pi-box: $2" >&2
+  exit "$1"
+}
+
+real_dir() { # path -> physical path; fails when missing or a symlink
+  [ -d "$1" ] && [ ! -L "$1" ] && (cd "$1" && pwd -P)
+}
+
+config_value() { # key -> last value in config.env, quotes stripped
+  [ -f "$ROOT/config.env" ] || return 0
+  sed -n "s/^[[:space:]]*$1=//p" "$ROOT/config.env" | tail -n 1 |
+    sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+
+if [ "${1:-}" = build ]; then
+  exec docker build -t "$IMAGE" "$SRC_DIR"
+fi
+
+ROOT="$(real_dir "$HOME/pi-box")" || die 2 "$HOME/pi-box is missing or a symlink; run pi-box/link"
+for d in work agent; do
+  real_dir "$ROOT/$d" >/dev/null || die 2 "$ROOT/$d is missing or a symlink"
+done
+
+cwd="$(pwd -P)"
+case "$cwd/" in
+  "$ROOT/work/"?*/) ;;
+  *) die 2 "run from $ROOT/work/<task-id>, not $cwd" ;;
+esac
+rel="${cwd#"$ROOT/work/"}"
+id="${rel%%/*}"
+[[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 2 "bad task id '$id'"
+ws="$ROOT/work/$id"
+name="pi-box-$id"
+
+args=(run --rm -i --name "$name" --hostname pi-box
+  --cap-drop ALL --cap-add NET_ADMIN --cap-add SETUID --cap-add SETGID
+  --security-opt no-new-privileges --memory 2g
+  -v "$ws:$ws" -v "$ROOT/agent:/home/pi/.pi/agent"
+  -w "$cwd" -e PIBOX_UID -e PIBOX_GID)
+if real_dir "$ROOT/in" >/dev/null; then
+  args+=(-v "$ROOT/in:$ROOT/in:ro")
+fi
+if [ -t 0 ] && [ -t 1 ]; then
+  args+=(-t)
+fi
+
+PIBOX_UID="$(id -u)"
+PIBOX_GID="$(id -g)"
+export PIBOX_UID PIBOX_GID
+
+for key in "${PASS_ENV[@]}"; do
+  if [ -n "${!key+set}" ]; then
+    export "${key?}"
+    args+=(-e "$key")
+  fi
+done
+for key in "${CONFIG_ENV[@]}"; do
+  if [ -z "${!key+set}" ]; then
+    val="$(config_value "$key")"
+    [ -n "$val" ] || continue
+    printf -v "$key" '%s' "$val"
+  fi
+  export "${key?}"
+  args+=(-e "$key")
+done
+
+args+=("$IMAGE")
+if [ "${1:-}" = exec ]; then
+  shift
+  [ "$#" -gt 0 ] || die 2 "usage: pi-box exec <cmd...>"
+  args+=("$@")
+else
+  args+=(pi "$@")
+fi
+
+if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then
+  printf '%q ' docker "${args[@]}"
+  echo
+  exit 0
+fi
+
+if [ -n "$(docker ps -q --filter "name=^${name}\$")" ]; then
+  die 3 "a pi-box container for '$id' is already running"
+fi
+exec docker "${args[@]}"

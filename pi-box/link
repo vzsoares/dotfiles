@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Creates the ~/pi-box workspace. Agent templates and config.env are copied,
+# not linked: the repo is not mounted in the box, and pi rewrites settings.json.
+# Existing files are kept; pass --force to overwrite the agent templates.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$HOME/pi-box"
+
+for d in "$ROOT" "$ROOT/work" "$ROOT/in" "$ROOT/agent"; do
+  if [ -L "$d" ]; then
+    echo "pi-box/link: $d is a symlink; the wrapper refuses it" >&2
+    exit 1
+  fi
+  mkdir -p "$d"
+done
+
+copy() { # src, dest
+  if [ -e "$2" ] && [ "${FORCE:-}" != 1 ]; then
+    echo "kept   $2"
+  else
+    cp "$1" "$2"
+    echo "copied $2"
+  fi
+}
+
+[ "${1:-}" = --force ] && FORCE=1
+for f in AGENTS.md settings.json mcp.json; do
+  copy "$SCRIPT_DIR/agent/$f" "$ROOT/agent/$f"
+done
+FORCE='' copy "$SCRIPT_DIR/config.env.example" "$ROOT/config.env"
+
+echo "next: pi-box build   (then: mkdir -p $ROOT/work/<id> && cd there && pi-box)"
