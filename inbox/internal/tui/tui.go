@@ -49,10 +49,12 @@ const (
 	scTalkNote
 	scReviewNote
 	scConfirm
-	// scLocked and scFreeBlank are never m.scr: they name the footer of a walk
-	// on a locked prod ask and of an empty free-text box.
+	// scLocked, scFreeBlank and scConfirmManual are never m.scr: they name the
+	// footer of a walk on a locked prod ask, of an empty free-text box and of
+	// a manual ask's confirm.
 	scLocked
 	scFreeBlank
+	scConfirmManual
 	scNote
 	scReply
 	scChief
@@ -228,8 +230,10 @@ type Model struct {
 	// prodBlock is why prod-action asks are locked here; it applies only
 	// while ib.User is false.
 	prodBlock string
-	// confirm is the Approve letter scConfirm stages on y.
-	confirm string
+	// confirm is the letter scConfirm stages on y, confirmRev the rev it was
+	// shown at.
+	confirm    string
+	confirmRev int64
 	// note is the one scNote and scReply show.
 	note inbox.Note
 	// chiefTA is the compose box for chief; its text stays across esc.
@@ -849,10 +853,10 @@ func (m *Model) stage(s view.Staged) tea.Cmd {
 	return m.saveDraft(id, s)
 }
 
-// saveDraft mirrors s as id's draft and queues its write. A prod Approve is
+// saveDraft mirrors s as id's draft and queues its write. A confirmed pick is
 // kept only in the pass, so a restart asks it again with its confirm.
 func (m *Model) saveDraft(id string, s view.Staged) tea.Cmd {
-	if d, ok := m.decision(id); ok && d.Prod != nil && s.Kind == "pick" && d.OptionText(s.Option) == "Approve" {
+	if d, ok := m.decision(id); ok && s.Kind == "pick" && d.NeedsConfirm(s.Option) {
 		delete(m.drafts, id)
 		return m.queueDrafts(draftOp{id: id})
 	}
@@ -1115,15 +1119,19 @@ func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 func (m *Model) locked(d inbox.Decision) bool { return d.Prod != nil && !m.ib.User }
 
 // notice is the line under the question: why a prod ask is locked, else
-// its draft.
+// its draft and why a manual ask's Done is refused here.
 func (m *Model) notice(d inbox.Decision) string {
 	if m.locked(d) {
 		return "prod approvals only from the cockpit terminal (" + m.prodBlock + ")"
 	}
+	var parts []string
 	if _, text := m.draftText(d); text != "" {
-		return "draft: " + text
+		parts = append(parts, "draft: "+text)
 	}
-	return ""
+	if d.Kind == inbox.KindManual && !m.ib.User {
+		parts = append(parts, "Done only from the cockpit terminal ("+m.prodBlock+")")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (m *Model) chosen(from []inbox.Decision) []string {
@@ -1431,7 +1439,7 @@ func (m *Model) scrollBy(k string) int {
 	case "ctrl+u", "ctrl+b":
 		return -half
 	}
-	if m.scr == scFull || m.scr == scNote || m.scr == scThread {
+	if m.scr == scFull || m.scr == scNote || m.scr == scThread || m.scr == scConfirm {
 		switch k {
 		case "down", "j":
 			return 1
@@ -1732,9 +1740,9 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 		m.startTalk(scWalk)
 	default:
 		switch {
-		case m.locked(d) || d.OptionText(choice) == "":
-		case d.Prod != nil && d.OptionText(choice) == "Approve":
-			m.confirm = choice
+		case m.locked(d), !m.ib.User && d.NeedsConfirm(choice), d.OptionText(choice) == "":
+		case d.NeedsConfirm(choice):
+			m.confirm, m.confirmRev = choice, d.Rev
 			m.scr = scConfirm
 		default:
 			return m, m.stage(view.Staged{Kind: "pick", Option: choice, Rev: d.Rev})
@@ -1743,11 +1751,22 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// keyConfirm stages Approve only on y; any other key goes back unstaged.
+// keyConfirm stages the pick only on y; any other key goes back unstaged,
+// but a manual ask's step scrolls.
 func (m *Model) keyConfirm(k string) (tea.Model, tea.Cmd) {
 	d, ok := m.decision(m.p.cur)
+	if ok && d.Kind == inbox.KindManual {
+		if n := m.scrollBy(k); n != 0 {
+			m.scroll = max(m.scroll+n, 0)
+			return m, nil
+		}
+	}
 	m.scr = scWalk
-	if ok && k == "y" && !m.locked(d) && d.OptionText(m.confirm) == "Approve" {
+	if ok && k == "y" && d.Rev != m.confirmRev {
+		m.p.notes = append(m.p.notes, d.ID+" changed: read it again before confirming")
+		return m, nil
+	}
+	if ok && k == "y" && m.ib.User && d.NeedsConfirm(m.confirm) {
 		return m, m.stage(view.Staged{Kind: "pick", Option: m.confirm, Rev: d.Rev})
 	}
 	return m, nil

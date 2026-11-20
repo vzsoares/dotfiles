@@ -279,6 +279,15 @@ func (r *Renderer) Number(lines, blocks []string) ([]string, []string) {
 	return out, blocks
 }
 
+// Unlabel drops the copy labels from lines, for a screen where y does not copy.
+func (r *Renderer) Unlabel(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = marker.ReplaceAllString(l, "")
+	}
+	return out
+}
+
 // block lays code lines (lead already cut off) at lead's indent on a tinted background, padded to
 // the widest line, with a copy label above. No border characters sit beside
 // the code, so a drag-select copies only the code.

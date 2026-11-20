@@ -90,7 +90,7 @@ func TestV9DumpMigratesToV10(t *testing.T) {
 	for table := range v9Tables {
 		want := before[table]
 		if table == "decisions" {
-			want = withBody(want)
+			want = withAdded(want)
 		}
 		if got := createSQL(t, ib.conn, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)

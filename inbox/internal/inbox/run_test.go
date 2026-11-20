@@ -18,14 +18,14 @@ func withCmd(create string) string {
 		" pushed_at TEXT NOT NULL DEFAULT '', pushed_by TEXT NOT NULL DEFAULT '')" + create[i+1:]
 }
 
-// withBody is a pre-v11 decisions CREATE after the v11 ALTER.
-func withBody(create string) string {
+// withAdded is a pre-v11 decisions CREATE after the v11 and v12 ALTERs.
+func withAdded(create string) string {
 	const last = "rev INTEGER NOT NULL DEFAULT 0,"
-	return strings.Replace(create, last, last+" body TEXT NOT NULL DEFAULT '',", 1)
+	return strings.Replace(create, last, last+" body TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', confirmed_at TEXT NOT NULL DEFAULT '',", 1)
 }
 
 // v10Columns is what a v10 binary reads from decisions.
-var v10Columns = strings.TrimSuffix(columns, ", body")
+var v10Columns = strings.TrimSuffix(columns, ", body, kind, confirmed_at")
 
 func askRun(t *testing.T, ib *Inbox) string {
 	t.Helper()

@@ -200,7 +200,7 @@ func TestV3KeepsV2TablesUnchanged(t *testing.T) {
 	for _, table := range []string{"decisions", "decision_options", "decision_briefs"} {
 		want := createSQL(t, v2, table)
 		if table == "decisions" {
-			want = withBody(want)
+			want = withAdded(want)
 		}
 		if got := createSQL(t, ib.conn, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)

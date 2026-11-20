@@ -145,3 +145,7 @@ end the turn instead of polling, and bans pgrep/load-average waits.
 ## [2026-11-20] feature | zen-inbox asks take a markdown body; run commands copy as blocks (#928)
 `zen-inbox ask|amend --body <md>|-` stores `decisions.body` (schema v11, one additive `ALTER TABLE`), shown under the question on every ask screen. A `--prod run` ask shows its `--cmd` as a numbered code block; `y` + number also works on the session and Review all screens. Code lines longer than the pane now break only at the pane edge.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-20] feature | zen-inbox manual-step asks: Done takes a typed y (#929)
+`zen-inbox ask <task> --manual -q …` files a step the user runs by hand with fixed options Done/Later (schema v12: `decisions.kind`, `decisions.confirmed_at`, additive). In the panel Done opens a confirm showing the step again; only `y` stages it. The CLI refuses Done on one, the answer is delivered as `a: Done (confirmed)`, and rows carry a `MANUAL` marker. The chief and orchestrator presets and the zen-flow skill file Human Only steps this way.
+Pages updated: architecture/decision-inbox.md

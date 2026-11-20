@@ -72,7 +72,10 @@ The relation is two-way, so one write links both pages.
   that need the backoffice UI. Human Only steps a session leaves behind append to
   one open checklist task per project and kind (device checks, secrets, a prod
   rollout) with `zen-board checklist <id> "<step>"`; never one task per step. Create
-  the checklist task only when none is open for that project and kind.
+  the checklist task only when none is open for that project and kind. A Human Only
+  step that goes to the inbox is a manual-step ask: `zen-inbox ask <task> --manual -q
+  "<the step>" --body "<its commands>"` (options fixed: Done, Later). Picking Done
+  asks the user to type `y` in the panel; agents never answer Done on one.
 - `Human Approval` — a step an agent can run from this machine with credentials it
   already has, once the user approves: pushes, remote branch deletes, edits to
   `.claude/settings.json` or permissions, tool installs, `gh` repo settings, prod
@@ -210,8 +213,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
   (task ID, page URL, repo, model tier) and sets them In Progress. It does not relay
   decisions (see Decision inbox), keeps the `cockpit` and `resume-watch` terminals running, records answers
-  the user gives in chat with `zen-inbox answer` (never a `--prod` ask: the user
-  approves those in the panel), runs each Human Approval step the user approves (or hands
+  the user gives in chat with `zen-inbox answer` (never a `--prod` ask or Done on a
+  `--manual` ask: the user confirms those in the panel), runs each Human Approval step the user approves (or hands
   it to the orchestrator; if auto mode blocks it, it asks for `go #<id>`), re-tags a step
   `Human Only` when the user answers "I'll do it myself", and lists Human Only work. On the user's `go #<id>` in
   its chat it spawns that queue entry's worker (`worker-rules`, tier and repo from the
@@ -316,6 +319,10 @@ Agents never message chief with decisions. They run `zen-inbox ask <task> -q ...
 on the first ask, and end the turn; `zen-inbox brief` sets that context later. `-q`
 stays one sentence: commands, lists and anything to copy go in `--body "<markdown>"`
 (or `--body -` from stdin), shown under the question with fenced blocks copyable. A
+step the user runs by hand is `zen-inbox ask <task> --manual -q ... [--body ...]`: no
+`-o` (the options are Done and Later, rec `a`), Done opens a confirm that shows the
+step again and takes a typed `y`, and the answer arrives as `a: Done (confirmed)`;
+`zen-inbox answer <id> a` is refused on it. A
 terminal named `cockpit` in group `chief` runs `zen-inbox watch`: one row per asking
 session (zen-bell rings once per session per poll). Opening one shows the task context, then
 its questions; the user walks them (pick, free text, skip) and sends them from a

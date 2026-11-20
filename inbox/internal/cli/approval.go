@@ -15,9 +15,9 @@ func usageErr(msg string) error { return &inbox.Error{Msg: msg, Code: 2} }
 func prodFlags(cmd *cobra.Command) error {
 	f := cmd.Flags()
 	if f.Changed("prod") {
-		for _, name := range []string{"question", "option", "rec", "gate"} {
+		for _, name := range []string{"question", "option", "rec", "gate", "manual"} {
 			if f.Changed(name) {
-				return usageErr("--prod writes its own question and options; drop -q, -o, --rec and --gate")
+				return usageErr("--prod writes its own question and options; drop -q, -o, --rec, --gate and --manual")
 			}
 		}
 		return nil

@@ -10,7 +10,7 @@ import (
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
-func TestV10DBMigratesToV11KeepingRows(t *testing.T) {
+func TestV10DBMigratesToCurrentKeepingRows(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "zen-flow.db")
 	raw, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -46,10 +46,10 @@ func TestV10DBMigratesToV11KeepingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := ib.userVersion(); v != 11 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
-	if got := createSQL(t, ib.conn, "decisions"); got != withBody(create) {
+	if got := createSQL(t, ib.conn, "decisions"); got != withAdded(create) {
 		t.Fatalf("decisions:\n%s", got)
 	}
 	for _, id := range []string{"7.1", "7.2"} {
@@ -62,7 +62,7 @@ func TestV10DBMigratesToV11KeepingRows(t *testing.T) {
 	}
 	_ = ib.Close()
 
-	// A v10 binary sees user_version 11 as current: it reads and writes its own columns.
+	// A v10 binary sees a later user_version as current: it reads and writes its own columns.
 	raw, err = sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)

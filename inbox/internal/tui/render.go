@@ -163,6 +163,10 @@ func (m *Model) layout(follow bool) ([]string, int, int) {
 	body := m.lines(f.body)
 	menu := m.lines(f.menu)
 	m.blocks = nil
+	if f.s == scConfirmManual {
+		// y confirms here, so a "[n] copy" label would invite a wrong y.
+		body = m.md.Unlabel(body)
+	}
 	top, m.blocks = m.md.Number(top, m.blocks)
 	body, m.blocks = m.md.Number(body, m.blocks)
 	menu, m.blocks = m.md.Number(menu, m.blocks)
@@ -510,10 +514,16 @@ func (m *Model) viewReview() frame {
 		menu: menuSection(reviewMenu, m.cursor, menuH, m.w), cur: -1, help: true}
 }
 
-// viewConfirm shows the exact prod action an Approve binds; the sha and a
-// run's command get lines of their own so all of them fit a narrow pane.
+// viewConfirm shows what the typed y binds. A manual ask: the step again,
+// scrolling over the pinned prompt. A prod ask: the exact action; the sha and
+// a run's command get lines of their own so all of them fit a narrow pane.
 func (m *Model) viewConfirm() frame {
 	d, _ := m.decision(m.p.cur)
+	if d.Kind == inbox.KindManual {
+		return frame{s: scConfirmManual, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  manual step", m.w)}, style: &bannerStyle}},
+			body: []section{{lines: view.PanelAskLines(d, m.w, m.paint)}},
+			menu: []section{{lines: []string{"", "Did you run it? type y"}, style: &bannerStyle}}, cur: -1, help: true}
+	}
 	var p inbox.ProdAction
 	if d.Prod != nil {
 		p = *d.Prod

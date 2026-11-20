@@ -17,7 +17,8 @@ message.
 ## Flow
 
 1. **ask** — `zen-inbox ask <task> -q ... -o ... --rec <letter> [--context ...]
-   [--body <markdown> | --body -] [--gate] [--title ... --brief ...]`. `-q` is one
+   [--body <markdown> | --body -] [--gate] [--title ... --brief ...]` (`--manual`
+   instead of `-o`: see Manual-step asks). `-q` is one
    sentence; `--body` (at most 16 KiB, also on `amend`, `""` clears it) carries
    commands and lists and is shown under the question (#928). The asker is `--session`, else
    `$AGENT_MANAGER_SESSION_ID` (set in every agent-manager pane); its name comes from
@@ -236,6 +237,39 @@ delete push to `prod`/`main`/`master` runs `check --match` for every gated ref, 
   not inherit an agent env var from the agentmgr tmux server's environment, or the
   guard refuses there too.
 
+## Manual-step asks (#929)
+
+`zen-inbox ask <task> --manual -q "<the step>" [--body <markdown>] [--context …]`
+files a step the user runs by hand, so it cannot be closed by reflex. zen-inbox
+writes the options `Done`/`Later` (rec `a` unless `--rec b`); `--manual` refuses
+`-o`, `--gate` and `--prod` (exit 2). `decisions.kind` is `manual`.
+
+- **Confirm.** Picking Done (`a` or enter) opens the confirm screen: the question
+  and body again, then a pinned `Did you run it? type y`. Only `y` stages the pick
+  for the normal review → Send; `↑↓`, `j`/`k` and `pgup`/`pgdn` scroll a long step;
+  any other key stages nothing and returns to the question. The step's code blocks
+  carry no `[n] copy` label there (`md.Unlabel`), since `y` confirms. A `y` on a step
+  amended while the confirm was open stages nothing (`confirmRev`) and returns to the
+  question with `changed: read it again before confirming`. Later, free text and
+  talk need no confirm.
+- **Only the user answers Done.** Inside `closeOne`'s transaction a pick of Done on
+  a manual ask needs `Inbox.User` (the bit prod asks use): from the CLI it is exit 1,
+  `<id> is a manual-step ask; confirm Done in the decisions panel`, row left `open`.
+  `answer <id> b`, `--text` and `resolve` work as on any ask. A panel inside an
+  agent session shows `Done only from the cockpit terminal (<reason>)` and ignores
+  `a`.
+- **Never a draft.** Like a prod Approve, a staged Done is kept only in the pass
+  (store and panel both refuse to write it), so a restart asks it again with its
+  confirm.
+- **Record.** The close stamps `decisions.confirmed_at`; the delivered line reads
+  `929.1 <question> → a: Done (confirmed)`, and `--json` carries `kind` and
+  `confirmed_at` (only on asks with a kind).
+- **Marker.** `MANUAL · ` leads the session row and the Inbox row, `MANUAL` sits in
+  a thread header, and the question line reads `929.1 manual  <question>`.
+- **Amend.** `-q`, `--body`, `--context` and `--rec` amend as usual (the staged
+  answer goes stale and is asked again); `-o` is refused, so the options stay fixed.
+- Unlike prod asks, an open manual ask holds its task's other answers, as any ask does.
+
 ## Notes (#707)
 
 A second channel from chief to the user: a note is a short message that is not a
@@ -361,7 +395,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 11. Tables `decisions` and `decision_options` use generic names because the db is
+now 12. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -385,7 +419,9 @@ messages to chief; no existing table changes, so a v9 reader keeps working.
 v11 adds `decisions.body` (default `''`), an ask's markdown body: one `ALTER TABLE …
 ADD COLUMN`, no row rewritten; a v10 reader names its columns, so it keeps reading
 and writing a v11 db. `--json` carries `body` only when it is set, and the answers
-message never includes it.
+message never includes it. v12 adds `decisions.kind` and `decisions.confirmed_at`
+(both default `''`), two `ALTER TABLE … ADD COLUMN`; a v11 reader keeps working, and
+only sees a manual ask as a plain Done/Later one it could answer without the confirm.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

@@ -1,0 +1,29 @@
+cockpit                                                                            quota n/a
+#929 Key rotation
+asked by spec-s1 · idle · 0s
+
+929.1 manual  Rotate the signing key?
+  Run on the build machine:
+
+  [1] copy
+   just rotate-key --env prod 
+a) Done  ← rec
+b) Later
+› a  ← rec
+  b
+  Free text
+  Skip
+  Talk
+  View full
+  Back
+
+
+
+
+
+
+
+
+
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · y copy · ←→ move · esc list
+? help

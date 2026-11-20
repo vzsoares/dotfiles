@@ -1,0 +1,29 @@
+cockpit                                                                            quota n/a
+929.1  manual step
+929.1 manual  Rotate the signing key?
+  Run on the build machine:
+
+  
+   just rotate-key --env prod 
+
+Did you run it? type y
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+y I ran it · n/esc back · ↑↓ scroll

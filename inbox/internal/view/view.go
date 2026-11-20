@@ -141,6 +141,9 @@ func QuestionTags(d inbox.Decision) string {
 	if d.Gate {
 		tags += " gate"
 	}
+	if d.Kind == inbox.KindManual {
+		tags += " manual"
+	}
 	if d.Amended {
 		tags += " (amended)"
 	}
@@ -368,6 +371,8 @@ type Row struct {
 	Newest string
 	// Drafted is how many open decisions the panel holds a current draft for.
 	Drafted int
+	// Manual is whether one of its open decisions is a manual-step ask.
+	Manual bool
 }
 
 // Rows is one row per asking session, oldest open decision first.
@@ -407,12 +412,13 @@ func Rows(open []inbox.Decision, sessions am.Sessions) []Row {
 				}
 			}
 		}
-		gate := false
+		gate, manual := false, false
 		for _, d := range ds {
 			gate = gate || d.Gate
+			manual = manual || d.Kind == inbox.KindManual
 		}
 		rows = append(rows, Row{sid, ds[0].SessionName, tasks, title, len(ds), ds[0].CreatedAt,
-			gate, am.Status(am.Find(sessions, sid)), ds[0].Task, ds[len(ds)-1].CreatedAt, 0})
+			gate, am.Status(am.Find(sessions, sid)), ds[0].Task, ds[len(ds)-1].CreatedAt, 0, manual})
 	}
 	return rows
 }
@@ -658,13 +664,14 @@ func ThreadNoteLabel(n inbox.Note, at time.Time) string {
 type ThreadHead struct {
 	Task, Title         string
 	Expanded, Prod      bool
+	Manual              bool
 	Open, Unread, Items int
 	// Held is how many open asks hold this thread's answered ones back.
 	Held   int
 	Newest string
 }
 
-// ThreadLabel is ▸/▾ #task, the title, PROD, the counts and the age of the
+// ThreadLabel is ▸/▾ #task, the title, PROD, MANUAL, the counts and the age of the
 // newest item; only the title is cut to fit room.
 func ThreadLabel(h ThreadHead, at time.Time, room int) string {
 	arrow := "▸ "
@@ -674,6 +681,9 @@ func ThreadLabel(h ThreadHead, at time.Time, room int) string {
 	var rest []string
 	if h.Prod {
 		rest = append(rest, "PROD")
+	}
+	if h.Manual {
+		rest = append(rest, "MANUAL")
 	}
 	if h.Open > 0 {
 		rest = append(rest, strconv.Itoa(h.Open)+" open")
@@ -718,6 +728,9 @@ func DecisionState(d inbox.Decision) string {
 		state = "talk"
 	case d.AnswerKind == "pick":
 		state = "→ " + d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
+		if d.ConfirmedAt != "" {
+			state += " (confirmed)"
+		}
 	default:
 		state = "free text: " + d.AnswerText
 	}

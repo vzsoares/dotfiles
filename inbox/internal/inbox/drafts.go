@@ -26,8 +26,8 @@ func (ib *Inbox) deleteDraft(id string) error {
 }
 
 // SaveDraft stores d for an open decision; a closed one is left without a
-// draft. An Approve on a prod-action ask is never stored, so after a restart
-// it is asked again with its confirm.
+// draft. A pick that needs the confirm (prod Approve, manual Done) is never
+// stored, so after a restart it is asked again with its confirm.
 func (ib *Inbox) SaveDraft(d Draft) error {
 	switch d.Kind {
 	case "pick", "text", "skip":
@@ -41,7 +41,7 @@ func (ib *Inbox) SaveDraft(d Draft) error {
 		if err != nil {
 			return err
 		}
-		if dec.Status != "open" || (dec.Prod != nil && d.Kind == "pick" && dec.OptionText(d.Option) == "Approve") {
+		if dec.Status != "open" || (d.Kind == "pick" && dec.NeedsConfirm(d.Option)) {
 			return ib.deleteDraft(d.ID)
 		}
 		return ib.exec("INSERT INTO decision_drafts (decision_id, kind, option, text, rev, updated_at)"+

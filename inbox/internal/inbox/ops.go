@@ -71,11 +71,23 @@ type AskInput struct {
 	// Prod binds the ask to one prod action; Question and Options must be
 	// ProdQuestion and ProdOptions (AskProd fills them).
 	Prod *ProdAction
+	// Manual makes it a manual-step ask: Options must be empty.
+	Manual bool
 }
 
 func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 	if err := checkTask(in.Task); err != nil {
 		return Decision{}, err
+	}
+	kind := ""
+	if in.Manual {
+		if len(in.Options) > 0 || in.Gate || in.Prod != nil {
+			return Decision{}, errf(2, "--manual writes its own options (Done, Later); drop -o, --gate and --prod")
+		}
+		kind, in.Options = KindManual, ManualOptions
+		if in.Rec == "" {
+			in.Rec = Letters[:1]
+		}
 	}
 	if pyfmt.Blank(in.Question) {
 		return Decision{}, errf(2, "a question is required")
@@ -114,10 +126,10 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 			id = fmt.Sprintf("%s.g%d", in.Task, seq)
 		}
 		if err := ib.exec("INSERT INTO decisions (id, task, seq, gate, session_id, session_name,"+
-			" question, body, context, rec, created_at, updated_at)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			" question, body, context, rec, kind, created_at, updated_at)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			id, in.Task, seq, gate, in.SessionID, in.Name, in.Question, in.Body, in.Context, in.Rec,
-			now, now); err != nil {
+			kind, now, now); err != nil {
 			return err
 		}
 		if err := ib.insertOptions(id, in.Options); err != nil {
@@ -247,6 +259,9 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 		if d.Prod != nil {
 			return errf(1, "%s is a prod-action ask; withdraw and re-ask", id)
 		}
+		if d.Kind == KindManual && in.Options != nil {
+			return errf(1, "%s is a manual-step ask; its options are fixed", id)
+		}
 		texts := in.Options
 		if texts == nil {
 			for _, o := range d.Options {
@@ -328,13 +343,20 @@ func (ib *Inbox) closeOne(id string, a closeArgs) (Decision, error) {
 		if a.kind == "pick" && d.OptionText(a.option) == "" {
 			return errf(2, "%s has no option %s", id, pyfmt.Repr(a.option))
 		}
+		confirmed := ""
+		if a.status == "answered" && a.kind == "pick" && d.ManualDone(a.option) {
+			if !ib.User {
+				return errf(1, "%s is a manual-step ask; confirm Done in the decisions panel", id)
+			}
+			confirmed = now
+		}
 		if err := ib.deleteDraft(id); err != nil {
 			return err
 		}
 		return ib.exec("UPDATE decisions SET status = ?, answer_kind = ?, answer_option = ?,"+
-			" answer_text = ?, note = ?, delivery = ?, answered_at = ?,"+
+			" answer_text = ?, note = ?, delivery = ?, answered_at = ?, confirmed_at = ?,"+
 			" updated_at = ?, rev = rev + 1 WHERE id = ? AND status = 'open'",
-			a.status, a.kind, a.option, a.text, a.note, a.delivery, now, now, id)
+			a.status, a.kind, a.option, a.text, a.note, a.delivery, now, confirmed, now, id)
 	})
 	return d, err
 }
@@ -608,6 +630,9 @@ func answerLine(d Decision, width int) string {
 	answer := "free text: " + d.AnswerText
 	if d.AnswerKind == "pick" {
 		answer = d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
+		if d.ConfirmedAt != "" {
+			answer += " (confirmed)"
+		}
 	}
 	question := d.Question
 	if width >= 0 {
