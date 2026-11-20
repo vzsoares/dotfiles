@@ -183,6 +183,27 @@ func TestReportJobsAndSinks(t *testing.T) {
 	}
 }
 
+func TestReportByteSinks(t *testing.T) {
+	fixture(t, reportCalls)
+	r, _ := report(t, defaults())
+	var keys []string
+	for _, s := range r.ByteSinks {
+		keys = append(keys, s.Key)
+	}
+	// Zero-output keys, background runs and excluded tools never rank.
+	want := []string{"mcp__claude_ai_Notion__notion-fetch", "Grep", "bash:bun", "bash:zen-board"}
+	if !reflect.DeepEqual(keys, want) {
+		t.Fatalf("byte sinks %v", keys)
+	}
+	top := r.ByteSinks[0]
+	if top.OutBytes != 9000 || top.Calls != 1 || !strings.HasPrefix(top.Title, "Cut agent output in ") {
+		t.Fatalf("top byte sink %+v", top)
+	}
+	if !strings.Contains(r.ByteSinks[0].Markdown, "Same job (board)") {
+		t.Fatalf("byte sink markdown lacks its job comparison:\n%s", r.ByteSinks[0].Markdown)
+	}
+}
+
 func TestReportDueAndFiled(t *testing.T) {
 	fixture(t, reportCalls)
 	week := isoWeek(now)
@@ -245,7 +266,7 @@ func TestReportMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	md := out.String()
-	order := []string{"## Calls over 30.0s", "## Time per tool", "## Same-job comparisons", "Background runs", "## Time-sink candidates", "## Sink checklist", "## Unmapped tools"}
+	order := []string{"## Calls over 30.0s", "## Time per tool", "## Same-job comparisons", "Background runs", "## Time-sink candidates", "## Output-sink candidates", "## Sink checklist", "## Unmapped tools"}
 	last := -1
 	for _, h := range order {
 		i := strings.Index(md, h)

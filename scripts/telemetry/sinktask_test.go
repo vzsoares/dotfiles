@@ -71,11 +71,15 @@ func TestChecklistAppendsNewSinkOnce(t *testing.T) {
 	for _, a := range r.Checklist.Append {
 		keys = append(keys, a.Key)
 	}
-	if !reflect.DeepEqual(keys, []string{"bash:bun", "bash:curl", "bash:agent-manager wait"}) {
+	if !reflect.DeepEqual(keys, []string{"bash:bun", "bash:curl", "bash:agent-manager wait",
+		"mcp__claude_ai_Notion__notion-fetch", "Grep", "bash:zen-board"}) {
 		t.Fatalf("append %v", keys)
 	}
 	if !strings.HasPrefix(r.Checklist.Append[0].Item, "bash:bun · ") {
 		t.Fatalf("item %q", r.Checklist.Append[0].Item)
+	}
+	if got := r.Checklist.Append[4].Item; got != "Grep · 4.9K out over 7 days (2026-W46)" {
+		t.Fatalf("byte sink item %q", got)
 	}
 	if got := runEntryCmd(t, "add", "bash:bun"); got != "added" {
 		t.Fatal(got)
@@ -84,7 +88,7 @@ func TestChecklistAppendsNewSinkOnce(t *testing.T) {
 		t.Fatal(got)
 	}
 	r, _ = report(t, defaults())
-	if r.Checklist.Append[0].Key != "bash:curl" || len(r.Checklist.Append) != 3 {
+	if r.Checklist.Append[0].Key != "bash:curl" || len(r.Checklist.Append) != 5 {
 		t.Fatalf("open sink appended again: %+v", r.Checklist.Append)
 	}
 	runEntryCmd(t, "close", "bash:bun")
@@ -142,6 +146,27 @@ func TestChecklistCloseChainedPrimary(t *testing.T) {
 		t.Fatalf("close %+v", r.Checklist.Close)
 	}
 	if c := r.Checklist.Close[0]; c.Key != "bash:zen-lock" || c.PrevMS != 100_000 || c.CurMS != 50_000 {
+		t.Fatalf("close %+v", c)
+	}
+}
+
+func TestChecklistCloseNeedsBothMetrics(t *testing.T) {
+	fixture(t, []fx{
+		// Time halves, output unchanged: stays open.
+		{session: "s1", tool: "Bash", cmd: "bun test", ago: 10 * day, durMS: 100_000, ok: true, out: 1000},
+		{session: "s1", tool: "Bash", cmd: "bun test", ago: 2 * day, durMS: 50_000, ok: true, out: 1000},
+		// Output halves with no recorded time: closes.
+		{session: "s1", tool: "Grep", ago: 10 * day, ok: true, out: 1000},
+		{session: "s1", tool: "Grep", ago: 2 * day, ok: true, out: 400},
+	})
+	runEntryCmd(t, "add", "bash:bun")
+	runEntryCmd(t, "add", "Grep")
+	r, _ := report(t, defaults())
+	if len(r.Checklist.Close) != 1 {
+		t.Fatalf("close %+v", r.Checklist.Close)
+	}
+	c := r.Checklist.Close[0]
+	if c.Key != "Grep" || c.PrevOut != 1000 || c.CurOut != 400 || c.DropPct != 60 {
 		t.Fatalf("close %+v", c)
 	}
 }

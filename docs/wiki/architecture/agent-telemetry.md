@@ -90,12 +90,15 @@ fills missing session metadata, then prints:
 4. Background runs, listed apart since their runtime is not in the payload.
 5. The top 6 time-sink candidates: a stable `sink-key` (`bash:zen-merge`, an MCP tool
    name), a suggested title, a `markdown` body with its job comparison, and the tasks
-   filed for that key in earlier weeks.
+   filed for that key in earlier weeks. `byte_sinks` is the same list ranked by total
+   output bytes (`total_out_bytes`, up to 6, zero-output keys skipped), so token sinks
+   surface beside time sinks.
 6. Unmapped tools by total time, so the jobs map can grow.
-7. `checklist`: the rolling sink task (`telemetry_meta` key `sink_task`), up to 3 sinks
-   with no open entry to `append` (each with its checklist `item` text), and open
-   entries to `close` because their agent time fell 50% or more against the previous
-   window of the same length (`prev > 0 && cur*2 <= prev`).
+7. `checklist`: the rolling sink task (`telemetry_meta` key `sink_task`), up to 3 time
+   sinks plus up to 3 byte sinks with no open entry to `append` (each with its checklist
+   `item` text; a key in both lists appears once, in its time form), and open
+   entries to `close` because agent time and output bytes both fell 50% or more against
+   the previous window of the same length (`cur*2 <= prev` on each, at least one `prev > 0`).
 
 - **Group key:** the tool name, or `bash:<exe>`, where `<exe>` is the first `primary`
   entry (jobs.json, precedence order) found among the call's stored `exes`, else the

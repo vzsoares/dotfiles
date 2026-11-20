@@ -51,6 +51,7 @@ type Report struct {
 	Jobs       []JobStat   `json:"jobs"`
 	Background []KeyCount  `json:"background"`
 	Sinks      []Sink      `json:"sinks"`
+	ByteSinks  []Sink      `json:"byte_sinks"`
 	Unmapped   []KeyTotal  `json:"unmapped"`
 	Checklist  Checklist   `json:"checklist"`
 }
@@ -116,6 +117,7 @@ type Sink struct {
 	Title    string   `json:"title"`
 	Calls    int      `json:"calls"`
 	TotalMS  int64    `json:"total_ms"`
+	OutBytes int64    `json:"total_out_bytes"`
 	Jobs     []string `json:"jobs"`
 	Filed    []Filed  `json:"filed"`
 	Markdown string   `json:"markdown"`
@@ -408,11 +410,21 @@ func totalMS(rows []row) int64 {
 	return t
 }
 
+func totalOut(rows []row) int64 {
+	var t int64
+	for _, r := range rows {
+		t += r.outBytes
+	}
+	return t
+}
+
 // sortByTotal orders keys by summed duration, then name, so output is stable.
-func sortByTotal(keys []string, m map[string][]row) {
+func sortByTotal(keys []string, m map[string][]row) { sortBy(keys, m, totalMS) }
+
+func sortBy(keys []string, m map[string][]row, metric func([]row) int64) {
 	totals := make(map[string]int64, len(m))
 	for k, rows := range m {
-		totals[k] = totalMS(rows)
+		totals[k] = metric(rows)
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		ti, tj := totals[keys[i]], totals[keys[j]]
@@ -428,6 +440,7 @@ func buildReport(db *sql.DB, rows []row, jobs jobsMap, o reportOpts, week string
 		Week: week, From: from.UTC().Format(time.RFC3339), To: to.UTC().Format(time.RFC3339),
 		Days: o.Days, Note: totalsNote,
 		Tools: []ToolStat{}, Jobs: []JobStat{}, Background: []KeyCount{}, Sinks: []Sink{}, Unmapped: []KeyTotal{},
+		ByteSinks: []Sink{},
 	}
 	slowMS := o.Slow.Milliseconds()
 	rep.Slow = SlowSection{ThresholdMS: slowMS, Groups: []SlowGroup{}}
@@ -491,26 +504,48 @@ func buildReport(db *sql.DB, rows []row, jobs jobsMap, o reportOpts, week string
 	}
 
 	sinks, sinkKeys := byKey(rows, func(r row) bool { return !r.background && !excluded(r.key) })
+	newSink := func(k, title string) (Sink, error) {
+		g := sinks[k]
+		filed, err := filedFor(db, k)
+		if err != nil {
+			return Sink{}, err
+		}
+		s := Sink{Key: k, Calls: len(g), TotalMS: totalMS(g), OutBytes: totalOut(g), Jobs: jobsOf[k], Filed: filed, Title: title}
+		if s.Jobs == nil {
+			s.Jobs = []string{}
+		}
+		s.Markdown = sinkMarkdown(s, stats(k, g), rep.Jobs)
+		return s, nil
+	}
 	sortByTotal(sinkKeys, sinks)
 	for _, k := range sinkKeys {
 		if len(rep.Sinks) == sinkCount {
 			break
 		}
-		g := sinks[k]
-		if totalMS(g) == 0 {
+		if totalMS(sinks[k]) == 0 {
 			continue
 		}
-		filed, err := filedFor(db, k)
+		s, err := newSink(k, fmt.Sprintf("Cut agent time in %s: %d calls, %s over %d days",
+			k, len(sinks[k]), fmtDur(totalMS(sinks[k])), o.Days))
 		if err != nil {
 			return rep, err
 		}
-		s := Sink{Key: k, Calls: len(g), TotalMS: totalMS(g), Jobs: jobsOf[k], Filed: filed,
-			Title: fmt.Sprintf("Cut agent time in %s: %d calls, %s over %d days", k, len(g), fmtDur(totalMS(g)), o.Days)}
-		if s.Jobs == nil {
-			s.Jobs = []string{}
-		}
-		s.Markdown = sinkMarkdown(s, stats(k, g), rep.Jobs)
 		rep.Sinks = append(rep.Sinks, s)
+	}
+	sortBy(sinkKeys, sinks, totalOut)
+	for _, k := range sinkKeys {
+		if len(rep.ByteSinks) == sinkCount {
+			break
+		}
+		if totalOut(sinks[k]) == 0 {
+			continue
+		}
+		s, err := newSink(k, fmt.Sprintf("Cut agent output in %s: %d calls, %s out over %d days",
+			k, len(sinks[k]), fmtBytes(totalOut(sinks[k])), o.Days))
+		if err != nil {
+			return rep, err
+		}
+		rep.ByteSinks = append(rep.ByteSinks, s)
 	}
 
 	for _, k := range keys {
@@ -595,6 +630,24 @@ func sinkMarkdown(s Sink, st ToolStat, jobs []JobStat) string {
 	return b.String()
 }
 
+func sinkList(b *strings.Builder, heading string, sinks []Sink) {
+	fmt.Fprintf(b, "\n## %s\n\n", heading)
+	if len(sinks) == 0 {
+		b.WriteString("None.\n")
+	}
+	for i, s := range sinks {
+		filed := ""
+		if len(s.Filed) > 0 {
+			ids := make([]string, len(s.Filed))
+			for j, f := range s.Filed {
+				ids[j] = fmt.Sprintf("#%s (%s)", f.TaskID, f.Week)
+			}
+			filed = " · filed: " + strings.Join(ids, ", ")
+		}
+		fmt.Fprintf(b, "%d. `%s`: %s%s\n", i+1, s.Key, s.Title, filed)
+	}
+}
+
 func renderMarkdown(r Report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Agent tool telemetry %s\n\n%s to %s (%d days). %s\n\n", r.Week, r.From, r.To, r.Days, r.Note)
@@ -645,21 +698,8 @@ func renderMarkdown(r Report) string {
 		fmt.Fprintf(&b, "\nBackground runs (real runtime not in the payload, not sinks): %s\n", strings.Join(parts, ", "))
 	}
 
-	b.WriteString("\n## Time-sink candidates\n\n")
-	if len(r.Sinks) == 0 {
-		b.WriteString("None.\n")
-	}
-	for i, s := range r.Sinks {
-		filed := ""
-		if len(s.Filed) > 0 {
-			ids := make([]string, len(s.Filed))
-			for j, f := range s.Filed {
-				ids[j] = fmt.Sprintf("#%s (%s)", f.TaskID, f.Week)
-			}
-			filed = " · filed: " + strings.Join(ids, ", ")
-		}
-		fmt.Fprintf(&b, "%d. `%s`: %s%s\n", i+1, s.Key, s.Title, filed)
-	}
+	sinkList(&b, "Time-sink candidates", r.Sinks)
+	sinkList(&b, "Output-sink candidates (by out bytes)", r.ByteSinks)
 
 	c := r.Checklist
 	task := "not set (zen-telemetry sink-task <id>)"

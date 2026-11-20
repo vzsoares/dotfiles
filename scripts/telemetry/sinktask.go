@@ -20,9 +20,10 @@ type Checklist struct {
 }
 
 type AppendItem struct {
-	Key     string `json:"key"`
-	TotalMS int64  `json:"total_ms"`
-	Item    string `json:"item"`
+	Key      string `json:"key"`
+	TotalMS  int64  `json:"total_ms"`
+	OutBytes int64  `json:"total_out_bytes"`
+	Item     string `json:"item"`
 }
 
 type CloseItem struct {
@@ -30,6 +31,8 @@ type CloseItem struct {
 	Match   string  `json:"match"`
 	PrevMS  int64   `json:"prev_ms"`
 	CurMS   int64   `json:"cur_ms"`
+	PrevOut int64   `json:"prev_out_bytes"`
+	CurOut  int64   `json:"cur_out_bytes"`
 	DropPct float64 `json:"drop_pct"`
 }
 
@@ -39,6 +42,14 @@ func itemPrefix(key string) string { return key + " ·" }
 
 // halved reports a drop of 50% or more from a nonzero previous week.
 func halved(prev, cur int64) bool { return prev > 0 && cur*2 <= prev }
+
+// improved is halved on time and output bytes, where a metric that was 0 must stay 0.
+func improved(prev, cur sinkTotal) bool {
+	return (halved(prev.ms, cur.ms) || halved(prev.out, cur.out)) &&
+		cur.ms*2 <= prev.ms && cur.out*2 <= prev.out
+}
+
+type sinkTotal struct{ ms, out int64 }
 
 func openEntries(db *sql.DB) (map[string]bool, error) {
 	q, err := db.Query(`SELECT sink_key FROM telemetry_entries WHERE closed_at = ''`)
@@ -57,17 +68,23 @@ func openEntries(db *sql.DB) (map[string]bool, error) {
 	return out, q.Err()
 }
 
-func sinkTotals(rows []row, excluded func(string) bool) map[string]int64 {
-	out := map[string]int64{}
+func sinkTotals(rows []row, excluded func(string) bool) map[string]sinkTotal {
+	out := map[string]sinkTotal{}
 	for _, r := range rows {
-		if !r.background && !excluded(r.key) && r.hasDur {
-			out[r.key] += r.durMS
+		if r.background || excluded(r.key) {
+			continue
 		}
+		t := out[r.key]
+		if r.hasDur {
+			t.ms += r.durMS
+		}
+		t.out += r.outBytes
+		out[r.key] = t
 	}
 	return out
 }
 
-func buildChecklist(db *sql.DB, rep Report, cur, prev map[string]int64) (Checklist, error) {
+func buildChecklist(db *sql.DB, rep Report, cur, prev map[string]sinkTotal) (Checklist, error) {
 	c := Checklist{Append: []AppendItem{}, Close: []CloseItem{}}
 	if err := db.QueryRow(`SELECT value FROM telemetry_meta WHERE key = 'sink_task'`).Scan(&c.Task); err != nil && err != sql.ErrNoRows {
 		return c, err
@@ -76,15 +93,28 @@ func buildChecklist(db *sql.DB, rep Report, cur, prev map[string]int64) (Checkli
 	if err != nil {
 		return c, err
 	}
-	for _, s := range rep.Sinks {
-		if len(c.Append) == appendCount {
-			break
+	queued := map[string]bool{}
+	lists := []struct {
+		sinks  []Sink
+		metric func(Sink) string
+	}{
+		{rep.Sinks, func(s Sink) string { return fmtDur(s.TotalMS) }},
+		{rep.ByteSinks, func(s Sink) string { return fmtBytes(s.OutBytes) + " out" }},
+	}
+	for _, l := range lists {
+		n := 0
+		for _, s := range l.sinks {
+			if n == appendCount {
+				break
+			}
+			if open[s.Key] || queued[s.Key] {
+				continue
+			}
+			queued[s.Key] = true
+			n++
+			c.Append = append(c.Append, AppendItem{Key: s.Key, TotalMS: s.TotalMS, OutBytes: s.OutBytes,
+				Item: fmt.Sprintf("%s %s over %d days (%s)", itemPrefix(s.Key), l.metric(s), rep.Days, rep.Week)})
 		}
-		if open[s.Key] {
-			continue
-		}
-		c.Append = append(c.Append, AppendItem{Key: s.Key, TotalMS: s.TotalMS,
-			Item: fmt.Sprintf("%s %s over %d days (%s)", itemPrefix(s.Key), fmtDur(s.TotalMS), rep.Days, rep.Week)})
 	}
 	keys := make([]string, 0, len(open))
 	for k := range open {
@@ -93,11 +123,15 @@ func buildChecklist(db *sql.DB, rep Report, cur, prev map[string]int64) (Checkli
 	sort.Strings(keys)
 	for _, k := range keys {
 		p, n := prev[k], cur[k]
-		if !halved(p, n) {
+		if !improved(p, n) {
 			continue
 		}
-		c.Close = append(c.Close, CloseItem{Key: k, Match: itemPrefix(k), PrevMS: p, CurMS: n,
-			DropPct: pct(int(p-n), int(p))})
+		drop := pct(int(p.ms-n.ms), int(p.ms))
+		if p.ms == 0 {
+			drop = pct(int(p.out-n.out), int(p.out))
+		}
+		c.Close = append(c.Close, CloseItem{Key: k, Match: itemPrefix(k), PrevMS: p.ms, CurMS: n.ms,
+			PrevOut: p.out, CurOut: n.out, DropPct: drop})
 	}
 	return c, nil
 }
