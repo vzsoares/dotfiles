@@ -174,7 +174,8 @@ def test_budget_starts_a_call_only_when_its_cap_still_fits() -> None:
 def test_guard_stops_while_two_messages_still_fit() -> None:
     reserve = CHEAP.message_reserve()  # $0.01
     g = ev.CallGuard(call_cap=0.05, reserve=reserve)
-    g.add(0.03)
+    for _ in range(3):
+        g.add(0.01)
     assert not g.must_stop()
     g.add(0.0001)
     assert g.must_stop()
@@ -247,7 +248,10 @@ def _live_env(
     pibox.write_text(FAKE_PIBOX.format(python=sys.executable))
     pibox.chmod(0o755)
     docker = bin_dir / "docker"
-    docker.write_text(f'#!/bin/sh\necho "$@" >> {tmp_path / "docker.log"}\n')
+    docker.write_text(
+        f'#!/bin/sh\necho "$@" >> {tmp_path / "docker.log"}\n'
+        '[ "$1" = container ] && exit 1\nexit 0\n'
+    )
     docker.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -268,12 +272,13 @@ def _results(tmp_path: Path) -> dict[str, object]:
 def test_live_stops_before_a_call_that_could_cross_the_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # GLM then DeepSeek spend ~$0.10; a third call could pass $0.15
+    # an oversized GLM message gets the call killed and charged $0.10;
+    # a second call could pass $0.15
     pibox = _live_env(tmp_path, monkeypatch, messages=1, tokens_in=200_000)
     calls = ev.plan(MODELS, TASKS)
     assert ev.live(calls, 0.15, 0.10, str(pibox)) == 0
     argv = (tmp_path / "argv.log").read_text().splitlines()
-    assert len(argv) == 2
+    assert len(argv) == 1
     first = json.loads(argv[0])
     assert first[:3] == [
         "exec",
@@ -306,7 +311,9 @@ def test_live_kills_a_call_over_its_cap(
     monkeypatch.setenv("FAKE_DELAY", "0.2")  # a real message takes seconds
     calls = ev.plan(MODELS, TASKS)[1:2]  # DeepSeek, the priciest
     assert ev.live(calls, 3.0, 0.10, str(pibox)) == 0
-    assert "kill pi-box-eval-898" in (tmp_path / "docker.log").read_text()
+    docker_log = (tmp_path / "docker.log").read_text()
+    assert "kill pi-box-eval-898" in docker_log
+    assert "container inspect pi-box-eval-898" in docker_log
     data = _results(tmp_path)
     calls_out = data["calls"]
     assert isinstance(calls_out, list) and len(calls_out) == 1
@@ -388,6 +395,7 @@ def test_scores(tmp_path: Path) -> None:
     assert scored(passing, tool_calls=2, final_text="done WORKER_DONE t") == 3
     assert scored(passing, tool_calls=2, tool_errors=1, final_text="WORKER_DONE t") == 2
     assert scored(passing, tool_calls=2) == 2
+    assert scored(passing, tool_calls=2, final_text="WORKER_DONE t, then more") == 2
     assert (
         scored(passing, tool_calls=2, final_text="WORKER_DONE t", stopped="call cap")
         == 1
@@ -405,6 +413,24 @@ def test_default_model_keeps_glm_within_two_points() -> None:
     assert ev.default_model(far, glm) == ds
     tie = {"a": {"score": 20.0, "cost": 0.2}, "b": {"score": 20.0, "cost": 0.1}}
     assert ev.default_model(tie, "x") == "b"
+
+
+def test_complete_rounds_drops_a_half_run_task() -> None:
+    rs = [
+        ev.CallResult(model="a", task="t1"),
+        ev.CallResult(model="b", task="t1"),
+        ev.CallResult(model="a", task="t2"),
+    ]
+    assert [(r.model, r.task) for r in ev.complete_rounds(rs)] == [
+        ("a", "t1"),
+        ("b", "t1"),
+    ]
+
+
+def test_guard_widens_its_step_after_an_oversized_message() -> None:
+    g = ev.CallGuard(call_cap=0.10, reserve=0.01)
+    g.add(0.04)
+    assert g.must_stop()
 
 
 if __name__ == "__main__":

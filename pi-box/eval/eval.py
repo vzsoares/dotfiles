@@ -94,12 +94,16 @@ class CallGuard:
     call_cap: float
     reserve: float
     spent: float = 0.0
+    largest: float = 0.0
 
     def add(self, cost: float) -> None:
         self.spent += cost
+        self.largest = max(self.largest, cost)
 
     def must_stop(self) -> bool:
-        return self.spent + 2 * self.reserve > self.call_cap + EPS
+        # pi does not enforce contextWindow per request, so a seen message may beat reserve
+        step = max(self.reserve, self.largest)
+        return self.spent + 2 * step > self.call_cap + EPS
 
 
 @dataclass
@@ -153,7 +157,7 @@ def load_tasks(path: Path) -> list[Task]:
 
 def plan(models: list[Model], tasks: list[Task]) -> list[Call]:
     """Task-major order, so a cap stop leaves every model with the same tasks done."""
-    calls = []
+    calls: list[Call] = []
     for task in tasks:
         for model in models:
             calls.append(Call(len(calls) + 1, model, task))
@@ -355,7 +359,7 @@ def score(result: CallResult, task: Task, root: Path) -> None:
         else:
             result.failed_checks.append(f"{i}:{check['type']}:{check['path']}")
     passed = result.checks_passed == result.checks_total and not result.stopped
-    marker = f"WORKER_DONE {task.id}" in result.final_text
+    marker = result.final_text.rstrip().endswith(f"WORKER_DONE {task.id}")
     if passed and marker and result.tool_errors == 0:
         result.score = 3
     elif passed:
@@ -380,6 +384,20 @@ def docker_kill(name: str) -> None:
     subprocess.run(["docker", "kill", name], capture_output=True, check=False)
 
 
+def wait_gone(name: str, timeout: float = 30.0) -> bool:
+    """--rm removal is async once the client is killed; the next run reuses the name."""
+    deadline = time.monotonic() + timeout
+    while True:
+        probe = subprocess.run(
+            ["docker", "container", "inspect", name], capture_output=True, check=False
+        )
+        if probe.returncode != 0:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.5)
+
+
 def run_call(
     cmd: list[str],
     cwd: Path,
@@ -393,7 +411,9 @@ def run_call(
     guard = CallGuard(call_cap, model.message_reserve())
     started = time.monotonic()
     with log.open("wb") as tee, (log.with_suffix(".stderr")).open("wb") as err:
-        proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=err)
+        proc = subprocess.Popen(
+            cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=err
+        )
         stdout = proc.stdout
         if stdout is None:
             raise RuntimeError("no stdout pipe")
@@ -420,6 +440,8 @@ def run_call(
         finally:
             timer.cancel()
             result.exit_code = proc.wait()
+    if stopped.is_set() and not wait_gone(container):
+        raise RuntimeError(f"{container} survived docker kill; stop it by hand")
     result.seconds = round(time.monotonic() - started, 1)
     return result
 
@@ -461,12 +483,21 @@ def summarize(results: list[CallResult]) -> dict[str, dict[str, float]]:
     return totals
 
 
+def complete_rounds(results: list[CallResult]) -> list[CallResult]:
+    """Only tasks every model ran, so a cap stop mid-round cannot tilt the pick."""
+    models = {r.model for r in results}
+    ran: dict[str, set[str]] = {}
+    for r in results:
+        ran.setdefault(r.task, set()).add(r.model)
+    return [r for r in results if ran[r.task] == models]
+
+
 def write_report(
     out_dir: Path, results: list[CallResult], spent: float, cap: float, stopped: str
 ) -> None:
     totals = summarize(results)
     incumbent = "glm-5-3-flash-uncensored"
-    pick = default_model(totals, incumbent)
+    pick = default_model(summarize(complete_rounds(results)), incumbent)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(
         json.dumps(
@@ -515,7 +546,8 @@ def live(calls: list[Call], cap: float, call_cap: float, pibox: str) -> int:
     if "VENICE_API_KEY" not in os.environ:
         print("eval: VENICE_API_KEY is not set in this shell", file=sys.stderr)
         return 2
-    root = Path.home() / "pi-box"
+    # the wrapper mounts the physical path, so PI_CODING_AGENT_DIR must match it
+    root = (Path.home() / "pi-box").resolve()
     stamp = time.strftime("%Y%m%d-%H%M%S")
     work = root / "work" / WORK_ID
     run_dir = work / "runs" / stamp
@@ -539,14 +571,20 @@ def live(calls: list[Call], cap: float, call_cap: float, pibox: str) -> int:
             f"eval: call {call.n}/{len(calls)} {call.model.id} {call.task.id}",
             file=sys.stderr,
         )
-        result = run_call(
-            pi_command(pibox, agent, call),
-            cwd,
-            call.model,
-            call_cap,
-            cwd / "events.jsonl",
-            f"pi-box-{WORK_ID}",
-        )
+        try:
+            result = run_call(
+                pi_command(pibox, agent, call),
+                cwd,
+                call.model,
+                call_cap,
+                cwd / "events.jsonl",
+                f"pi-box-{WORK_ID}",
+            )
+        except RuntimeError as e:
+            stopped = str(e)
+            print(f"eval: abort at call {call.n}, {stopped}", file=sys.stderr)
+            write_report(out_dir, results, budget.spent + call_cap, cap, stopped)
+            return 1
         budget.spent += charge(result, call.model, call_cap)
         score(result, call.task, cwd)
         results.append(result)

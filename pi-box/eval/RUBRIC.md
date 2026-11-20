@@ -47,9 +47,12 @@ tie. `results.md` names the pick; the orchestrator confirms it on the task.
   out 0.55, DeepSeek 0.33 / 1.32, Gemma 0.1625 / 0.50. Cache reads are priced
   as full input on purpose, so the tally can only overstate.
 - The eval's `models.json` caps each message at 4096 output tokens and the
-  context at 65536, so one message costs at most $0.027 (DeepSeek).
+  context at 65536: about $0.027 for one DeepSeek message at that size.
 - A call is killed (`docker kill pi-box-eval-898`) once two more messages
-  could push it past its $0.10 cap, and is killed after 600 s.
+  could push it past its $0.10 cap, and is killed after 600 s. A message is
+  sized as the larger of that bound and the biggest one seen in the call, since
+  pi compacts at the context window but does not cap a request. If the
+  container survives the kill, the batch aborts.
 - A call starts only when $0.10 more still fits under the $3 total, so the
   batch stops before any call that could cross it. A killed call counts as at
   least $0.10. 30 calls of $0.10 fill the cap exactly; the estimate is ~$0.30.
