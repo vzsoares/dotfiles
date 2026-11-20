@@ -410,7 +410,7 @@ def await_sessions(
     new_only: bool = False,
     root: Path | None = None,
     poll: float = 1.0,
-    bg_grace: float = 2700.0,
+    bg_grace: float = parse_duration(BG_GRACE),
 ) -> Event:
     """Block until one watched session stops with a (new) event."""
     deadline = time.monotonic() + timeout
@@ -475,9 +475,7 @@ def await_sessions(
                         summary=f"no reply yet after {fmt_duration(STARTUP_GRACE)}",
                     )
                 event = event_for(current, root)
-                pending, ended = (
-                    pending_runs(current, root) if stale else ([], None)
-                )
+                pending, ended = pending_runs(current, root) if stale else ([], None)
                 if event.state == "idle" and pending:
                     if ended is None:
                         ended = first_pending.setdefault((sid, uuid), time.time())

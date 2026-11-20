@@ -3,7 +3,7 @@ scripts/gate.py
 scripts/test_gate.py
 scripts/test_merge.py skip-focus
 scripts/await.py timeout-bump
-# #914: tests pass zen-await its own --timeout flag, not a raised test timeout
+# #914: test_await passes zen-await its own CLI wait limit, not a raised test limit
 scripts/test_await.py timeout-bump
 scripts/telemetry/parse_test.go timeout-bump
 # #587: ported to inbox/ (Go) and removed with inbox.py

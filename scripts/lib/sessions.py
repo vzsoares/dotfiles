@@ -64,6 +64,19 @@ def find_session(
 
 BG_START_RE = re.compile(r"^Command running in background with ID: ([\w-]+)")
 TASK_ID_RE = re.compile(r"<task-id>([\w-]+)</task-id>")
+# TaskStop's tool_result; a stopped run gets no <task-notification>.
+BG_STOP_RE = re.compile(r'^\{"message":"Successfully stopped task: ([\w-]+)')
+
+
+def _queued_texts(rec: dict[str, object]) -> list[str]:
+    """Prompt queued while the agent was busy (a mid-turn <task-notification>)."""
+    attachment = rec.get("attachment")
+    if rec.get("type") != "attachment" or rec.get("isSidechain"):
+        return []
+    if not isinstance(attachment, dict) or attachment.get("type") != "queued_command":
+        return []
+    prompt = attachment.get("prompt")
+    return [prompt] if isinstance(prompt, str) else []
 
 
 def _user_texts(rec: dict[str, object]) -> tuple[list[str], list[str]]:
@@ -97,7 +110,7 @@ def _user_texts(rec: dict[str, object]) -> tuple[list[str], list[str]]:
 
 
 def pending_background(records: list[dict[str, object]]) -> list[str]:
-    """IDs of Bash background runs with no later <task-notification> for them."""
+    """IDs of Bash background runs not yet notified or stopped."""
     pending: dict[str, None] = {}
     for rec in records:
         results, texts = _user_texts(rec)
@@ -105,7 +118,10 @@ def pending_background(records: list[dict[str, object]]) -> list[str]:
             match = BG_START_RE.match(result)
             if match:
                 pending[match.group(1)] = None
-        for text in texts:
+            stopped = BG_STOP_RE.match(result)
+            if stopped:
+                pending.pop(stopped.group(1), None)
+        for text in texts + _queued_texts(rec):
             if "<task-notification>" in text:
                 for task_id in TASK_ID_RE.findall(text):
                     pending.pop(task_id, None)

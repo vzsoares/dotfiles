@@ -690,9 +690,31 @@ def test_pending_background_ignores_quoted_text() -> None:
     )
     note = json.loads(_notification("bbb"))
     note["isSidechain"] = True
-    assert zen_await.pending_background([quoted, json.loads(_bg_start("bbb")), note]) == [
-        "bbb"
-    ]
+    assert zen_await.pending_background(
+        [quoted, json.loads(_bg_start("bbb")), note]
+    ) == ["bbb"]
+
+
+def test_pending_background_mid_turn_notification() -> None:
+    queued = {
+        "type": "attachment",
+        "isSidechain": False,
+        "attachment": {
+            "type": "queued_command",
+            "prompt": json.loads(_notification("aaa"))["message"]["content"],
+        },
+    }
+    lines = _records_of([_bg_start("aaa"), _bg_start("bbb")])
+    assert zen_await.pending_background([*lines, queued]) == ["bbb"]
+
+
+def test_pending_background_stopped_run() -> None:
+    stop = json.loads(_bg_start("zzz"))
+    stop["message"]["content"][0]["content"] = (
+        '{"message":"Successfully stopped task: aaa (bun dev)","task_id":"aaa"}'
+    )
+    lines = _records_of([_bg_start("aaa"), _bg_start("bbb")])
+    assert zen_await.pending_background([*lines, stop]) == ["bbb"]
 
 
 def test_pending_run_keeps_waiting(projects: Path, fake_am: Path) -> None:
