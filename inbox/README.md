@@ -19,7 +19,7 @@ macOS arm64 and Manjaro amd64.
 
 ## Writing for the cockpit
 
-Note bodies, briefs, and an ask's question, context and options render as
+Note bodies, briefs, and an ask's question, body, context and options render as
 markdown in a ~92x29 pane (titles and list rows stay one plain line):
 
 - Open with a **bold lead line**: the outcome or the call, in one sentence.
@@ -28,7 +28,12 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
 - Fenced blocks for anything to copy, every line 70 chars or less.
 - Headings (`##`) only in long notes; tables for comparisons.
 - An ask: a one-sentence question, then short options that each carry their
-  consequence (`-o "Keep glamour: no new code"`).
+  consequence (`-o "Keep glamour: no new code"`). Commands, lists and anything to
+  copy go in `--body` (markdown, `--body -` reads stdin, 16 KiB at most), shown
+  under the question; `amend --body` replaces it and `--body ""` clears it.
+- `y` then a block's number copies its source exactly; a `--prod run` ask shows
+  its `--cmd` as such a block. A code line wider than the pane wraps at the pane
+  edge on screen only.
 
 ## Threads
 
@@ -46,7 +51,7 @@ one opens the next. Expanded threads (`threads_open`) whose task has nothing lef
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v10, IDs, guarded transitions, flush, message,
+internal/inbox      store: schema v11, IDs, guarded transitions, flush, message,
                     prod-action approvals, chief's notes, threads, chats
 internal/guard      refuses prod answers from inside an agent session (env, ps walk)
 internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell)
@@ -56,6 +61,7 @@ internal/cli        cobra commands, output and exit codes
 internal/tui        the watch panel (list, threads, session, review all, walk, review, talk, notes)
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
+testdata/panel      panel screens at fixed sizes (`go test ./internal/tui -update-panel`)
 testdata/xver       v1 and v2 dbs written by inbox.py, and v4 and v9 dbs written by
                     those binaries (v4.sql, v9.sql), as SQL dumps
 testdata/fakes      fake agent-manager, tmux, zen-bell, terminal-notifier, osascript for tests

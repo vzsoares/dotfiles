@@ -141,3 +141,7 @@ zen-await keeps waiting on a claude session whose last turn ended with a Bash
 background run lacking its `<task-notification>` (parsed in
 `scripts/lib/sessions.py`), up to `--bg-grace` (45m); worker rule 10 now says to
 end the turn instead of polling, and bans pgrep/load-average waits.
+
+## [2026-11-20] feature | zen-inbox asks take a markdown body; run commands copy as blocks (#928)
+`zen-inbox ask|amend --body <md>|-` stores `decisions.body` (schema v11, one additive `ALTER TABLE`), shown under the question on every ask screen. A `--prod run` ask shows its `--cmd` as a numbered code block; `y` + number also works on the session and Review all screens. Code lines longer than the pane now break only at the pane edge.
+Pages updated: architecture/decision-inbox.md

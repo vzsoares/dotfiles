@@ -8,11 +8,25 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
 
 // copyScreen is whether y copies a code block here.
 func (m *Model) copyScreen() bool {
-	return m.scr == scNote || m.scr == scWalk || m.scr == scFull || m.scr == scThread
+	switch m.scr {
+	case scNote, scWalk, scFull, scThread, scSession, scAll:
+		return true
+	}
+	return false
+}
+
+// copiedLines is the copy toast, wrapped; nil when there is none.
+func (m *Model) copiedLines() []string {
+	if m.copied == "" {
+		return nil
+	}
+	return view.WrapRest("» "+m.copied, m.w, "", "  ")
 }
 
 // keyYank handles y and the block number after it; it reports whether it

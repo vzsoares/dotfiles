@@ -166,7 +166,7 @@ const v5ProdCols = "SELECT decision_id, action, repo, branch, sha, used_at, used
 func TestV4FixtureMigratesToV5(t *testing.T) {
 	f := newFake(t)
 	f.load("testdata/xver/v4.sql")
-	before := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols)
+	before := f.sqlite("SELECT " + v10Decisions + " FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols)
 	var cmds []*exec.Cmd
 	for range 6 {
 		cmds = append(cmds, f.cmd(nil, zenBin, "notes", "--json"))
@@ -176,10 +176,10 @@ func TestV4FixtureMigratesToV5(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "10" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "11" {
 		t.Fatal(v)
 	}
-	if after := f.sqlite("SELECT * FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols); after != before {
+	if after := f.sqlite("SELECT " + v10Decisions + " FROM decisions ORDER BY id; SELECT * FROM decision_drafts; " + v5ProdCols); after != before {
 		t.Fatalf("migration changed rows:\n%s\n%s", before, after)
 	}
 }

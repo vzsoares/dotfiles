@@ -95,18 +95,17 @@ func (r *Renderer) Lines(text string, width int) []string {
 	for i := 0; i < len(raw); i++ {
 		if lead, _, ok := strings.Cut(raw[i], fenceOpen); ok {
 			var code []string
-			for i++; i < len(raw); i++ {
-				body, _, closed := strings.Cut(raw[i], fenceClose)
-				if !closed || strings.TrimSpace(ansi.Strip(body)) != "" {
-					code = append(code, body)
-				}
-				if closed {
-					break
-				}
+			i, code = fenced(raw, i)
+			leadW := lipgloss.Width(lead)
+			for j, l := range code {
+				code[j] = ansi.TruncateLeft(l, leadW, "")
 			}
 			id := -1
 			if n < len(srcs) {
-				id = r.register(srcs[n])
+				id = r.register(srcs[n].src)
+				if whole := r.unwrapped(srcs[n]); whole != nil {
+					code = whole
+				}
 			}
 			n++
 			lines = append(lines, r.block(lead, code, width, ascii, id)...)
@@ -122,6 +121,48 @@ func (r *Renderer) Lines(text string, width int) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+// fenced is the code lines of the block opening at raw[i] and the index of
+// its closing line.
+func fenced(raw []string, i int) (int, []string) {
+	var code []string
+	for i++; i < len(raw); i++ {
+		body, _, closed := strings.Cut(raw[i], fenceClose)
+		if !closed || strings.TrimSpace(ansi.Strip(body)) != "" {
+			code = append(code, body)
+		}
+		if closed {
+			break
+		}
+	}
+	return i, code
+}
+
+// unwrapped renders one code block alone, wide enough that glamour's word
+// wrap never splits a line, so block breaks long lines only at the pane edge.
+// nil when that render fails.
+func (r *Renderer) unwrapped(b rawBlock) []string {
+	src := inputFix.Replace(b.src)
+	wide := 256
+	for _, l := range strings.Split(src, "\n") {
+		for wide < lipgloss.Width(l)+8 {
+			wide *= 2
+		}
+	}
+	open, rest, _ := strings.Cut(Fence(src), "\n")
+	out, err := r.render(open+b.lang+"\n"+rest, wide)
+	if err != nil {
+		return nil
+	}
+	raw := strings.Split(out, "\n")
+	for i := range raw {
+		if strings.Contains(raw[i], fenceOpen) {
+			_, code := fenced(raw, i)
+			return code
+		}
+	}
+	return nil
 }
 
 // render is glamour's output; a panic inside it is an error too.
@@ -188,25 +229,32 @@ func (r *Renderer) register(src string) int {
 	return len(r.srcs) - 1
 }
 
-// rawBlocks are the code blocks of text in document order, source as
-// written, the same blocks glamour renders between the fence runes.
-func rawBlocks(text string) []string {
+// rawBlock is one code block's source as written and its fence language.
+type rawBlock struct{ src, lang string }
+
+// rawBlocks are the code blocks of text in document order, the same blocks
+// glamour renders between the fence runes.
+func rawBlocks(text string) []rawBlock {
 	src := []byte(inputKeepTabs.Replace(text))
 	doc := goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser().Parse(gtext.NewReader(src))
-	var out []string
+	var out []rawBlock
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		switch n.(type) {
+		switch n := n.(type) {
 		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			lang := ""
+			if f, ok := n.(*ast.FencedCodeBlock); ok {
+				lang = string(f.Language(src))
+			}
 			var b strings.Builder
 			ls := n.Lines()
 			for i := range ls.Len() {
 				seg := ls.At(i)
 				b.Write(seg.Value(src))
 			}
-			out = append(out, strings.TrimSuffix(b.String(), "\n"))
+			out = append(out, rawBlock{strings.TrimSuffix(b.String(), "\n"), lang})
 			return ast.WalkSkipChildren, nil
 		}
 		return ast.WalkContinue, nil
@@ -231,7 +279,7 @@ func (r *Renderer) Number(lines, blocks []string) ([]string, []string) {
 	return out, blocks
 }
 
-// block lays code lines at lead's indent on a tinted background, padded to
+// block lays code lines (lead already cut off) at lead's indent on a tinted background, padded to
 // the widest line, with a copy label above. No border characters sit beside
 // the code, so a drag-select copies only the code.
 func (r *Renderer) block(lead string, code []string, width int, ascii bool, id int) []string {
@@ -239,8 +287,7 @@ func (r *Renderer) block(lead string, code []string, width int, ascii bool, id i
 	inner := max(width-leadW-3, 1)
 	var body []string
 	for _, l := range code {
-		l = finish(ansi.TruncateLeft(l, leadW, ""), ascii)
-		body = append(body, wrap(l, inner, ascii)...)
+		body = append(body, wrap(finish(l, ascii), inner, ascii)...)
 	}
 	for len(body) > 0 && strings.TrimSpace(ansi.Strip(body[len(body)-1])) == "" {
 		body = body[:len(body)-1]
@@ -400,6 +447,22 @@ func Style() gansi.StyleConfig {
 			CenterSeparator: ptr("┼"), ColumnSeparator: ptr("│"), RowSeparator: ptr("─"),
 		},
 	}
+}
+
+// Fence wraps code in a fenced block whose fence outruns any backtick run
+// inside it, so the block's source is code exactly.
+func Fence(code string) string {
+	n, run := 2, 0
+	for _, r := range code {
+		if r != '`' {
+			run = 0
+			continue
+		}
+		run++
+		n = max(n, run)
+	}
+	fence := strings.Repeat("`", n+1)
+	return fence + "\n" + code + "\n" + fence
 }
 
 var plainMarks = []*regexp.Regexp{

@@ -42,6 +42,13 @@ func checkOptions(options []string, rec string) error {
 	return nil
 }
 
+func checkBody(body string) error {
+	if len(body) > BodyMax {
+		return errf(2, "--body is over %d bytes", BodyMax)
+	}
+	return nil
+}
+
 func (ib *Inbox) insertOptions(id string, options []string) error {
 	for i, o := range options {
 		if err := ib.exec("INSERT INTO decision_options (decision_id, letter, text) VALUES (?, ?, ?)",
@@ -55,6 +62,7 @@ func (ib *Inbox) insertOptions(id string, options []string) error {
 // AskInput is one `zen-inbox ask`.
 type AskInput struct {
 	Task, Question  string
+	Body            string
 	Options         []string
 	Rec, Context    string
 	Gate            bool
@@ -74,6 +82,12 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 	}
 	if err := checkOptions(in.Options, in.Rec); err != nil {
 		return Decision{}, err
+	}
+	if err := checkBody(in.Body); err != nil {
+		return Decision{}, err
+	}
+	if pyfmt.Blank(in.Body) {
+		in.Body = ""
 	}
 	now := stamp()
 	gate := 0
@@ -100,9 +114,9 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 			id = fmt.Sprintf("%s.g%d", in.Task, seq)
 		}
 		if err := ib.exec("INSERT INTO decisions (id, task, seq, gate, session_id, session_name,"+
-			" question, context, rec, created_at, updated_at)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			id, in.Task, seq, gate, in.SessionID, in.Name, in.Question, in.Context, in.Rec,
+			" question, body, context, rec, created_at, updated_at)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			id, in.Task, seq, gate, in.SessionID, in.Name, in.Question, in.Body, in.Context, in.Rec,
 			now, now); err != nil {
 			return err
 		}
@@ -208,14 +222,20 @@ type AmendInput struct {
 	Options  []string
 	Rec      *string
 	Context  *string
+	Body     *string
 }
 
 func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, error) {
-	if in.Question == nil && in.Options == nil && in.Rec == nil && in.Context == nil {
+	if in.Question == nil && in.Options == nil && in.Rec == nil && in.Context == nil && in.Body == nil {
 		return Decision{}, errf(2, "nothing to amend")
 	}
 	if in.Question != nil && pyfmt.Blank(*in.Question) {
 		return Decision{}, errf(2, "a question is required")
+	}
+	if in.Body != nil {
+		if err := checkBody(*in.Body); err != nil {
+			return Decision{}, err
+		}
 	}
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
@@ -243,16 +263,22 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 		if err := checkOptions(texts, rec); err != nil {
 			return err
 		}
-		question, context := d.Question, d.Context
+		question, context, body := d.Question, d.Context, d.Body
+		if in.Body != nil {
+			body = *in.Body
+			if pyfmt.Blank(body) {
+				body = ""
+			}
+		}
 		if in.Question != nil {
 			question = *in.Question
 		}
 		if in.Context != nil {
 			context = *in.Context
 		}
-		if err := ib.exec("UPDATE decisions SET question = ?, context = ?, rec = ?, amended = 1,"+
+		if err := ib.exec("UPDATE decisions SET question = ?, body = ?, context = ?, rec = ?, amended = 1,"+
 			" updated_at = ?, rev = rev + 1 WHERE id = ?",
-			question, context, rec, stamp(), id); err != nil {
+			question, body, context, rec, stamp(), id); err != nil {
 			return err
 		}
 		if in.Options != nil {

@@ -139,7 +139,7 @@ func (a *App) ask() *cobra.Command {
 	var session string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S | --prod run --repo R --cmd C)",
+		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S | --prod run --repo R --cmd C) [--body TEXT | --body -]",
 		Short: "Record a decision; print its ID.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -153,6 +153,10 @@ func (a *App) ask() *cobra.Command {
 			}
 			if in.SessionID == "" {
 				return noSession()
+			}
+			var err error
+			if in.Body, err = readBody(in.Body); err != nil {
+				return err
 			}
 			ib, err := a.open()
 			if err != nil {
@@ -181,6 +185,7 @@ func (a *App) ask() *cobra.Command {
 	f.StringArrayVarP(&in.Options, "option", "o", nil, "up to 4, in order")
 	f.StringVar(&in.Rec, "rec", "", "recommended option letter")
 	f.StringVar(&in.Context, "context", "", "context for this question")
+	f.StringVar(&in.Body, "body", "", "markdown shown under the question, or - to read stdin")
 	f.BoolVar(&in.Gate, "gate", false, "gate ID <task>.g")
 	f.StringVar(&in.Title, "title", "", "board task title")
 	f.StringVar(&in.Brief, "brief", "", "1-3 lines of task context")
@@ -238,20 +243,28 @@ func (a *App) amend() *cobra.Command {
 	var options []string
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "amend ID [-q ...] [-o ...]... [--rec ...] [--context ...]",
+		Use:   "amend ID [-q ...] [-o ...]... [--rec ...] [--context ...] [--body TEXT | --body -]",
 		Short: "Change an open decision, keeping its ID.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			in := inbox.AmendInput{
+				Question: optional(cmd, "question"),
+				Rec:      optional(cmd, "rec"),
+				Context:  optional(cmd, "context"),
+				Body:     optional(cmd, "body"),
+			}
+			if in.Body != nil {
+				body, err := readBody(*in.Body)
+				if err != nil {
+					return err
+				}
+				in.Body = &body
+			}
 			ib, err := a.open()
 			if err != nil {
 				return err
 			}
 			defer ib.Close()
-			in := inbox.AmendInput{
-				Question: optional(cmd, "question"),
-				Rec:      optional(cmd, "rec"),
-				Context:  optional(cmd, "context"),
-			}
 			if len(options) > 0 {
 				in.Options = options
 			}
@@ -268,6 +281,7 @@ func (a *App) amend() *cobra.Command {
 	f.StringArrayVarP(&options, "option", "o", nil, "new options, replacing all")
 	f.String("rec", "", "recommended option letter")
 	f.String("context", "", "new context")
+	f.String("body", "", "new markdown body, or - to read stdin; empty clears it")
 	f.BoolVar(&force, "force", false, "amend another session's")
 	return cmd
 }
@@ -416,6 +430,9 @@ func (a *App) show() *cobra.Command {
 				a.out(d.Brief)
 			}
 			a.out(d.Question)
+			if d.Body != "" {
+				a.out(d.Body)
+			}
 			if d.Context != "" {
 				a.out(d.Context)
 			}

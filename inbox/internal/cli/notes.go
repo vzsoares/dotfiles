@@ -10,6 +10,19 @@ import (
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
+// readBody is a --body value, read from stdin when it is "-"; one byte past
+// BodyMax is kept so the store reports an oversized body.
+func readBody(v string) (string, error) {
+	if v != "-" {
+		return v, nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(os.Stdin, inbox.BodyMax+1))
+	if err != nil {
+		return "", usageErr("--body -: " + err.Error())
+	}
+	return string(raw), nil
+}
+
 func (a *App) note() *cobra.Command {
 	var in inbox.NoteInput
 	var session string
@@ -28,12 +41,9 @@ func (a *App) note() *cobra.Command {
 			if in.SessionID == "" {
 				return noSession()
 			}
-			if in.Body == "-" {
-				raw, err := io.ReadAll(io.LimitReader(os.Stdin, inbox.BodyMax+1))
-				if err != nil {
-					return usageErr("--body -: " + err.Error())
-				}
-				in.Body = string(raw)
+			var err error
+			if in.Body, err = readBody(in.Body); err != nil {
+				return err
 			}
 			ib, err := a.open()
 			if err != nil {

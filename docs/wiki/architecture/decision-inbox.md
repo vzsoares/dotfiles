@@ -1,7 +1,7 @@
 ---
 title: Decision Inbox — zen-inbox
 category: architecture
-updated: 2026-11-17
+updated: 2026-11-20
 related: [overview, release-tooling]
 ---
 
@@ -17,7 +17,9 @@ message.
 ## Flow
 
 1. **ask** — `zen-inbox ask <task> -q ... -o ... --rec <letter> [--context ...]
-   [--gate] [--title ... --brief ...]`. The asker is `--session`, else
+   [--body <markdown> | --body -] [--gate] [--title ... --brief ...]`. `-q` is one
+   sentence; `--body` (at most 16 KiB, also on `amend`, `""` clears it) carries
+   commands and lists and is shown under the question (#928). The asker is `--session`, else
    `$AGENT_MANAGER_SESSION_ID` (set in every agent-manager pane); its name comes from
    `agent-manager sessions --json`. `--title`/`--brief` (or `zen-inbox brief`) store
    the task context for that session.
@@ -116,7 +118,11 @@ message.
 - **Code blocks (#864).** Fenced blocks render on a tinted background with no
   border characters beside the code (a drag-select copies only code; the context
   `│ ` gutter is dropped on those lines). Each has a `[n] copy` header, numbered in
-  screen order on notes, the walk and View full. `y` then `1`-`9` copies that block's
+  screen order on notes, the session screen, the walk, View full, Review all and the
+  thread. A `--prod run` ask shows its `--cmd` as a block under the question, so it
+  copies byte for byte (the y/N confirm keeps its own wrapped text). Each block is
+  rendered alone at a wide width first, so a line longer than the pane breaks only
+  at the pane edge, never at glamour's word wrap. `y` then `1`-`9` copies that block's
   raw source by OSC 52 (plus `pbcopy` on a local Mac) and toasts `copied n`; another
   key cancels, an out-of-range number does nothing. No click-to-copy: the panel
   already captures the mouse, and a click target would not survive a drag.
@@ -140,7 +146,7 @@ message.
 - **`r` retry.** On the list, `r` retries the first failed delivery; `enter` on a
   `retry <session>: n answer(s)` row retries that one. It runs `zen-inbox retry`'s
   path, including the delivery check.
-- **Markdown (#611).** Question, context, option and brief text render through
+- **Markdown (#611).** Question, body, context, option and brief text render through
   glamour (`internal/md`) with a cut-down style on ANSI-16 colour indexes, so the
   terminal's own palette applies; no margins, and under `NO_COLOR` (Ascii profile)
   no escape bytes at all. Lines are hard-wrapped (`ansi.Hardwrap`, escapes carried
@@ -355,7 +361,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 10. Tables `decisions` and `decision_options` use generic names because the db is
+now 11. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -376,6 +382,10 @@ pushable. A v7 reader still works on a v8 db and never touches the new columns.
 v9 adds `note_replies` (every reply to a note). v10 adds `chats (id, task, text,
 sent_at, message_id, status, error)` with index `chats_task (task, id)`, the panel's
 messages to chief; no existing table changes, so a v9 reader keeps working.
+v11 adds `decisions.body` (default `''`), an ask's markdown body: one `ALTER TABLE …
+ADD COLUMN`, no row rewritten; a v10 reader names its columns, so it keeps reading
+and writing a v11 db. `--json` carries `body` only when it is set, and the answers
+message never includes it.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer

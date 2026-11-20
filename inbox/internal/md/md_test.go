@@ -259,3 +259,44 @@ func TestPlainDropsInlineMarkers(t *testing.T) {
 		}
 	}
 }
+
+func TestLongCodeLineBreaksOnlyAtThePaneEdge(t *testing.T) {
+	cmd := "aws s3 sync ./dist s3://example-bucket/app --delete --exclude '*.map' --cache-control max-age=31536000,immutable"
+	for _, text := range []string{"```sh\n" + cmd + "\n```", "- step:\n\n  ```\n  " + cmd + "\n  ```", "> q\n>\n> ```\n> " + cmd + "\n> ```"} {
+		for _, r := range []*Renderer{plain(), colour()} {
+			lines, blocks := shown(r, text, 60)
+			if len(blocks) != 1 || blocks[0] != cmd {
+				t.Fatalf("blocks %q", blocks)
+			}
+			var code []string
+			for _, l := range lines {
+				if l = ansi.Strip(l); lipgloss.Width(l) > 60 {
+					t.Fatalf("line %q wider than 60", l)
+				} else if i := strings.Index(l, "copy"); i < 0 && len(code) > 0 || strings.Contains(l, "aws s3") {
+					code = append(code, strings.TrimSpace(l))
+				}
+			}
+			// Rejoined with nothing between the pieces, the code is the command.
+			if got := strings.Join(code, ""); strings.ReplaceAll(got, " ", "") != strings.ReplaceAll(cmd, " ", "") {
+				t.Fatalf("code %q", code)
+			}
+			for _, l := range code[:len(code)-1] {
+				if lipgloss.Width(l) < 40 {
+					t.Fatalf("early break in %q", code)
+				}
+			}
+		}
+	}
+}
+
+func TestFenceOutrunsBackticksInside(t *testing.T) {
+	for _, code := range []string{"plain", "a `b` c", "x ``` y", "```` four", ""} {
+		_, blocks := shown(plain(), Fence(code), 40)
+		if code == "" {
+			continue
+		}
+		if len(blocks) != 1 || blocks[0] != code {
+			t.Fatalf("%q came back as %q", code, blocks)
+		}
+	}
+}

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SchemaVersion = 10
+	SchemaVersion = 11
 	Letters       = "abcd"
 	// A 'sending' row older than this is a crashed send, not one in flight.
 	StaleSeconds = 2 * 30
@@ -89,9 +89,15 @@ CREATE TABLE prod_actions (
 );
 `
 
+// schemaV11 adds an ask's markdown body. Additive: a v10 reader names its
+// columns and keeps working.
+const schemaV11 = `
+ALTER TABLE decisions ADD COLUMN body TEXT NOT NULL DEFAULT '';
+`
+
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
 // can build a db of any version.
-var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10}
+var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11}
 
 // Error carries the exit code the CLI reports it with.
 type Error struct {
@@ -141,13 +147,15 @@ func ParseStamp(s string) (time.Time, bool) {
 
 // Decision is one row with its options and its session+task brief.
 type Decision struct {
-	ID            string
-	Task          string
-	Seq           int64
-	Gate          bool
-	SessionID     string
-	SessionName   string
-	Question      string
+	ID          string
+	Task        string
+	Seq         int64
+	Gate        bool
+	SessionID   string
+	SessionName string
+	Question    string
+	// Body is optional markdown shown under the question.
+	Body          string
 	Context       string
 	Rec           string
 	Status        string
@@ -187,7 +195,7 @@ func (d Decision) JSON() pyfmt.Object {
 	for i, o := range d.Options {
 		opts[i] = pyfmt.Object{{Key: "letter", Value: o.Letter}, {Key: "text", Value: o.Text}}
 	}
-	return pyfmt.Object{
+	out := pyfmt.Object{
 		{Key: "id", Value: d.ID},
 		{Key: "task", Value: d.Task},
 		{Key: "seq", Value: d.Seq},
@@ -214,6 +222,10 @@ func (d Decision) JSON() pyfmt.Object {
 		{Key: "title", Value: d.Title},
 		{Key: "brief", Value: d.Brief},
 	}
+	if d.Body != "" {
+		out = append(out, pyfmt.KV{Key: "body", Value: d.Body})
+	}
+	return out
 }
 
 // Delivery is the outcome of one send.
@@ -441,7 +453,7 @@ func (ib *Inbox) Exec(query string, args ...any) error {
 
 const columns = "id, task, seq, gate, session_id, session_name, question, context, rec," +
 	" status, amended, answer_kind, answer_option, answer_text, note, created_at," +
-	" updated_at, answered_at, delivery, message_id, delivery_error, rev"
+	" updated_at, answered_at, delivery, message_id, delivery_error, rev, body"
 
 func (ib *Inbox) sel(where string, args ...any) ([]Decision, error) {
 	rows, err := ib.conn.QueryContext(ctx, "SELECT "+columns+" FROM decisions WHERE "+where, args...)
@@ -455,7 +467,7 @@ func (ib *Inbox) sel(where string, args ...any) ([]Decision, error) {
 		if err := rows.Scan(&d.ID, &d.Task, &d.Seq, &gate, &d.SessionID, &d.SessionName,
 			&d.Question, &d.Context, &d.Rec, &d.Status, &amended, &d.AnswerKind,
 			&d.AnswerOption, &d.AnswerText, &d.Note, &d.CreatedAt, &d.UpdatedAt,
-			&d.AnsweredAt, &d.Delivery, &d.MessageID, &d.DeliveryError, &d.Rev); err != nil {
+			&d.AnsweredAt, &d.Delivery, &d.MessageID, &d.DeliveryError, &d.Rev, &d.Body); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}

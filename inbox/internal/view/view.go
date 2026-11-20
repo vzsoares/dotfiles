@@ -170,8 +170,17 @@ func OptionLines(d inbox.Decision, width int) []string {
 	return out
 }
 
+// BodyLines is the ask's body as written, indented under the question.
+func BodyLines(d inbox.Decision, width int) []string {
+	if pyfmt.Blank(d.Body) {
+		return nil
+	}
+	return Wrap(strings.TrimRight(d.Body, "\n"), width, "  ")
+}
+
 func DecisionLines(d inbox.Decision, width int) []string {
 	out := QuestionLines(d, width)
+	out = append(out, BodyLines(d, width)...)
 	out = append(out, ContextLines(d, width)...)
 	return append(out, OptionLines(d, width)...)
 }
@@ -256,6 +265,30 @@ func PanelQuestionLines(d inbox.Decision, width int, p Painter) []string {
 		d.ID+QuestionTags(d)+"  ", "  ")
 }
 
+// PanelBodyLines is the ask's markdown body, indented under the question.
+func PanelBodyLines(d inbox.Decision, width int, p Painter) []string {
+	if pyfmt.Blank(d.Body) {
+		return nil
+	}
+	return Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "body"}, d.Body, width, "  ", "  ")
+}
+
+// PanelCmdLines is a run ask's command as a code block, so it copies like one.
+func PanelCmdLines(d inbox.Decision, width int, p Painter) []string {
+	if d.Prod == nil || d.Prod.Cmd == "" {
+		return nil
+	}
+	return Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "cmd"}, md.Fence(d.Prod.Cmd), width, "  ", "  ")
+}
+
+// PanelAskLines is the question with what belongs right under it: a run's
+// command and the body.
+func PanelAskLines(d inbox.Decision, width int, p Painter) []string {
+	out := PanelQuestionLines(d, width, p)
+	out = append(out, PanelCmdLines(d, width, p)...)
+	return append(out, PanelBodyLines(d, width, p)...)
+}
+
 func PanelContextLines(d inbox.Decision, width int, p Painter) []string {
 	if pyfmt.Blank(d.Context) {
 		return nil
@@ -285,7 +318,7 @@ func PanelOptionLines(d inbox.Decision, width int, p Painter) []string {
 }
 
 func PanelDecisionLines(d inbox.Decision, width int, p Painter) []string {
-	out := PanelQuestionLines(d, width, p)
+	out := PanelAskLines(d, width, p)
 	out = append(out, PanelContextLines(d, width, p)...)
 	return append(out, PanelOptionLines(d, width, p)...)
 }
@@ -717,6 +750,8 @@ func PanelThreadEntry(it inbox.ThreadItem, width int, at time.Time, p Painter) [
 		}
 		out := faint(WrapRest(head, width, "", "  "))
 		out = append(out, Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "question"}, d.Question, width, "", "")...)
+		out = append(out, PanelCmdLines(d, width, p)...)
+		out = append(out, PanelBodyLines(d, width, p)...)
 		state := WrapRest(DecisionState(d), width, "", "  ")
 		if d.Status == "withdrawn" {
 			state = faint(state)

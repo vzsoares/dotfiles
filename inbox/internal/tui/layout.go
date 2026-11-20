@@ -57,7 +57,7 @@ func fitWalk(d inbox.Decision, b view.Brief, banner []string, notice string, wid
 	if b.AskedBy != "" {
 		asked = view.Wrap(b.AskedBy, width, "")
 	}
-	question := view.PanelQuestionLines(d, width, p)
+	question := view.PanelAskLines(d, width, p)
 	if notice != "" {
 		question = append(question, view.WrapRest(notice, width, "", "  ")...)
 	}
@@ -178,7 +178,7 @@ var footers = map[screen][]key{
 	scChief:      {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
 	scThread:     {{"↑↓", ""}, {"tab", "next"}, {"enter", "open"}, {"f", "reply"}, {"a", "answer"}, {"m", "read"}, {"c", "chief"}, {"T", "refile"}, {"esc", "back"}, {"?", "help"}},
 	scRefile:     {{"ctrl+d", "save"}, {"enter", "newline"}, {"esc", "cancel"}},
-	scLocked:     {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
+	scLocked:     {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"y", "copy"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
 }
 
 var helps = map[screen]string{
@@ -190,13 +190,13 @@ var helps = map[screen]string{
 		" tab and shift+tab move the › mark; enter opens the marked note or open ask; f replies to the marked note (else the newest)," +
 		" m marks the thread's notes read, a answers its open asks, c writes to chief about it, T moves the marked note to another task. g and G jump to the top and end; y then a number copies that code block.",
 	scRefile:  "Type the task to move this note to, then ctrl+d; - or empty moves it to No task.",
-	scSession: "Answer walks the questions one by one; Review all shows every open decision on one screen; Talk opens the agent in a popup.",
-	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn scroll; enter walks from the marked one, t talks to the agent about picked ones.",
+	scSession: "Answer walks the questions one by one; Review all shows every open decision on one screen; Talk opens the agent in a popup. y then a number copies that code block.",
+	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn scroll; enter walks from the marked one, t talks to the agent about picked ones; y then a number copies that code block.",
 	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything, y then a number copies that code block. ← or shift+tab goes back a question, → forward, esc or l lists them all. Answers are kept as drafts, even across leaving and restarts, and recorded only at Send. Approve on a prod ask asks y/N first.",
 	scJump: "Every decision of this session: ○ open, ● drafted, – skipped; changed: review means it was amended after you drafted it, so it is asked again before Send." +
 		" Dimmed ones closed meanwhile. enter opens one on its draft; esc goes back to the cockpit list.",
 	scReview:  "Send records the staged answers; n or Send with note adds one note to every answer, delivered once; Change one or l lists the questions to jump to one; ← goes back to the last.",
-	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal.",
+	scLocked:  "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal. y then a number copies that code block.",
 	scConfirm: "y stages Approve for this exact sha; any other key goes back without staging it.",
 	scNote:    "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. y then a number copies that code block.",
 	scChief:   "ctrl+d sends the message to the live chief session, enter adds a line. esc cancels and keeps the draft for the next c.",

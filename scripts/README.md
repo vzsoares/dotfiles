@@ -144,6 +144,7 @@ zen-sweep                                       # 0 clean · 1 findings; never c
 ```
 zen-inbox ask <task> -q "<question>" -o a -o b --rec a   # prints 580.1 (--gate: 580.g)
           [--title "<task title>"] [--brief "<1-3 lines>"]  # session+task context
+          [--body "<md>" | --body -]  # markdown under the question: commands, lists
 zen-inbox ask <task> --prod release --repo R --branch B --sha <40 hex>  # Approve/Hold
 zen-inbox approval use|check <id> --action A --repo R --branch B --sha S [--by who]
 zen-inbox approval use|check --match --action A --repo R --branch B --sha S  # oldest approved unused
@@ -153,6 +154,7 @@ zen-inbox approval pending --repo R --branch B  # read-only: used release asks n
 zen-inbox approval push <id> --repo R --branch B --sha S  # a release's one push
 zen-inbox brief <task> [--title ...] [--text ...] [--session <id>]  # set/replace it
 zen-inbox amend|withdraw <id> [--force]                 # asker only, --force for chief
+                                             # amend: -q, -o, --rec, --context, --body
 zen-inbox list [--all] | show <id>                      # --json on both
 zen-inbox answer <id> (<letter> | --text "...") [--note "..."]  # not a --prod ask
 zen-inbox resolve <id> [--note "..."]                   # settled in talk; not --prod

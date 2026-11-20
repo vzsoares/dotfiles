@@ -1,0 +1,29 @@
+cockpit                                                                            quota n/a
+#926 Deploy steps
+926.1  Run the deploy steps now?
+  Three commands, run in this order:
+
+  1. Build: just build
+  2. Upload:
+
+  [1] copy
+   aws s3 sync ./dist s3://example-bucket/app --delete --exclude '*.map' --cache-control m 
+   ax-age=31536000,immutable                                                               
+
+  3. Check:
+
+  [2] copy
+   curl -s -o /dev/null \                           
+     -w "%{http_code}\n" https://example.com/health 
+
+  • Rollback is just rollback.
+│ The bucket is the staging one.
+a) Run: an agent runs all three
+b) Hold: nothing runs  ← rec
+› a  (1/7)
+  b  ← rec
+  Free text
+  Skip
+  Talk
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · y copy · ←→ move · esc list
+? help

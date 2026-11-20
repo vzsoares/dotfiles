@@ -227,11 +227,7 @@ func (m *Model) frame() frame {
 		return m.viewFree()
 	case scFull:
 		d, _ := m.decision(m.p.cur)
-		var top []section
-		if m.copied != "" {
-			top = []section{{lines: view.WrapRest("» "+m.copied, m.w, "", "  "), style: &bannerStyle}}
-		}
-		return frame{s: scFull, top: top, body: []section{{lines: m.fullLines(d)}}, cur: -1, help: true}
+		return frame{s: scFull, top: []section{{lines: m.copiedLines(), style: &bannerStyle}}, body: []section{{lines: m.fullLines(d)}}, cur: -1, help: true}
 	case scReview:
 		return m.viewReview()
 	case scJump:
@@ -442,14 +438,16 @@ func (m *Model) footer(s screen, scroll bool) []string {
 }
 
 func (m *Model) viewSession() frame {
+	copied := m.copiedLines()
 	markers := m.markerLines()
 	text := view.PanelSessionLines(m.sessionOpen(), m.snap.sessions, m.w, m.now(), m.paint)
 	help := 0
 	if m.showHelp {
 		help = len(helpLines(scSession, m.w))
 	}
-	menuH := menuRows(len(sessionMenu), len(markers)+len(text)+help, m.rows()-m.footRows(scSession))
-	return frame{s: scSession, body: []section{{lines: markers, style: &bannerStyle}, {lines: text}},
+	menuH := menuRows(len(sessionMenu), len(markers)+len(text)+help, m.rows()-m.footRows(scSession)-len(copied))
+	return frame{s: scSession, top: []section{{lines: copied, style: &bannerStyle}},
+		body: []section{{lines: markers, style: &bannerStyle}, {lines: text}},
 		menu: menuSection(sessionMenu, m.cursor, menuH, m.w), cur: -1, help: true}
 }
 
@@ -520,7 +518,7 @@ func (m *Model) viewConfirm() frame {
 	if d.Prod != nil {
 		p = *d.Prod
 	}
-	body := append(prodLines(p, m.w), "", "Approve? y/N")
+	body := append(prodLines(p, m.w, true), "", "Approve? y/N")
 	return frame{s: scConfirm, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  prod approval", m.w)}, style: &bannerStyle}},
 		body: []section{{lines: body}}, cur: -1, help: true}
 }
@@ -593,8 +591,9 @@ func (m *Model) markMenu(ds []inbox.Decision) []section {
 }
 
 // prodLines is a prod ask's action; the sha and a run's command get lines of
-// their own so all of them fit a narrow pane.
-func prodLines(p inbox.ProdAction, width int) []string {
+// their own so all of them fit a narrow pane. Without tail a run's command
+// text is left to the caller.
+func prodLines(p inbox.ProdAction, width int, tail bool) []string {
 	run := p.Action == inbox.RunAction
 	fields := [][2]string{{"action", p.Action}, {"repo", p.Repo}}
 	if !run {
@@ -606,6 +605,9 @@ func prodLines(p inbox.ProdAction, width int) []string {
 	}
 	if run {
 		out = append(out, "command")
+		if !tail {
+			return out
+		}
 		return append(out, wrapCmd(p.Cmd, max(width, view.MinWidth))...)
 	}
 	return append(out, "sha", p.Sha)
@@ -624,10 +626,13 @@ func (m *Model) viewAll() frame {
 		}
 		lines := view.PanelQuestionLines(d, w, m.paint)
 		if d.Prod != nil {
-			for _, l := range prodLines(*d.Prod, w-2) {
+			run := d.Prod.Action == inbox.RunAction
+			for _, l := range prodLines(*d.Prod, w-2, !run) {
 				lines = append(lines, "  "+l)
 			}
+			lines = append(lines, view.PanelCmdLines(d, w, m.paint)...)
 		}
+		lines = append(lines, view.PanelBodyLines(d, w, m.paint)...)
 		lines = append(lines, view.PanelContextLines(d, w, m.paint)...)
 		lines = append(lines, view.PanelOptionLines(d, w, m.paint)...)
 		if mark, text := m.draftText(d); text != "" {
@@ -645,7 +650,7 @@ func (m *Model) viewAll() frame {
 		}
 	}
 	head := pyfmt.Clip("Review all · "+m.sname+" · "+strconv.Itoa(len(open))+" open", m.w)
-	return frame{s: scAll, top: []section{{lines: []string{head}, style: &headerStyle}},
+	return frame{s: scAll, top: []section{{lines: []string{head}, style: &headerStyle}, {lines: m.copiedLines(), style: &bannerStyle}},
 		body: []section{{lines: body}}, cur: cur, help: true}
 }
 

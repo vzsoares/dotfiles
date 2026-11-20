@@ -122,17 +122,22 @@ func TestConcurrentApprovalUseOneWins(t *testing.T) {
 	}
 }
 
+// v10Decisions are the decisions columns before v11 added body.
+const v10Decisions = "id, task, seq, gate, session_id, session_name, question, context, rec," +
+	" status, amended, answer_kind, answer_option, answer_text, note, created_at," +
+	" updated_at, answered_at, delivery, message_id, delivery_error, rev"
+
 func TestV2FixtureMigratesToV3(t *testing.T) {
 	f := newFake(t)
 	f.load("testdata/xver/v2.sql")
-	before := f.sqlite("SELECT * FROM decisions ORDER BY id")
+	before := f.sqlite("SELECT " + v10Decisions + " FROM decisions ORDER BY id")
 	if r := f.zen(nil, "list", "--json"); r.code != 0 {
 		t.Fatalf("%+v", r)
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "10" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "11" {
 		t.Fatal(v)
 	}
-	if after := f.sqlite("SELECT * FROM decisions ORDER BY id"); after != before {
+	if after := f.sqlite("SELECT " + v10Decisions + " FROM decisions ORDER BY id"); after != before {
 		t.Fatalf("migration changed rows:\n%s\n%s", before, after)
 	}
 	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)

@@ -47,7 +47,7 @@ func TestChatStoresTheErrorOnFailure(t *testing.T) {
 
 // v9Tables are the tables a v9 db holds, with the columns a v9 binary reads.
 var v9Tables = map[string]string{
-	"decisions":        columns,
+	"decisions":        v10Columns,
 	"decision_options": "decision_id, letter, text",
 	"decision_briefs":  "session_id, task, title, brief, updated_at",
 	"prod_actions":     "decision_id, action, repo, branch, sha, used_at, used_by, cmd, pushed_sha, pushed_at, pushed_by",
@@ -84,12 +84,16 @@ func TestV9DumpMigratesToV10(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := ib.userVersion(); v != SchemaVersion || SchemaVersion != 10 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	for table := range v9Tables {
-		if got := createSQL(t, ib.conn, table); got != before[table] {
-			t.Fatalf("%s changed:\n%s\n%s", table, got, before[table])
+		want := before[table]
+		if table == "decisions" {
+			want = withBody(want)
+		}
+		if got := createSQL(t, ib.conn, table); got != want {
+			t.Fatalf("%s changed:\n%s\n%s", table, got, want)
 		}
 	}
 	th, err := ib.Thread("843")

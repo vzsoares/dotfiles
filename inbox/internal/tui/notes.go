@@ -273,9 +273,7 @@ func (m *Model) viewNote() frame {
 	head := pyfmt.Clip(view.NoteHead(n, m.now()), max(m.w-lipgloss.Width(mark)-1, 0))
 	line := bannerStyle.Render(head) + " " + markStyle.Render(mark)
 	top := []section{{lines: []string{line}}}
-	if m.copied != "" {
-		top = append(top, section{lines: view.WrapRest("» "+m.copied, m.w, "", "  "), style: &bannerStyle})
-	}
+	top = append(top, section{lines: m.copiedLines(), style: &bannerStyle})
 	if m.flash != "" {
 		top = append(top, section{lines: view.WrapRest("» "+m.flash, m.w, "", "  "), style: &bannerStyle})
 	}
