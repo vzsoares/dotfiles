@@ -647,7 +647,7 @@ func TestTalkResolvesOnlyChosen(t *testing.T) {
 	if d.m.scr != scTalkNote {
 		t.Fatal("no note prompt")
 	}
-	d.keys("talked", "enter")
+	d.keys("talked", "ctrl+d")
 	if d.m.flash != "resolved 7.1, 7.3" {
 		t.Fatalf("flash %q", d.m.flash)
 	}
@@ -714,7 +714,7 @@ func TestTalkFromReviewAllReturnsThere(t *testing.T) {
 		d.ask("7", "s1", "Which way?", "left", "right")
 	}
 	d.poll()
-	d.keys("enter", "r", "down", "t", "enter", " ", "enter", "done", "enter")
+	d.keys("enter", "r", "down", "t", "enter", " ", "enter", "done", "ctrl+d")
 	if d.m.scr != scAll || d.m.cursor != 1 || !strings.HasPrefix(d.m.flash, "resolved ") {
 		t.Fatalf("screen %d cursor %d flash %q", d.m.scr, d.m.cursor, d.m.flash)
 	}

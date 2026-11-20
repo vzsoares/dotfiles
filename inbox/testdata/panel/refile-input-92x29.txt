@@ -1,29 +1,29 @@
 cockpit                                                                            quota n/a
 refile n2  Swept 6 finished agents
-> task (- or empty clears)                                                               
+┃ task (- or empty clears)                                                                  
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-enter save · esc cancel
+ctrl+d save · enter newline · esc cancel

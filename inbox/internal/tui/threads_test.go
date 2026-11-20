@@ -135,7 +135,7 @@ func TestThreadNoTaskAndRefileGoldens(t *testing.T) {
 		t.Fatalf("T did not open the refile box:\n%s", d.view())
 	}
 	d.fits()
-	d.has("refile n2  Swept 6 finished agents", "enter save")
+	d.has("refile n2  Swept 6 finished agents", "ctrl+d save")
 	golden(t, "refile-input-92x29", d.view())
 }
 
@@ -396,7 +396,7 @@ func TestRefileIntoAThreadAndBack(t *testing.T) {
 	d.addNote("", "Phone notes before the task", "")
 	d.poll()
 	d.cursorTo("before the task")
-	d.keys("T", "843", "enter")
+	d.keys("T", "843", "ctrl+d")
 	if n := d.noteRow(11); n.Task != "843" {
 		t.Fatalf("%+v", n)
 	}
@@ -407,7 +407,7 @@ func TestRefileIntoAThreadAndBack(t *testing.T) {
 	for d.threadCursor() != "n11" {
 		d.keys("tab")
 	}
-	d.keys("T", "ctrl+u", "-", "enter")
+	d.keys("T", "ctrl+u", "-", "ctrl+d")
 	if n := d.noteRow(11); n.Task != "" {
 		t.Fatalf("%+v", n)
 	}
@@ -417,7 +417,7 @@ func TestRefileIntoAThreadAndBack(t *testing.T) {
 	d.keys("esc")
 	d.has("No task · 1 unread", "● Phone notes before the task")
 	d.cursorTo("before the task")
-	d.keys("T", "ctrl+u", "x1", "enter")
+	d.keys("T", "ctrl+u", "x1", "ctrl+d")
 	if d.m.scr != scRefile || !strings.Contains(d.view(), "bad task") {
 		t.Fatalf("bad task not refused:\n%s", d.view())
 	}

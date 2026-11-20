@@ -27,7 +27,7 @@ func TestSendWithNoteStoresAndDeliversOnce(t *testing.T) {
 	if d.m.scr != scReviewNote {
 		t.Fatalf("screen %d\n%s", d.m.scr, d.view())
 	}
-	d.keys("ship it after lunch", "enter")
+	d.keys("ship it after lunch", "ctrl+d")
 	for _, id := range []string{"7.1", "7.2", "7.3"} {
 		if got := d.get(id); got.Note != "ship it after lunch" || got.Status != "answered" {
 			t.Errorf("%s = %+v", id, got)
@@ -48,7 +48,7 @@ func TestSendWithNoteStoresAndDeliversOnce(t *testing.T) {
 func TestSendWithEmptyNoteIsPlain(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.reviewAtThree()
-	d.keys("down", "enter", "enter")
+	d.keys("down", "enter", "ctrl+d")
 	if d.get("7.1").Note != "" || len(d.am.sends) != 1 || strings.Contains(d.am.sends[0][1], "Note:") {
 		t.Fatalf("sends %v note %q", d.am.sends, d.get("7.1").Note)
 	}
@@ -87,7 +87,7 @@ func TestFailedSendKeepsNoteForRetry(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.reviewAtThree()
 	d.am.fail = "boom"
-	d.keys("n", "keep me", "enter")
+	d.keys("n", "keep me", "ctrl+d")
 	for _, id := range []string{"7.1", "7.2", "7.3"} {
 		if got := d.get(id); got.Note != "keep me" || got.Delivery != "failed" {
 			t.Errorf("%s = %+v", id, got)
@@ -102,7 +102,7 @@ func TestAmendedSendRefillsNote(t *testing.T) {
 	if _, err := d.other.Amend("7.3", "s1", false, inbox.AmendInput{Question: &q, Options: []string{"up", "down"}}); err != nil {
 		t.Fatal(err)
 	}
-	d.keys("n", "keep me", "enter")
+	d.keys("n", "keep me", "ctrl+d")
 	if d.m.scr != scWalk {
 		t.Fatalf("screen %d\n%s", d.m.scr, d.view())
 	}

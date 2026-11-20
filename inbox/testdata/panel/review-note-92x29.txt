@@ -1,29 +1,29 @@
 cockpit                                                                            quota n/a
 note for all 3 answers (optional)
-> one note for the lot                                                                      
+┃ one note for the lot                                                                      
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
+┃                                                                                           
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-enter send · esc back
+ctrl+d send · enter newline · esc back

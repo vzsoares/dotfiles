@@ -256,10 +256,10 @@ func (m *Model) frame() frame {
 		return m.viewRefile()
 	case scReviewNote:
 		return frame{s: scReviewNote, top: []section{{lines: []string{"note for all " + strconv.Itoa(m.p.answers()) + " answers (optional)"}}},
-			body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
+			body: []section{{lines: strings.Split(m.ti.View(), "\n")}}, cur: -1, help: true}
 	case scTalkNote:
 		return frame{s: scTalkNote, top: []section{{lines: []string{"note (optional)"}}},
-			body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
+			body: []section{{lines: strings.Split(m.ti.View(), "\n")}}, cur: -1, help: true}
 	}
 	return frame{s: m.scr, cur: -1}
 }

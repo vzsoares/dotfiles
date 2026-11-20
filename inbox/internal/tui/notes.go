@@ -249,19 +249,18 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) keyReply(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
+	submit, cancel, cmd := keyInput(&m.ta, msg)
+	switch {
+	case cancel:
 		m.scr = scNote
 		return m, nil
-	case "ctrl+d":
+	case submit:
 		if pyfmt.Blank(m.ta.Value()) {
 			m.scr = scNote
 			return m, nil
 		}
 		return m, m.replyCmd(m.note, m.ta.Value())
 	}
-	var cmd tea.Cmd
-	m.ta, cmd = m.ta.Update(msg)
 	return m, cmd
 }
 

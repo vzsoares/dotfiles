@@ -47,11 +47,7 @@ type chiefSentMsg struct {
 type chiefStatusMsg struct{ id, status, err string }
 
 func newChiefBox() textarea.Model {
-	ta := textarea.New()
-	ta.ShowLineNumbers = false
-	ta.CharLimit = 0
-	ta.Placeholder = "message to chief"
-	return ta
+	return newInput("message to chief")
 }
 
 // openChief opens the compose box bound to task ("" for none); esc and a
@@ -169,18 +165,17 @@ func (m *Model) expireChief() {
 }
 
 func (m *Model) keyChief(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
+	submit, cancel, cmd := keyInput(&m.chiefTA, msg)
+	switch {
+	case cancel:
 		return m, m.leaveChief("", false)
-	case "ctrl+d":
+	case submit:
 		text := m.chiefTA.Value()
 		if pyfmt.Blank(text) {
 			return m, nil
 		}
 		return m, m.chiefSendCmd(text)
 	}
-	var cmd tea.Cmd
-	m.chiefTA, cmd = m.chiefTA.Update(msg)
 	return m, cmd
 }
 

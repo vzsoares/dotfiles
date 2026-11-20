@@ -11,10 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -211,7 +209,8 @@ type Model struct {
 	jumpFrom screen
 
 	ta textarea.Model
-	ti textinput.Model
+	// ti is the note box: review and talk notes, and the refile task.
+	ti textarea.Model
 	// freeID and freeRev name the question revision the free-text box was typed against.
 	freeID  string
 	freeRev int64
@@ -269,14 +268,8 @@ type Model struct {
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
-	ta := textarea.New()
-	ta.ShowLineNumbers = false
-	ta.Placeholder = freePlaceholder
-	ti := textinput.New()
-	ti.Placeholder = "note (optional)"
-	// A blinking cursor keeps a timer running in Update; static is enough.
-	ta.Cursor.SetMode(cursor.CursorStatic)
-	ti.Cursor.SetMode(cursor.CursorStatic)
+	ta := newInput(freePlaceholder)
+	ti := newInput("note (optional)")
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()), clip: copyText,
 		prodBlock: "guard not run", drafts: map[string]view.Staged{}, threadsOpen: map[string]bool{}, chiefMu: &sync.Mutex{}, chatMisses: map[int64]int{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
@@ -1242,11 +1235,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
-		m.ta.SetWidth(max(m.w, 1))
-		m.ta.SetHeight(max(m.rows()-4, 1))
-		m.chiefTA.SetWidth(max(m.w, 1))
-		m.chiefTA.SetHeight(max(m.rows()-4, 1))
-		m.ti.Width = max(m.w-3, 1)
+		for _, ta := range []*textarea.Model{&m.ta, &m.chiefTA, &m.ti} {
+			sizeInput(ta, m.w, m.rows()-4)
+		}
 		return m, nil
 	case tea.MouseMsg:
 		if m.busy == "" && msg.Action == tea.MouseActionPress {
@@ -1774,14 +1765,13 @@ func (m *Model) brief(d inbox.Decision) view.Brief {
 }
 
 func (m *Model) keyFree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
+	submit, cancel, cmd := keyInput(&m.ta, msg)
+	switch {
+	case cancel:
 		return m, m.saveFree(false)
-	case "ctrl+d":
+	case submit:
 		return m, m.saveFree(true)
 	}
-	var cmd tea.Cmd
-	m.ta, cmd = m.ta.Update(msg)
 	return m, cmd
 }
 
@@ -1839,6 +1829,7 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 		return m, m.sendCmd("")
 	case "note":
 		m.ti.Reset()
+		m.ti.Placeholder = "note (optional)"
 		m.ti.SetValue(m.p.note)
 		m.scr = scReviewNote
 		return m, m.ti.Focus()
@@ -1967,6 +1958,7 @@ func (m *Model) keyTalkPick(k string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.ti.Reset()
+		m.ti.Placeholder = "note (optional)"
 		m.scr = scTalkNote
 		return m, m.ti.Focus()
 	case "esc":
@@ -1976,30 +1968,28 @@ func (m *Model) keyTalkPick(k string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) keyNote(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
-		return m, m.resolveCmd(m.ti.Value())
-	case "esc":
+	submit, cancel, cmd := keyInput(&m.ti, msg)
+	switch {
+	case submit:
+		return m, m.resolveCmd(strings.TrimSpace(m.ti.Value()))
+	case cancel:
 		return m, m.resolveCmd("")
 	}
-	var cmd tea.Cmd
-	m.ti, cmd = m.ti.Update(msg)
 	return m, cmd
 }
 
 // keyReviewNote reads one note for the whole batch; empty sends plain.
 func (m *Model) keyReviewNote(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
+	submit, cancel, cmd := keyInput(&m.ti, msg)
+	switch {
+	case submit:
 		m.busy = sendingText(m.p.answers(), m.sname)
 		m.p.note = strings.TrimSpace(m.ti.Value())
 		return m, m.sendCmd(m.p.note)
-	case "esc":
+	case cancel:
 		m.scr, m.cursor = scReview, 0
 		return m, nil
 	}
-	var cmd tea.Cmd
-	m.ti, cmd = m.ti.Update(msg)
 	return m, cmd
 }
 

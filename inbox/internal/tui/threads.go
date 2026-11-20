@@ -772,19 +772,18 @@ func (m *Model) openRefile(n inbox.Note, from screen) tea.Cmd {
 }
 
 func (m *Model) keyRefile(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
+	submit, cancel, cmd := keyInput(&m.ti, msg)
+	switch {
+	case submit:
 		ib, client, w, sessions := m.ib, m.am, m.watched(), m.snap.sessions
-		id, task := m.refileNote.ID, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(m.ti.Value()), "#"))
+		id, task := m.refileNote.ID, strings.Join(strings.Fields(strings.TrimPrefix(strings.TrimSpace(m.ti.Value()), "#")), " ")
 		return m, func() tea.Msg {
 			n, err := ib.Refile(id, task)
 			return refiledMsg{n, err, load(ib, client, w, sessions, false)}
 		}
-	case "esc":
+	case cancel:
 		return m, m.leaveRefile("", false)
 	}
-	var cmd tea.Cmd
-	m.ti, cmd = m.ti.Update(msg)
 	return m, cmd
 }
 
@@ -827,5 +826,5 @@ func (m *Model) viewRefile() frame {
 	if m.flash != "" {
 		top = append(top, section{lines: view.WrapRest("» "+m.flash, m.w, "", "  "), style: &bannerStyle})
 	}
-	return frame{s: scRefile, top: top, body: []section{{lines: []string{m.ti.View()}}}, cur: -1, help: true}
+	return frame{s: scRefile, top: top, body: []section{{lines: strings.Split(m.ti.View(), "\n")}}, cur: -1, help: true}
 }

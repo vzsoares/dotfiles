@@ -17,4 +17,4 @@ reply to n1  Task 707 merged
 ┃                                                           
 
 
-ctrl+d send · esc back
+ctrl+d send · enter newline · esc back
