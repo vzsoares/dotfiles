@@ -2,6 +2,8 @@
 set -e
 
 # zen-lock <name> [--wait SECS] -- <cmd...>   run cmd holding ~/.cache/zen/<name>.lock
+#                                             full output goes to a log; prints its last
+#                                             40 lines and an exit/waited/ran/log line
 # zen-lock status <name>                      show the holder
 # zen-lock break <name>                       remove the lock by hand
 #
@@ -13,6 +15,8 @@ BASE="${ZEN_LOCK_DIR:-$HOME/.cache/zen}"
 POLL="${ZEN_LOCK_POLL:-5}"
 DEFAULT_WAIT=1800
 EX_TIMEOUT=75
+TAIL_LINES=40
+LOG_KEEP_DAYS=7
 
 usage() {
     cat >&2 <<'EOF'
@@ -86,6 +90,28 @@ reap_stale() {
 
 HELD=
 CHILD=
+NAME=
+LOG=
+WAITED=0
+RAN_FROM=0
+
+# Tab-separated, one printf >> under PIPE_BUF, so concurrent writers never interleave.
+record_run() {
+    local status=$1 ran=$2 cmd
+    cmd=$(printf '%s' "$3" | tr '\t\n' '  ' | cut -c1-200)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NAME" \
+        "${AGENT_MANAGER_SESSION_ID:-}" "$WAITED" "$ran" "$status" "$cmd" \
+        >>"$BASE/lock-stats.tsv" 2>/dev/null || true
+}
+
+finish() {
+    local status=$1 ran=$((SECONDS - RAN_FROM))
+    tail -n "$TAIL_LINES" "$LOG" 2>/dev/null || true
+    # Output without a trailing newline would swallow the summary line.
+    if [ -s "$LOG" ] && [ -n "$(tail -c 1 "$LOG")" ]; then echo; fi
+    echo "zen-lock: $NAME exit $status · waited ${WAITED}s · ran ${ran}s · log $LOG"
+    record_run "$status" "$ran" "$CMDLINE"
+}
 
 release() {
     # Never remove a lock someone else holds; an owner file not yet written is ours.
@@ -103,6 +129,8 @@ on_signal() {
     if [ -n "$CHILD" ]; then
         kill -s "$1" -- "-$CHILD" 2>/dev/null || true
         wait "$CHILD" 2>/dev/null || true
+        CHILD=
+        finish "$2"
     fi
     exit "$2"
 }
@@ -152,7 +180,9 @@ cmd_run() {
     case "$wait" in "" | *[!0-9]*) usage ;; esac
     check_name "$name"
 
-    mkdir -p "$BASE"
+    mkdir -p "$BASE/lock-logs"
+    NAME=$name
+    CMDLINE=$*
     local lock="$BASE/$name.lock" last="" holder
     trap release EXIT
     trap 'on_signal INT 130' INT
@@ -176,6 +206,12 @@ cmd_run() {
     done
 
     HELD=$lock
+    WAITED=$SECONDS
+    RAN_FROM=$SECONDS
+    find "$BASE/lock-logs" -type f -name '*.log' -mtime +"$LOG_KEEP_DAYS" -delete 2>/dev/null || true
+    LOG=$(mktemp "$BASE/lock-logs/$name-$(date +%Y%m%d-%H%M%S).XXXXXX") || exit 1
+    mv "$LOG" "$LOG.log"
+    LOG=$LOG.log
 
     {
         echo "${AGENT_MANAGER_SESSION_ID:-zen-lock} $(date)"
@@ -190,10 +226,11 @@ cmd_run() {
     # and the trap runs while the command is still going.
     local status=0
     set -m
-    "$@" 0<&0 &
+    "$@" 0<&0 >"$LOG" 2>&1 &
     CHILD=$!
     wait "$CHILD" || status=$?
     CHILD=
+    finish "$status"
     exit "$status"
 }
 

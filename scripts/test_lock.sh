@@ -203,6 +203,55 @@ wait
     [ "$(sed -n '2p' "$TMP/log" | cut -d' ' -f1)" = end ]
 check "concurrent runs do not overlap" $?
 
+# quiet output: tail + summary on stdout, full output in the log
+reset
+bash "$LOCK" t -- bash -c 'seq 1 100; echo oops >&2' >"$TMP/out"
+LOGF=$(find "$ZEN_LOCK_DIR/lock-logs" -name 't-*.log' | head -n 1)
+[ "$(wc -l <"$LOGF" | tr -d ' ')" = 101 ]
+check "log holds the full output, stderr included" $?
+[ "$(wc -l <"$TMP/out" | tr -d ' ')" = 41 ] && [ "$(head -n 1 "$TMP/out")" = 62 ]
+check "stdout is the last 40 lines plus the summary" $?
+tail -n 1 "$TMP/out" | grep -Eq "^zen-lock: t exit 0 · waited 0s · ran [0-9]+s · log $LOGF\$"
+check "summary line reports exit, waited 0, ran and log" $?
+bash "$LOCK" t -- bash -c 'echo boom; exit 3' >"$TMP/out"
+[ $? = 3 ] && tail -n 1 "$TMP/out" | grep -q 'exit 3 '
+check "non-zero exit passes through and is reported" $?
+
+# waited > 0 behind a held lock
+reset
+bash "$LOCK" t -- sleep 1.5 >/dev/null &
+wait_for "$ZEN_LOCK_DIR/t.lock/owner"
+bash "$LOCK" t -- true 2>/dev/null | tail -n 1 | grep -Eq 'waited [1-9][0-9]*s'
+check "waited is positive behind a held lock" $?
+wait
+
+# stats: concurrent runs append one well-formed line each
+reset
+for i in 1 2 3 4; do
+    AGENT_MANAGER_SESSION_ID=s$i bash "$LOCK" t --wait 30 -- bash -c 'true' >/dev/null &
+done
+wait
+STATS="$ZEN_LOCK_DIR/lock-stats.tsv"
+[ "$(wc -l <"$STATS" | tr -d ' ')" = 4 ] &&
+    [ "$(awk -F'\t' 'NF == 7' "$STATS" | wc -l | tr -d ' ')" = 4 ] &&
+    awk -F'\t' '$1 ~ /^[0-9-]+T[0-9:]+Z$/ && $2 == "t" && $3 ~ /^s[1-4]$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ && $6 == 0 && $7 == "bash -c true" { n++ } END { exit n != 4 }' "$STATS"
+check "each concurrent run appends one 7-field stats line" $?
+reset
+bash "$LOCK" t -- bash -c 'exit 5' >/dev/null
+long=$(printf 'x%.0s' $(seq 1 300))
+bash "$LOCK" t -- echo "$long" >/dev/null
+awk -F'\t' 'NR == 1 && $6 == 5 { a = 1 } NR == 2 && length($7) == 200 { b = 1 } END { exit !(a && b) }' "$ZEN_LOCK_DIR/lock-stats.tsv"
+check "stats record the exit status and cut the command to 200 chars" $?
+
+# logs older than 7 days are pruned, newer stay
+reset
+mkdir -p "$ZEN_LOCK_DIR/lock-logs"
+touch -t 200001010000 "$ZEN_LOCK_DIR/lock-logs/old.log"
+touch "$ZEN_LOCK_DIR/lock-logs/new.log"
+bash "$LOCK" t -- true >/dev/null
+[ ! -e "$ZEN_LOCK_DIR/lock-logs/old.log" ] && [ -e "$ZEN_LOCK_DIR/lock-logs/new.log" ]
+check "old logs are pruned, recent ones kept" $?
+
 # bad usage
 bash "$LOCK" 2>/dev/null
 [ $? = 2 ]

@@ -126,3 +126,7 @@ Pages updated: overview.md, manjaroi3/fresh-install.md
 ## [2026-11-20] feature | pi skill (#923)
 `.claude/skills/pi/`: SKILL.md core (pi 1.6.0 vs Claude Code/Codex/agy, modes, agent dir, native MCP exposure, sessions, trust, pi-box) plus paraphrased `references/` per topic. `scripts/refresh.py` re-scrapes docs.pi.dev/latest and diffs page hashes against `references/SOURCES.json` (exit 3 on drift; `--write` records). Linked as a shared skill by `agents/link`; `pi-box/link` copies it into the box. Tests: `agents/test/link.sh`, `pi-box/test/link.sh`, `uv run agents/test/test_pi_refresh.py`.
 Pages updated: overview.md
+
+## [2026-11-20] feature | zen-lock is quiet by default (#912)
+`zen-lock` writes the command's full output to `~/.cache/zen/lock-logs/` (pruned past 7 days), prints the last 40 lines plus `exit · waited · ran · log`, and appends a run line to `~/.cache/zen/lock-stats.tsv`. The `worker-rules` rule 10 now says: targeted runs while iterating, about 2 full runs per task, no `test` after a green `check`, never pipe `zen-lock` through grep/head/tail. Re-import the preset with `agent-manager/link`.
+Pages updated: none

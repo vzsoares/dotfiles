@@ -282,7 +282,12 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
   `branch-model` drift in personal repos.
 - `zen-lock <name> [--wait SECS] -- <cmd>` (worker): runs a core-heavy command under
   `~/.cache/zen/<name>.lock`; releases on exit/INT/TERM, takes over a lock whose owner
-  pid is gone, exits 75 on timeout. `status <name>`, `break <name>`.
+  pid is gone, exits 75 on timeout. Output is quiet: the full stdout+stderr goes to
+  `~/.cache/zen/lock-logs/` (pruned past 7 days) and it prints the last 40 lines plus
+  `exit · waited · ran · log`; each run appends a line to `~/.cache/zen/lock-stats.tsv`.
+  Never pipe it through grep/head/tail (hides the exit code): read the tail, grep the log
+  path. Iterate with targeted runs; ~2 full runs per task; no `test` after a green `check`.
+  `status <name>`, `break <name>`.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
 - `zen-chief "<message>"` (me, from a shell; the panel's `c` runs the same script):
   queues a message to the live `chief` session with `--from zenha`, prints the message id;
