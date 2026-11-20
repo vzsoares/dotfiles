@@ -15,13 +15,14 @@ import json
 import sys
 import time
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 PKG = Path(__file__).resolve().parent.parent
 
 
-def load(name: str) -> object:
+def load(name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, PKG / f"{name}.py")
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
