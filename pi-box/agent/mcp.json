@@ -1,3 +1,8 @@
 {
-    "mcpServers": {}
+    "mcpServers": {
+        "browser": {
+            "command": "/usr/local/bin/abb-mcp",
+            "exposure": "direct"
+        }
+    }
 }

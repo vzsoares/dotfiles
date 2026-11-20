@@ -6,7 +6,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER="$HERE/../wrapper"
 TMP="$(cd "$(mktemp -d)" && pwd -P)"
 FAILS=0
-trap 'rm -rf "$TMP"' EXIT
+LISTENER=""
+cleanup() {
+  [ -n "$LISTENER" ] && kill "$LISTENER" 2>/dev/null
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 
 ok() { echo "ok   $1"; }
 bad() { echo "FAIL $1"; FAILS=$((FAILS + 1)); }
@@ -20,6 +25,10 @@ mkdir -p "$TMP/bin" "$TMP/home/pi-box/work/t1/sub" "$TMP/home/pi-box/agent" \
   "$TMP/home/pi-box/in" "$TMP/outside"
 cat >"$TMP/bin/docker" <<'FAKE'
 #!/usr/bin/env bash
+if [ "$1" = ps ] && [ "$2" = --format ]; then
+  [ -n "$FAKE_HOLDER" ] && echo "$FAKE_HOLDER"
+  exit 0
+fi
 if [ "$1" = ps ]; then
   printf '%s\n' "$@" >"$FAKE_PS"
   [ -n "$FAKE_RUNNING" ] && echo abc123
@@ -34,10 +43,20 @@ fi
 printf '%s\n' "$@" >"$FAKE_LOG"
 echo "CRAWL_DELAY_MS=${CRAWL_DELAY_MS-unset}" >>"$FAKE_LOG"
 echo "VENICE_API_KEY=${VENICE_API_KEY-unset}" >>"$FAKE_LOG"
+echo "PAIR_TOKEN_SET=${AGENT_BROWSER_PAIR_TOKEN:+yes}" >>"$FAKE_LOG"
+echo run >>"$FAKE_RUNS"
+if [ -n "$FAKE_BIND_FAIL" ] && printf '%s\n' "$@" | grep -qx -- -p; then
+  exit 125
+fi
+exit "${FAKE_RC:-0}"
 FAKE
 chmod +x "$TMP/bin/docker"
 export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/ps" FAKE_STOP="$TMP/stop"
+export FAKE_RUNS="$TMP/runs"
 unset VENICE_API_KEY CRAWL_DELAY_MS FAKE_RUNNING FAKE_SLEEP FAKE_APPEND
+unset FAKE_HOLDER FAKE_BIND_FAIL FAKE_RC AGENT_BROWSER_PAIR_TOKEN PIBOX_BRIDGE_SRC
+# The browser section below turns it on, against a port this test owns.
+export PIBOX_BROWSER=0
 W="$HOME/pi-box/work"
 
 run_in() { # dir, args... -> exit code; stdout in $TMP/out
@@ -182,6 +201,155 @@ mkdir -p "$W/a.b"
 FAKE_RUNNING=1 run_in "$W/a.b"
 grep -q 'name=^pi-box-a\\.b\$' "$TMP/ps"
 check "ps filter escapes dots in the task id" $?
+
+# image build: the pinned bridge by default, a local checkout on request
+run_in "$TMP/outside" build
+! grep -q -- build-context "$FAKE_LOG" && grep -qx -- "$(cd "$HERE/.." && pwd -P)" "$FAKE_LOG"
+check "build uses the pinned bridge by default" $?
+PIBOX_BRIDGE_SRC=/src/abb run_in "$TMP/outside" build
+grep -qx -- --build-context "$FAKE_LOG" && grep -qx 'bridge-src=/src/abb' "$FAKE_LOG"
+check "PIBOX_BRIDGE_SRC builds from a local bridge checkout" $?
+
+# browser: bridge port, pairing token, pinned mcp.json entry
+BP="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+TOKEN="$HOME/.config/agent-browser-bridge/pair.token"
+M="$HOME/pi-box/agent/mcp.json"
+TEMPLATE="$HERE/../agent/mcp.json"
+PUBLISH="-p 127.0.0.1:$BP:9242 -e AGENT_BROWSER_PAIR_TOKEN "
+export PIBOX_BROWSER_PORT="$BP"
+mcp_is() { # other-entry json; the browser entry must equal the template's
+  python3 - "$M" "$TEMPLATE" "$1" <<'PY'
+import json, sys
+got, want = (json.load(open(p))["mcpServers"] for p in sys.argv[1:3])
+other = json.loads(sys.argv[3])
+sys.exit(got.pop("browser", None) != want["browser"] or got != other)
+PY
+}
+runs() { wc -l <"$FAKE_RUNS" | tr -d ' '; }
+
+today="docker run --rm -i --name pi-box-t1 --hostname pi-box --cap-drop ALL \
+--cap-add NET_ADMIN --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges \
+--memory 2g --shm-size 512m -v $W/t1:$W/t1 -v $HOME/pi-box/agent:/home/pi/.pi/agent \
+-w $W/t1 -e PIBOX_UID -e PIBOX_GID -v $HOME/pi-box/in:$HOME/pi-box/in:ro \
+-e TERM -e CRAWL_DELAY_MS pi-box pi --version "
+dry() { # the dry-run command for t1; bash always sets TERM
+  (
+    unset COLORTERM LANG
+    cd "$W/t1" && PIBOX_DRY_RUN=1 bash "$WRAPPER" --version
+  ) 2>"$TMP/err"
+}
+[ "$(dry)" = "$today" ]
+check "PIBOX_BROWSER=0: the docker command is today's, byte for byte" $?
+rm -f "$M"
+run_in "$W/t1" --version
+! grep -Eq -- '^-p$|AGENT_BROWSER' "$FAKE_LOG" && grep -qx 'PAIR_TOKEN_SET=' "$FAKE_LOG" &&
+  [ ! -e "$TOKEN" ]
+check "PIBOX_BROWSER=0: no publish, no token passed or created" $?
+mcp_is '{}'
+check "PIBOX_BROWSER=0: a start still writes the pinned browser entry" $?
+
+export PIBOX_BROWSER=1
+rm -f "$M"
+[ "$(dry)" = "${today/pi-box pi --version/${PUBLISH}pi-box pi --version}" ]
+check "port free: dry run adds the loopback publish and the token name only" $?
+[ ! -e "$TOKEN" ] && [ ! -e "$M" ]
+check "a dry run creates no token and leaves mcp.json alone" $?
+run_in "$W/t1" --version
+check "port free: runs docker" $?
+grep -qx -- '-p' "$FAKE_LOG" && grep -qx "127.0.0.1:$BP:9242" "$FAKE_LOG" &&
+  grep -qx 'AGENT_BROWSER_PAIR_TOKEN' "$FAKE_LOG" && grep -qx 'PAIR_TOKEN_SET=yes' "$FAKE_LOG"
+check "port free: publishes to the host loopback, token by name" $?
+[ "$(python3 -c 'import os, sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777))' "$TOKEN")" = 0o600 ] &&
+  grep -Eqx '[0-9a-f]{64}' "$TOKEN"
+check "a missing pairing token is created, 0600" $?
+grep -q "paste it into the extension popup" "$TMP/err"
+check "a new token tells the user to pair the extension" $?
+! grep -q "$(cat "$TOKEN")" "$FAKE_LOG" "$TMP/out" "$TMP/err"
+check "the token value is in no argv or output" $?
+before="$(cat "$TOKEN")"
+run_in "$W/t1" --version
+[ "$(cat "$TOKEN")" = "$before" ] && ! grep -q "paste it" "$TMP/err"
+check "an existing token is reused" $?
+: >"$TOKEN"
+run_in "$W/t1" --version
+! grep -qx -- '-p' "$FAKE_LOG" && grep -q "is empty; this run has no browser" "$TMP/err"
+check "an empty token file starts without the browser" $?
+printf '%s\n' "$before" >"$TOKEN"
+PIBOX_BROWSER_PORT=x run_in "$W/t1" --version
+expect_rc 2 "a non-numeric PIBOX_BROWSER_PORT is refused (exit 2)"
+
+python3 -c 'import socket, sys, time
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", int(sys.argv[1])))
+s.listen()
+time.sleep(600)' "$BP" &
+LISTENER=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  (exec 3<>"/dev/tcp/127.0.0.1/$BP") 2>/dev/null && break
+  sleep 0.3
+done
+FAKE_RC=7 run_in "$W/t1" --version
+expect_rc 7 "port busy: the run still starts and exits as pi does"
+! grep -Eq -- '^-p$|AGENT_BROWSER' "$FAKE_LOG" && grep -qx 'PAIR_TOKEN_SET=' "$FAKE_LOG"
+check "port busy: no publish and no token" $?
+grep -qx "pi-box: browser held by another process on 127.0.0.1:$BP; this run has no browser" "$TMP/err"
+check "port busy: warns that a host process holds the browser" $?
+FAKE_HOLDER="pi-box-other 127.0.0.1:$BP->9242/tcp" run_in "$W/t1" --version
+grep -qx "pi-box: browser held by pi-box-other; this run has no browser" "$TMP/err"
+check "port busy: names the pi-box run that holds the browser" $?
+[ "$(dry)" = "$today" ] && grep -q "browser held by" "$TMP/err"
+check "port busy: the dry run shows no publish either" $?
+kill "$LISTENER"
+wait "$LISTENER" 2>/dev/null
+LISTENER=""
+
+# two starts at once: the loser's bind fails (125) and it starts without
+: >"$FAKE_RUNS"
+FAKE_BIND_FAIL=1 FAKE_HOLDER="pi-box-other 127.0.0.1:$BP->9242/tcp" run_in "$W/t1" --version
+check "a lost bind race still starts" $?
+[ "$(runs)" = 2 ] && ! grep -qx -- '-p' "$FAKE_LOG" &&
+  grep -q "browser held by pi-box-other" "$TMP/err"
+check "a lost bind race retries once without the browser" $?
+: >"$FAKE_RUNS"
+FAKE_BIND_FAIL=1 run_in "$W/t1" --version
+expect_rc 125 "a docker failure with no other holder is not retried (exit 125)"
+[ "$(runs)" = 1 ]
+check "no second start when no other box holds the port" $?
+: >"$FAKE_RUNS"
+FAKE_BIND_FAIL=1 FAKE_HOLDER="pi-box-t1 127.0.0.1:$BP->9242/tcp" run_in "$W/t1" --version
+[ "$(runs)" = 1 ]
+check "its own container on the port is not a lost race" $?
+
+# pinned mcp.json entry: only `browser` is rewritten
+echo '{"mcpServers":{"browser":{"command":"/bin/evil","args":["x"]},"mine":{"command":"npx"}},"autoEnableCodemode":false}' >"$M"
+run_in "$W/t1" --version
+mcp_is '{"mine":{"command":"npx"}}' && grep -q '"autoEnableCodemode": false' "$M"
+check "an edited browser entry is restored, other entries and keys kept" $?
+echo '{"mcpServers":{"mine":{"command":"npx"}}}' >"$M"
+run_in "$W/t1" --version
+mcp_is '{"mine":{"command":"npx"}}'
+check "a deleted browser entry is restored" $?
+[ -z "$(find "$HOME/pi-box/agent" -name '.mcp.json.*')" ]
+check "the rewrite leaves no temp file" $?
+echo '{"mcpServers":{"mine":{"command":"npx"}}}' >"$M"
+PIBOX_DRY_RUN=1 run_in "$W/t1" --version
+! grep -q browser "$M"
+check "a dry run does not rewrite mcp.json" $?
+echo 'not json' >"$M"
+: >"$FAKE_RUNS"
+run_in "$W/t1" --version
+expect_rc 2 "refuses to start on an unparsable mcp.json (exit 2)"
+[ "$(cat "$M")" = 'not json' ] && [ "$(runs)" = 0 ]
+check "an unparsable mcp.json is left as is, docker not started" $?
+echo '{"secret":"host"}' >"$TMP/outside/host.json"
+rm -f "$M"
+ln -s "$TMP/outside/host.json" "$M"
+run_in "$W/t1" --version
+expect_rc 2 "refuses a symlinked mcp.json (exit 2)"
+[ -L "$M" ] && [ "$(cat "$TMP/outside/host.json")" = '{"secret":"host"}' ]
+check "a symlinked mcp.json is neither followed nor replaced" $?
+rm -f "$M"
 
 echo
 if [ "$FAILS" -gt 0 ]; then

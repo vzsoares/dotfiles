@@ -4,6 +4,7 @@
 #   pi-box [pi args...]       pi with every argument passed through
 #   pi-box exec <cmd...>      a command in the box instead of pi
 #   pi-box build              build the image from this directory
+#                             (PIBOX_BRIDGE_SRC=<dir>: a local bridge checkout)
 #   pi-box doctor             offline toolkit check in a throwaway container
 #   pi-box cost [--month [YYYY-MM]]   spend per model from the ledger
 #
@@ -12,6 +13,11 @@
 #
 # ~/pi-box/shim/pi links here, so the agent-manager pi-box env profile boxes
 # every pi it launches.
+#
+# The first run to start publishes the bridge port (9242) to the host loopback,
+# so the paired Chrome extension can connect; a run that finds it busy starts
+# without the browser. PIBOX_BROWSER=0 skips it; PIBOX_BROWSER_PORT moves the
+# host port (tests).
 #
 # PIBOX_DRY_RUN=1 prints the docker command instead of running it.
 
@@ -47,7 +53,11 @@ config_value() { # key -> last value in config.env, quotes stripped
 }
 
 if [ "${1:-}" = build ]; then
-  exec docker build -t "$IMAGE" "$SRC_DIR"
+  build=(build -t "$IMAGE")
+  if [ -n "${PIBOX_BRIDGE_SRC:-}" ]; then
+    build+=(--build-context "bridge-src=$PIBOX_BRIDGE_SRC")
+  fi
+  exec docker "${build[@]}" "$SRC_DIR"
 fi
 
 if [ "${1:-}" = doctor ]; then
@@ -119,13 +129,13 @@ for key in "${CONFIG_ENV[@]}"; do
   args+=(-e "$key")
 done
 
-args+=("$IMAGE")
+cmd=("$IMAGE")
 if [ "${1:-}" = exec ]; then
   shift
   [ "$#" -gt 0 ] || die 2 "usage: pi-box exec <cmd...>"
-  args+=("$@")
+  cmd+=("$@")
 else
-  args+=(pi)
+  cmd+=(pi)
   while [ "$#" -gt 0 ]; do
     # agent-manager's session hook runs the host agent-manager, which the box
     # neither has nor may reach; --session-id already carries the id.
@@ -138,14 +148,126 @@ else
       shift
       continue
     fi
-    args+=("$1")
+    cmd+=("$1")
     shift
   done
 fi
 
+BRIDGE_PORT=9242
+port="${PIBOX_BROWSER_PORT:-$BRIDGE_PORT}"
+[[ "$port" =~ ^[0-9]+$ ]] || die 2 "bad PIBOX_BROWSER_PORT '$port'"
+token_file="$HOME/.config/agent-browser-bridge/pair.token"
+browser=()
+
+# check: prints free|busy for the host port and changes nothing.
+# start: under the spend lock, re-asserts the repo's `browser` entry in
+#   agent/mcp.json and, given a port, prints free|busy and creates a missing
+#   pairing token when free.
+browser_host() { # check|start, [port]
+  python3 - "$1" "$ROOT" "$SRC_DIR/agent/mcp.json" "$token_file" "${2:-}" <<'PY'
+import fcntl
+import json
+import os
+import secrets
+import socket
+import stat
+import sys
+import tempfile
+
+mode, root, template, token_file, port = sys.argv[1:6]
+
+
+def fail(msg):
+    print(f"pi-box: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def pin():
+    path = os.path.join(root, "agent", "mcp.json")
+    with open(template) as f:
+        entry = json.load(f)["mcpServers"]["browser"]
+    data = {}
+    try:
+        # The box can write this dir: never follow a link or block on a fifo.
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        fail(f"{path} is a symlink or unreadable; remove it")
+    else:
+        with os.fdopen(fd) as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                fail(f"{path} is not a regular file; remove it")
+            try:
+                data = json.load(f)
+            except ValueError:
+                fail(f"{path} is not valid JSON; fix or remove it")
+    servers = data.setdefault("mcpServers", {}) if isinstance(data, dict) else None
+    if not isinstance(servers, dict):
+        fail(f"{path} has no mcpServers object; fix or remove it")
+    if servers.get("browser") == entry:
+        return
+    servers["browser"] = entry
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".mcp.json.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=4)
+        f.write("\n")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+
+
+def port_free():
+    with socket.socket() as s:
+        s.settimeout(1)
+        return s.connect_ex(("127.0.0.1", int(port))) != 0
+
+
+def ensure_token():
+    if os.path.exists(token_file):
+        return
+    os.makedirs(os.path.dirname(token_file), mode=0o700, exist_ok=True)
+    fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(secrets.token_hex(32) + "\n")
+    print(
+        f"pi-box: created {token_file}; paste it into the extension popup",
+        file=sys.stderr,
+    )
+
+
+if mode == "check":
+    print("free" if port_free() else "busy")
+    sys.exit(0)
+with open(os.path.join(root, ".ledger.lock"), "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    pin()
+    if port:
+        free = port_free()
+        if free:
+            ensure_token()
+        print("free" if free else "busy")
+PY
+}
+
+holder() { # the container publishing the port, else a host process
+  local held
+  held="$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null |
+    awk -v p="127.0.0.1:$port->" 'index($0, p) { print $1; exit }')"
+  echo "${held:-another process on 127.0.0.1:$port}"
+}
+
+no_browser() { echo "pi-box: browser held by $1; this run has no browser" >&2; }
+
 if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then
   python3 "$SPEND" begin "$ROOT" "$id" --check-only || exit $?
-  printf '%q ' docker "${args[@]}"
+  if [ "${PIBOX_BROWSER:-}" != 0 ]; then
+    if [ "$(browser_host check "$port")" = free ]; then
+      browser=(-p "127.0.0.1:$port:$BRIDGE_PORT" -e AGENT_BROWSER_PAIR_TOKEN)
+    else
+      no_browser "$(holder)"
+    fi
+  fi
+  printf '%q ' docker "${args[@]}" "${browser[@]}" "${cmd[@]}"
   echo
   exit 0
 fi
@@ -153,6 +275,23 @@ fi
 # The name filter is a regex; a task id may contain dots.
 if [ -n "$(docker ps -q --filter "name=^${name//./\\.}\$")" ]; then
   die 3 "a pi-box container for '$id' is already running"
+fi
+
+if [ "${PIBOX_BROWSER:-}" = 0 ]; then
+  browser_host start >/dev/null || exit $?
+else
+  state="$(browser_host start "$port")" || exit $?
+  if [ "$state" != free ]; then
+    no_browser "$(holder)"
+  else
+    AGENT_BROWSER_PAIR_TOKEN="$(tr -d '[:space:]' <"$token_file")"
+    if [ -n "$AGENT_BROWSER_PAIR_TOKEN" ]; then
+      export AGENT_BROWSER_PAIR_TOKEN
+      browser=(-p "127.0.0.1:$port:$BRIDGE_PORT" -e AGENT_BROWSER_PAIR_TOKEN)
+    else
+      echo "pi-box: $token_file is empty; this run has no browser" >&2
+    fi
+  fi
 fi
 
 run="$(python3 "$SPEND" begin "$ROOT" "$id" --pid "$$")" || exit $?
@@ -175,6 +314,16 @@ cleanup() {
 }
 trap cleanup EXIT
 rc=0
-docker "${args[@]}" || rc=$?
+docker "${args[@]}" "${browser[@]}" "${cmd[@]}" || rc=$?
+# 125: docker could not start the container. When another box took the port
+# between the check and the bind, start once more without the browser.
+if [ "$rc" = 125 ] && [ "${#browser[@]}" -gt 0 ]; then
+  other="$(holder)"
+  if [ "$other" != "$name" ] && [[ "$other" != "another process"* ]]; then
+    no_browser "$other"
+    rc=0
+    docker "${args[@]}" "${cmd[@]}" || rc=$?
+  fi
+fi
 finished=1
 exit "$rc"

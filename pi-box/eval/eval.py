@@ -554,6 +554,8 @@ def live(calls: list[Call], cap: float, call_cap: float, pibox: str) -> int:
     out_dir = root / "evals" / stamp
     agent = work / "agent"
     prepare_agent_dir(agent)
+    # the eval scores tool calls; it never drives the user's Chrome
+    os.environ["PIBOX_BROWSER"] = "0"
     budget = Budget(cap, call_cap)
     results: list[CallResult] = []
     stopped = ""

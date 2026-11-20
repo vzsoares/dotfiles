@@ -57,6 +57,42 @@ PATH="$base" bash "$LINK" >/dev/null
 [ ! -e "$R/agent/skills/pi/stale.md" ] && [ ! -e "$R/agent/skills/pi/scripts/__pycache__" ]
 check "a re-run refreshes the pi skill without bytecode caches" $?
 
+[ -f "$R/agent/skills/chrome/SKILL.md" ] && [ -f "$R/agent/skills/browser/SKILL.md" ]
+check "copies the chrome skill beside the browser skill" $?
+
+M="$R/agent/mcp.json"
+cmp -s "$M" "$HERE/../agent/mcp.json" && grep -q '"command": "/usr/local/bin/abb-mcp"' "$M" &&
+  grep -q '"exposure": "direct"' "$M"
+check "a first run copies mcp.json with the pinned browser entry" $?
+mcp_is() { # other-entry json; the browser entry must equal the template's
+  python3 - "$M" "$HERE/../agent/mcp.json" "$1" <<'PY'
+import json, sys
+got, want = (json.load(open(p))["mcpServers"] for p in sys.argv[1:3])
+other = json.loads(sys.argv[3])
+sys.exit(got.pop("browser", None) != want["browser"] or got != other)
+PY
+}
+echo '{"mcpServers":{"mine":{"command":"npx","args":["-y","x@1.0.0"]}}}' >"$M"
+PATH="$base" bash "$LINK" >/dev/null
+mcp_is '{"mine":{"command":"npx","args":["-y","x@1.0.0"]}}'
+check "a re-run merges the browser entry and keeps pi's own servers" $?
+echo '{"mcpServers":{"browser":{"command":"/bin/evil"},"mine":{"command":"npx"}}}' >"$M"
+PATH="$base" bash "$LINK" >/dev/null
+mcp_is '{"mine":{"command":"npx"}}'
+check "a re-run resets an edited browser entry" $?
+PATH="$base" bash "$LINK" --force >/dev/null
+cmp -s "$M" "$HERE/../agent/mcp.json"
+check "--force resets mcp.json to the template" $?
+echo '{"secret":"host"}' >"$TMP/host.json"
+rm -f "$M"
+ln -s "$TMP/host.json" "$M"
+! PATH="$base" bash "$LINK" >/dev/null 2>&1 && [ -L "$M" ] && [ "$(cat "$TMP/host.json")" = '{"secret":"host"}' ]
+check "refuses a symlinked mcp.json without following it" $?
+PATH="$base" bash "$LINK" --force >/dev/null
+[ ! -L "$M" ] && cmp -s "$M" "$HERE/../agent/mcp.json" &&
+  [ "$(cat "$TMP/host.json")" = '{"secret":"host"}' ]
+check "--force replaces a symlinked mcp.json, not its target" $?
+
 echo
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failed"

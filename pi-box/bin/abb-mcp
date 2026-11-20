@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# The bridge MCP server pi spawns over stdio (mcp.json entry `browser`).
+# The entrypoint leaves the pairing token only on a run that holds the browser.
+
+set -e
+
+token=/run/abb/pair.token
+if [ ! -r "$token" ]; then
+  echo "abb-mcp: browser not available for this run" >&2
+  exit 1
+fi
+export AGENT_BROWSER_HOST=0.0.0.0 AGENT_BROWSER_CLIENT=off \
+  AGENT_BROWSER_PAIR_TOKEN_FILE="$token"
+exec bun /opt/abb/bridge/src/mcp/server.ts

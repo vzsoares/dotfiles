@@ -10,8 +10,10 @@ WRAPPER="$HERE/../wrapper"
 REAL_HOME="$HOME"
 TMP="$(cd "$(mktemp -d)" && pwd -P)"
 SERVER=""
+BOX=""
 cleanup() {
   [ -n "$SERVER" ] && kill "$SERVER" 2>/dev/null
+  [ -n "$BOX" ] && kill "$BOX" 2>/dev/null
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -37,7 +39,51 @@ ws="$HOME/pi-box/work/boundary"
 mkdir -p "$ws" "$HOME/pi-box/agent" "$HOME/pi-box/in"
 cp "$HERE/inside.sh" "$ws/inside.sh"
 cd "$ws"
-AWS_SECRET_ACCESS_KEY=canary GITHUB_TOKEN=canary \
+AWS_SECRET_ACCESS_KEY=canary GITHUB_TOKEN=canary PIBOX_BROWSER=0 \
   bash "$WRAPPER" exec bash ./inside.sh "$REAL_HOME" "$PORT" "$HOME/pi-box/in"
+
+# Browser run, on a host port this test owns: the user's extension dials 9242
+# and never sees it. The pairing token is created in the temp HOME.
+export PIBOX_BROWSER_PORT=$((40000 + RANDOM % 20000))
+url="http://127.0.0.1:$PIBOX_BROWSER_PORT"
+AWS_SECRET_ACCESS_KEY=canary GITHUB_TOKEN=canary \
+  bash "$WRAPPER" exec bash ./inside.sh "$REAL_HOME" "$PORT" "$HOME/pi-box/in" browser &
+BOX=$!
+for _ in $(seq 180); do
+  [ -e "$ws/ready" ] && break
+  kill -0 "$BOX" 2>/dev/null || break
+  sleep 1
+done
+[ -e "$ws/ready" ] || { echo "FAIL the browser box never got ready"; exit 1; }
+
+code() { curl -s -m 5 -o /dev/null -w '%{http_code}' "$@"; }
+upgrade=(-H 'Connection: Upgrade' -H 'Upgrade: websocket'
+  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==')
+curl -fsS -m 5 "$url/" | grep -q 'Agent Browser Bridge'
+echo "ok   host loopback reaches the bridge through the firewall"
+[ "$(code "${upgrade[@]}" "$url/")" = 403 ]
+[ "$(code "${upgrade[@]}" -H 'Origin: http://localhost' "$url/")" = 403 ]
+echo "ok   upgrade without the extension Origin refused (403)"
+[ "$(code "${upgrade[@]}" "$url/client")" = 404 ]
+echo "ok   /client is off (404)"
+[ "$(code "${upgrade[@]}" \
+  -H 'Origin: chrome-extension://jjlgogdanhhkgglgckdpigepfniilinm' "$url/")" = 101 ]
+echo "ok   the pinned extension Origin upgrades (101)"
+
+ws2="$HOME/pi-box/work/boundary2"
+mkdir -p "$ws2"
+cp "$HERE/inside.sh" "$ws2/inside.sh"
+cd "$ws2"
+bash "$WRAPPER" exec bash ./inside.sh "$REAL_HOME" "$PORT" "$HOME/pi-box/in" second \
+  2>"$TMP/second.err"
+grep -q 'browser held by pi-box-boundary; this run has no browser' "$TMP/second.err"
+echo "ok   a second concurrent box is told who holds the browser"
+dry="$(PIBOX_DRY_RUN=1 bash "$WRAPPER" exec true 2>/dev/null)"
+case "$dry" in *" -p "* | *AGENT_BROWSER*) echo "FAIL second box publishes"; exit 1 ;; esac
+echo "ok   a second concurrent box gets no publish and no token"
+
+touch "$ws/done"
+wait "$BOX"
+BOX=""
 echo
 echo "all passed"

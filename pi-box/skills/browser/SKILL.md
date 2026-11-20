@@ -6,7 +6,8 @@ description: Drive headless Chromium with Playwright for JavaScript-heavy pages,
 # browser
 
 Chromium runs headless only (Playwright's headless shell); there is no display.
-Save the rendered HTML to `out/`, then parse it with `extract`.
+Save the rendered HTML to `out/`, then parse it with `extract`. For a site that
+needs the user's own login or live session, use the `chrome` skill instead.
 
 ## Render a page
 

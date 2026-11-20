@@ -53,6 +53,8 @@ mermaid/      # zen-diagram: themed mermaid renderer (bun); screenshots and
 nvim/         # neovim config (lua)
 pi-box/       # pi inside a Docker box (no host repos, secrets or services):
               #   Dockerfile, entrypoint (egress rules, drops to host uid),
+              #   bin/abb-mcp (pi drives the user's Chrome through the paired
+              #   agent-browser-bridge extension; first run holds port 9242),
               #   wrapper (pi-box on PATH via link-bin), agent/ templates
               #   that ./link copies into ~/pi-box, plus the shim/pi and
               #   agent-manager env profile + group that box agent-manager's

@@ -229,6 +229,8 @@ FAKE_PIBOX = """#!{python}
 import json, os, sys, time
 with open(os.environ["FAKE_ARGV"], "a") as f:
     f.write(json.dumps(sys.argv[1:]) + "\\n")
+with open(os.environ["FAKE_ARGV"] + ".browser", "a") as f:
+    f.write(os.environ.get("PIBOX_BROWSER", "unset") + "\\n")
 n = int(os.environ["FAKE_MESSAGES"])
 for i in range(n):
     msg = {{"role": "assistant", "content": [{{"type": "text", "text": "x"}}],
@@ -259,6 +261,7 @@ def _live_env(
     monkeypatch.setenv("FAKE_ARGV", str(tmp_path / "argv.log"))
     monkeypatch.setenv("FAKE_MESSAGES", str(messages))
     monkeypatch.setenv("FAKE_INPUT", str(tokens_in))
+    monkeypatch.delenv("PIBOX_BROWSER", raising=False)
     monkeypatch.setattr(ev.Path, "home", lambda: tmp_path / "home")
     return pibox
 
@@ -294,6 +297,7 @@ def test_live_stops_before_a_call_that_could_cross_the_cap(
         "venice",
     ]
     assert FAKE_KEY not in "".join(argv)
+    assert (tmp_path / "argv.log.browser").read_text().splitlines() == ["0"]
     data = _results(tmp_path)
     spent = data["spent_usd"]
     assert isinstance(spent, float) and spent <= 0.15

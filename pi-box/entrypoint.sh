@@ -34,6 +34,18 @@ if [ -e /proc/net/if_inet6 ]; then
   done
 fi
 
+# A run that holds the browser: replies to the published bridge port leave
+# through a private gateway address. New connections there stay rejected.
+if [ -n "${AGENT_BROWSER_PAIR_TOKEN:-}" ]; then
+  iptables -I OUTPUT 1 -p tcp --sport 9242 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+  # Root has no CAP_CHOWN, so the pi uid creates its own file.
+  printf '%s\n' "$AGENT_BROWSER_PAIR_TOKEN" |
+    setpriv --reuid="$uid" --regid="$gid" --clear-groups -- \
+      sh -c 'umask 277 && cat >/run/abb/pair.token'
+fi
+unset AGENT_BROWSER_PAIR_TOKEN
+chmod 755 /run/abb
+
 if ! getent passwd "$uid" >/dev/null; then
   echo "pi:x:$uid:$gid::/home/pi:/bin/bash" >>/etc/passwd
 fi

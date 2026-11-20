@@ -470,6 +470,11 @@ scraping at volume, media download or transcoding, content Claude refuses, or bu
 gathering into files. Code changes in a repo stay with claude workers; pi's `out/` can
 feed one.
 
+- **Logged-in browsing:** a task that needs the user's own logins (reading their
+  dashboards, inboxes, notifications) also routes to pi-box: the run drives the user's
+  everyday Chrome through the `browser` MCP tools. The ask line says the run may use
+  the user's Chrome; only one run at a time holds the browser.
+
 - **Ask command:** `mkdir -p ~/pi-box/work/<id>/out`, then
   `python3 pi-box/contract.py command <id> <goal-file>` in the dotfiles repo prints the
   exact `agent-manager spawn --tool pi --env pi-box --group pi-box --directory

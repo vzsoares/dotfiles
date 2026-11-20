@@ -1,17 +1,47 @@
 # pi-box
 
 Runs [pi](https://github.com/earendil-works/pi) entirely inside a Docker
-container that can't reach the host's repos, secrets, services or browser.
-The host `pi` stays as it is.
+container that can't reach the host's repos, secrets, services or browser,
+except the browser through the paired extension (see Browser). The host `pi`
+stays as it is.
 
 ## Setup
 
 ```
 ./pi-box/link     # creates ~/pi-box, copies agent templates + config.env
 ./link-bin        # puts pi-box on PATH
-pi-box build      # builds the image (pi 1.5.2 + the crawl/scrape toolkit)
+pi-box build      # builds the image (pi 1.5.2 + the crawl/scrape toolkit
+                  #   + agent-browser-bridge v2.0.0 at a pinned commit)
 pi-box doctor     # offline toolkit check in a throwaway container
 ```
+
+`PIBOX_BRIDGE_SRC=<checkout> pi-box build` builds the bridge from a local
+checkout instead of the pinned commit (development only).
+
+## Browser
+
+pi drives the user's everyday Chrome through
+[agent-browser-bridge](https://github.com/vzsoares/agent-browser-bridge): the
+bridge's MCP server runs in the box as a child of pi (`mcp.json` entry
+`browser`, tools `mcp__browser__browser_*`), and the Chrome extension connects
+in to `ws://localhost:9242`. Once per machine:
+
+1. Build `chrome-extension/dist` from bridge v2.0.0 and load it unpacked in
+   the everyday Chrome profile.
+2. Start any pi-box run; the first one creates
+   `~/.config/agent-browser-bridge/pair.token` (0600).
+3. Paste that file's content into the extension popup's pairing field.
+
+Every run (pi or `exec`) takes the browser when `127.0.0.1:9242` is free. A
+run that finds it busy, by another pi-box run or a host-side bridge, prints
+`pi-box: browser held by <holder>; this run has no browser` and starts
+without it: its `browser` server shows as failed and no tools are declared.
+`PIBOX_BROWSER=0` skips the browser (the eval and the tests use it).
+
+pi may add its own MCP servers (`pi mcp add`) and packages (`pi install`);
+they persist in `~/pi-box/agent` for every later run, browser runs included.
+Only the `browser` entry is repo-owned: the wrapper rewrites that one entry on
+every start and `link` merges it, both leaving the other entries alone.
 
 ## Use
 
@@ -110,6 +140,8 @@ writes deliverables to `out/` and `RESULT.md` with non-empty `## Summary`,
 | Files | Only `work/<task-id>` (rw, same absolute path), `in/` (ro), and `~/pi-box/agent` at `/home/pi/.pi/agent`. Symlinked `pi-box`, `work`, `agent` or `in` dirs are refused. |
 | Env | Allowlist only: `VENICE_API_KEY`, `TERM`, `COLORTERM`, `LANG`, plus the crawl and proxy keys from `~/pi-box/config.env` (host env overrides). Passed by name, so values never show in `ps`. |
 | User | The entrypoint starts as root with only `NET_ADMIN`, `SETUID`, `SETGID`, installs the egress rules, then runs the command as the host uid with every capability dropped and `no_new_privs`. `--memory 2g`, no docker socket. |
+| Browser | The run that holds it publishes the bridge port to the host's `127.0.0.1:9242` only; the box never dials the host. One extra rule lets replies out: `--sport 9242` in conntrack state `ESTABLISHED`. The bridge refuses any Origin but the pinned extension ID, needs the pairing token as the first frame, and has `/client` off, so pi's stdio pipe is the only driver. The token enters by name and is left at `/run/abb/pair.token` (0400, pi uid), not in pi's env; all it can do is register as the extension on a bridge. |
+| Self-installs | What pi installs lives in `~/pi-box/agent` and loads in later runs that hold the user's logins (accepted risk: per-run approval, the install note in `RESULT.md`, the extension's toggle and action log). The wrapper and `link` refuse a symlinked `mcp.json`. |
 | Network | `REJECT` for 10/8, 172.16/12, 192.168/16 (the Docker Desktop host gateway included), 169.254/16, 100.64/10, multicast and 240/4, and IPv6 ULA/link-local/multicast. DNS to the container resolver stays open. A proxy on a private address is therefore unreachable. |
 
 ## Toolkit
@@ -122,8 +154,8 @@ Chromium is Playwright's headless shell only; there is no headed browser.
 `pi-box-cookies2state` turns a Netscape `cookies.txt` into Playwright
 `storageState`.
 
-`./pi-box/link` copies `skills/*/SKILL.md` (fetch, crawl, browser, extract,
-media) and the shared `.claude/skills/pi` skill to `~/pi-box/agent/skills`, and creates `~/pi-box/in/cookies/`. Export a
+`./pi-box/link` copies `skills/*/SKILL.md` (fetch, crawl, browser, chrome,
+extract, media) and the shared `.claude/skills/pi` skill to `~/pi-box/agent/skills`, and creates `~/pi-box/in/cookies/`. Export a
 site's cookies there as `<site>.txt` to let the box log in.
 
 Update the Python lock with `uv pip compile requirements.in
@@ -155,4 +187,11 @@ zen-lock core-heavy -- pi-box doctor                  # toolkit, offline
 
 `boundary.sh` starts a host listener, proves a plain container reaches it,
 then runs `test/inside.sh` in the box: absent host paths, env allowlist, no
-caps, private ranges and host gateway refused, `example.com` loads.
+caps, private ranges and host gateway refused, `example.com` loads. It then
+starts a box that holds the browser on a random host port (never 9242, so the
+real extension is not involved): `pi mcp list` shows `browser` connected with
+11 tools, the host reaches the bridge, an upgrade without the extension Origin
+and `/client` are refused, egress from source port 9242 is still rejected, and
+a second box started meanwhile has no publish, no token and a failed `browser`.
+`wrapper.sh` covers the publish, the token file, the busy port, the lost bind
+race and the pinned `mcp.json` entry with a fake docker.

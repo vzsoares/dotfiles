@@ -2,6 +2,7 @@
 # Creates the ~/pi-box workspace. Agent templates and config.env are copied,
 # not linked: the repo is not mounted in the box, and pi rewrites settings.json.
 # Existing files are kept; pass --force to overwrite the agent templates.
+# mcp.json keeps the servers pi added; only its `browser` entry is set.
 # Skills, including the shared pi skill, are repo-owned and always refreshed.
 
 set -e
@@ -28,9 +29,58 @@ copy() { # src, dest
 }
 
 [ "${1:-}" = --force ] && FORCE=1
-for f in AGENTS.md settings.json models.json mcp.json; do
+for f in AGENTS.md settings.json models.json; do
   copy "$SCRIPT_DIR/agent/$f" "$ROOT/agent/$f"
 done
+
+MCP="$ROOT/agent/mcp.json"
+if [ "${FORCE:-}" = 1 ] || { [ ! -e "$MCP" ] && [ ! -L "$MCP" ]; }; then
+  rm -f "$MCP"
+  cp "$SCRIPT_DIR/agent/mcp.json" "$MCP"
+  echo "copied $MCP"
+else
+  python3 - "$SCRIPT_DIR/agent/mcp.json" "$MCP" <<'PY'
+import json
+import os
+import stat
+import sys
+import tempfile
+
+template, path = sys.argv[1:3]
+
+
+def fail(msg):
+    print(f"pi-box/link: {path} {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+with open(template) as f:
+    entry = json.load(f)["mcpServers"]["browser"]
+try:
+    # The box can write this dir: never follow a link or block on a fifo.
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+except OSError:
+    fail("is a symlink or unreadable; remove it")
+with os.fdopen(fd) as f:
+    if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+        fail("is not a regular file; remove it")
+    try:
+        data = json.load(f)
+    except ValueError:
+        fail("is not valid JSON; fix it or pass --force")
+servers = data.setdefault("mcpServers", {}) if isinstance(data, dict) else None
+if not isinstance(servers, dict):
+    fail("has no mcpServers object; fix it or pass --force")
+servers["browser"] = entry
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".mcp.json.")
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=4)
+    f.write("\n")
+os.chmod(tmp, 0o644)
+os.replace(tmp, path)
+PY
+  echo "merged $MCP"
+fi
 for skill in "$SCRIPT_DIR"/skills/*/; do
   name="$(basename "$skill")"
   mkdir -p "$ROOT/agent/skills/$name"

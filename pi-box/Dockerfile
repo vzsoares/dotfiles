@@ -1,5 +1,21 @@
+# syntax=docker/dockerfile:1
 FROM rust:1.90-slim-bookworm AS htmlq
 RUN cargo install htmlq --version 0.4.0 --locked --root /out
+
+# The bridge at its v2.0.0 commit. `--build-context bridge-src=<dir>`
+# (PIBOX_BRIDGE_SRC, development only) replaces this stage.
+FROM scratch AS bridge-src
+ARG BRIDGE_SHA=4d7e21cafede6ae26a2b2228493a70bd0b5453c7
+ADD https://github.com/vzsoares/agent-browser-bridge.git#${BRIDGE_SHA} /
+
+FROM oven/bun:1.3.11-slim AS abb
+WORKDIR /opt/abb
+COPY --from=bridge-src package.json bun.lock ./
+COPY --from=bridge-src bridge ./bridge
+COPY --from=bridge-src protocol ./protocol
+COPY --from=bridge-src logger ./logger
+COPY --from=bridge-src chrome-extension/package.json ./chrome-extension/package.json
+RUN bun install --frozen-lockfile --production
 
 FROM node:22.23.1-bookworm-slim
 
@@ -17,7 +33,7 @@ RUN npm install -g --ignore-scripts \
   && npm cache clean --force
 
 COPY --from=ghcr.io/astral-sh/uv:0.8.22 /uv /usr/local/bin/uv
-COPY --from=oven/bun:1.3.0-slim /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.3.11-slim /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=htmlq /out/bin/htmlq /usr/local/bin/htmlq
 
 # Playwright's headless shell is the only browser; no headed one exists.
@@ -33,13 +49,16 @@ RUN uv venv "$VIRTUAL_ENV" --python /usr/bin/python3 \
   && chmod -R a+rX /opt/venv /opt/pw-browsers
 
 COPY bin/ /usr/local/bin/
+COPY --from=abb /opt/abb /opt/abb
 COPY doctor/ /opt/pi-box/doctor/
 
 # The entrypoint runs pi as the host uid, which may not be 1000.
 RUN groupmod -n pi node \
   && usermod -l pi -d /home/pi -m node \
   && mkdir -p /home/pi/.pi/agent \
-  && chmod 1777 /home/pi /home/pi/.pi /home/pi/.pi/agent
+  && chmod 1777 /home/pi /home/pi/.pi /home/pi/.pi/agent \
+  && mkdir -m 1777 /run/abb \
+  && chmod -R a+rX /opt/abb
 
 COPY entrypoint.sh /usr/local/sbin/pi-box-entrypoint
 ENTRYPOINT ["/usr/local/sbin/pi-box-entrypoint"]
