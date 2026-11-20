@@ -226,6 +226,10 @@ version:
   repos, secrets or services; private network ranges are rejected; env is an
   allowlist. The wrapper exits 2 outside `~/pi-box/work/<task-id>/` and 3 when
   that task's container already runs.
+- **Browser.** The one way out: the `browser` MCP server (`mcp.json`, reset by
+  the wrapper on every start) drives the user's logged-in Chrome through the
+  paired agent-browser-bridge extension. Only the run that got host port 9242
+  has the tools; `PIBOX_BROWSER=0` skips it.
 - **Agent dir.** `pi-box/link` copies `pi-box/agent/*` (settings, models, mcp,
   AGENTS.md) into `~/pi-box/agent` and refreshes the box skills (including a
   copy of this one). Copies, not links: the repo is not mounted in the box.

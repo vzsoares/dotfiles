@@ -315,11 +315,13 @@ cleanup() {
 trap cleanup EXIT
 rc=0
 docker "${args[@]}" "${browser[@]}" "${cmd[@]}" || rc=$?
-# 125: docker could not start the container. When another box took the port
-# between the check and the bind, start once more without the browser.
+# 125: docker could not start the container. When the port was taken between
+# the check and the bind, start once more without the browser. The winner may
+# not be listed by `docker ps` yet, so a busy port counts too.
 if [ "$rc" = 125 ] && [ "${#browser[@]}" -gt 0 ]; then
   other="$(holder)"
-  if [ "$other" != "$name" ] && [[ "$other" != "another process"* ]]; then
+  if [ "$other" != "$name" ] && { [[ "$other" != "another process"* ]] ||
+    [ "$(browser_host check "$port")" = busy ]; }; then
     no_browser "$other"
     rc=0
     docker "${args[@]}" "${cmd[@]}" || rc=$?

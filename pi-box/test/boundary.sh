@@ -44,7 +44,8 @@ AWS_SECRET_ACCESS_KEY=canary GITHUB_TOKEN=canary PIBOX_BROWSER=0 \
 
 # Browser run, on a host port this test owns: the user's extension dials 9242
 # and never sees it. The pairing token is created in the temp HOME.
-export PIBOX_BROWSER_PORT=$((40000 + RANDOM % 20000))
+PIBOX_BROWSER_PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+export PIBOX_BROWSER_PORT
 url="http://127.0.0.1:$PIBOX_BROWSER_PORT"
 AWS_SECRET_ACCESS_KEY=canary GITHUB_TOKEN=canary \
   bash "$WRAPPER" exec bash ./inside.sh "$REAL_HOME" "$PORT" "$HOME/pi-box/in" browser &

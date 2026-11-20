@@ -10,7 +10,7 @@ ADD https://github.com/vzsoares/agent-browser-bridge.git#${BRIDGE_SHA} /
 
 FROM oven/bun:1.3.11-slim AS abb
 WORKDIR /opt/abb
-COPY --from=bridge-src package.json bun.lock ./
+COPY --from=bridge-src package.json bun.lock tsconfig.json ./
 COPY --from=bridge-src bridge ./bridge
 COPY --from=bridge-src protocol ./protocol
 COPY --from=bridge-src logger ./logger

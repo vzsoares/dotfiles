@@ -9,6 +9,7 @@ FAILS=0
 LISTENER=""
 cleanup() {
   [ -n "$LISTENER" ] && kill "$LISTENER" 2>/dev/null
+  [ -f "$TMP/taken.pid" ] && kill "$(cat "$TMP/taken.pid")" 2>/dev/null
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -46,15 +47,27 @@ echo "VENICE_API_KEY=${VENICE_API_KEY-unset}" >>"$FAKE_LOG"
 echo "PAIR_TOKEN_SET=${AGENT_BROWSER_PAIR_TOKEN:+yes}" >>"$FAKE_LOG"
 echo run >>"$FAKE_RUNS"
 if [ -n "$FAKE_BIND_FAIL" ] && printf '%s\n' "$@" | grep -qx -- -p; then
+  if [ -n "$FAKE_BIND_TAKEN" ]; then
+    python3 -c 'import socket, sys, time
+s = socket.socket()
+s.bind(("127.0.0.1", int(sys.argv[1])))
+s.listen()
+time.sleep(600)' "$FAKE_BIND_TAKEN" >/dev/null 2>&1 &
+    echo $! >"$FAKE_TAKEN_PID"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      (exec 3<>"/dev/tcp/127.0.0.1/$FAKE_BIND_TAKEN") 2>/dev/null && break
+      sleep 0.3
+    done
+  fi
   exit 125
 fi
 exit "${FAKE_RC:-0}"
 FAKE
 chmod +x "$TMP/bin/docker"
 export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/ps" FAKE_STOP="$TMP/stop"
-export FAKE_RUNS="$TMP/runs"
+export FAKE_RUNS="$TMP/runs" FAKE_TAKEN_PID="$TMP/taken.pid"
 unset VENICE_API_KEY CRAWL_DELAY_MS FAKE_RUNNING FAKE_SLEEP FAKE_APPEND
-unset FAKE_HOLDER FAKE_BIND_FAIL FAKE_RC AGENT_BROWSER_PAIR_TOKEN PIBOX_BRIDGE_SRC
+unset FAKE_HOLDER FAKE_BIND_FAIL FAKE_BIND_TAKEN FAKE_RC AGENT_BROWSER_PAIR_TOKEN PIBOX_BRIDGE_SRC
 # The browser section below turns it on, against a port this test owns.
 export PIBOX_BROWSER=0
 W="$HOME/pi-box/work"
@@ -316,6 +329,13 @@ FAKE_BIND_FAIL=1 run_in "$W/t1" --version
 expect_rc 125 "a docker failure with no other holder is not retried (exit 125)"
 [ "$(runs)" = 1 ]
 check "no second start when no other box holds the port" $?
+: >"$FAKE_RUNS"
+FAKE_BIND_FAIL=1 FAKE_BIND_TAKEN="$BP" run_in "$W/t1" --version
+check "a lost race to a holder docker ps does not list still starts" $?
+[ "$(runs)" = 2 ] && ! grep -qx -- '-p' "$FAKE_LOG" &&
+  grep -q "browser held by another process on 127.0.0.1:$BP" "$TMP/err"
+check "a port found busy after a failed bind retries without the browser" $?
+kill "$(cat "$TMP/taken.pid")"
 : >"$FAKE_RUNS"
 FAKE_BIND_FAIL=1 FAKE_HOLDER="pi-box-t1 127.0.0.1:$BP->9242/tcp" run_in "$W/t1" --version
 [ "$(runs)" = 1 ]
