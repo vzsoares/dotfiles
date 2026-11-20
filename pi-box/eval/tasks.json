@@ -1,0 +1,118 @@
+{
+    "version": 1,
+    "tasks": [
+        {
+            "id": "fetch-text",
+            "skill": "fetch",
+            "prompt": "Fetch https://example.com and save its main heading and first paragraph, as plain text, to out/example.txt.",
+            "est_input_tokens": 30000,
+            "est_output_tokens": 1500,
+            "checks": [
+                { "type": "contains", "path": "out/example.txt", "all": ["Example Domain"] }
+            ]
+        },
+        {
+            "id": "fetch-headers",
+            "skill": "fetch",
+            "prompt": "Request https://www.iana.org/help/example-domains with curl. Write out/headers.json as a JSON object with an integer \"status\" (the final HTTP status) and a string \"content_type\" (the Content-Type header).",
+            "est_input_tokens": 30000,
+            "est_output_tokens": 1500,
+            "checks": [
+                { "type": "json_field", "path": "out/headers.json", "field": "status", "equals": 200 },
+                { "type": "contains", "path": "out/headers.json", "all": ["text/html"] }
+            ]
+        },
+        {
+            "id": "crawl-books",
+            "skill": "crawl",
+            "prompt": "Crawl the first two catalogue pages of https://books.toscrape.com/ (page 1 and page 2 only, honouring CRAWL_DELAY_MS). Write out/books.csv with a header row \"title,price\" and one row per book.",
+            "est_input_tokens": 60000,
+            "est_output_tokens": 3000,
+            "checks": [
+                { "type": "min_lines", "path": "out/books.csv", "lines": 41 },
+                { "type": "contains", "path": "out/books.csv", "all": ["title,price", "A Light in the Attic"] }
+            ]
+        },
+        {
+            "id": "browser-js",
+            "skill": "browser",
+            "prompt": "https://quotes.toscrape.com/js/ renders its quotes with JavaScript. Use the headless browser to load it and write out/quotes.json: a JSON array of the first 10 quotes, each an object with \"text\" and \"author\".",
+            "est_input_tokens": 60000,
+            "est_output_tokens": 3000,
+            "checks": [
+                { "type": "json_length", "path": "out/quotes.json", "length": 10 },
+                { "type": "contains", "path": "out/quotes.json", "all": ["Albert Einstein"] }
+            ]
+        },
+        {
+            "id": "extract-html",
+            "skill": "extract",
+            "prompt": "in-task/page.html holds an HTML table of cities. Extract every data row with htmlq into out/cities.csv, with a header row \"city,population\" and the population as a plain integer.",
+            "files": {
+                "in-task/page.html": "<html><body><h1>Cities</h1><table id=\"c\"><tr><th>City</th><th>Population</th></tr><tr><td>Lisbon</td><td>545,796</td></tr><tr><td>Porto</td><td>231,962</td></tr><tr><td>Braga</td><td>193,333</td></tr></table></body></html>\n"
+            },
+            "est_input_tokens": 30000,
+            "est_output_tokens": 1500,
+            "checks": [
+                { "type": "contains", "path": "out/cities.csv", "all": ["city,population", "Lisbon,545796", "Porto,231962", "Braga,193333"] }
+            ]
+        },
+        {
+            "id": "extract-json",
+            "skill": "extract",
+            "prompt": "in-task/orders.json is a list of orders. With jq, sum \"amount\" over the orders whose \"status\" is \"paid\" and write only that number to out/total.txt.",
+            "files": {
+                "in-task/orders.json": "[{\"id\":1,\"status\":\"paid\",\"amount\":120},{\"id\":2,\"status\":\"refunded\",\"amount\":75},{\"id\":3,\"status\":\"paid\",\"amount\":300},{\"id\":4,\"status\":\"pending\",\"amount\":50},{\"id\":5,\"status\":\"paid\",\"amount\":814}]\n"
+            },
+            "est_input_tokens": 25000,
+            "est_output_tokens": 1000,
+            "checks": [
+                { "type": "equals", "path": "out/total.txt", "value": "1234" }
+            ]
+        },
+        {
+            "id": "file-write",
+            "skill": "none",
+            "prompt": "Write a Python script out/fib.py that prints the first 10 Fibonacci numbers starting 0 1, one per line. Run it and save its output to out/fib.txt.",
+            "est_input_tokens": 25000,
+            "est_output_tokens": 1500,
+            "checks": [
+                { "type": "exists", "path": "out/fib.py" },
+                { "type": "equals", "path": "out/fib.txt", "value": "0\n1\n1\n2\n3\n5\n8\n13\n21\n34" }
+            ]
+        },
+        {
+            "id": "media-tone",
+            "skill": "media",
+            "prompt": "With ffmpeg, generate a 2-second 440 Hz sine tone, encode it as out/tone.mp3, then write its duration in whole seconds (from ffprobe) to out/duration.txt.",
+            "est_input_tokens": 30000,
+            "est_output_tokens": 1500,
+            "checks": [
+                { "type": "exists", "path": "out/tone.mp3" },
+                { "type": "equals", "path": "out/duration.txt", "value": "2" }
+            ]
+        },
+        {
+            "id": "multi-authors",
+            "skill": "fetch",
+            "prompt": "Fetch https://quotes.toscrape.com/ (page 1 only). Write the distinct quote authors, sorted, one per line, to out/authors.txt, and the number of distinct authors to out/count.txt.",
+            "est_input_tokens": 45000,
+            "est_output_tokens": 2000,
+            "checks": [
+                { "type": "contains", "path": "out/authors.txt", "all": ["Albert Einstein", "Jane Austen"] },
+                { "type": "count_matches_lines", "path": "out/count.txt", "lines_of": "out/authors.txt" }
+            ]
+        },
+        {
+            "id": "multi-recover",
+            "skill": "fetch",
+            "prompt": "Request https://books.toscrape.com/catalogue/page-999.html and write its HTTP status code to out/status.txt. Since that page does not exist, fall back to https://books.toscrape.com/catalogue/page-1.html and write the title of its first book to out/first_title.txt.",
+            "est_input_tokens": 45000,
+            "est_output_tokens": 2000,
+            "checks": [
+                { "type": "equals", "path": "out/status.txt", "value": "404" },
+                { "type": "contains", "path": "out/first_title.txt", "all": ["A Light in the Attic"] }
+            ]
+        }
+    ]
+}

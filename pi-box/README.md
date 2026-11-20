@@ -77,10 +77,25 @@ site's cookies there as `<site>.txt` to let the box log in.
 Update the Python lock with `uv pip compile requirements.in
 --python-version 3.11 -o requirements.txt` (bump with `--upgrade`).
 
+## Model eval
+
+`eval/` scores the three Venice candidates on ten tool-call tasks; see
+`eval/RUBRIC.md`. The dry run is the default and calls nothing:
+
+```
+uv run pi-box/eval/eval.py                                # plan + estimate
+zen-lock core-heavy -- uv run pi-box/eval/eval.py --live  # paid, $3 cap
+```
+
+`--live` runs each call as `pi-box exec env PI_CODING_AGENT_DIR=… pi --mode
+json` from `~/pi-box/work/eval-898`, with the eval's own `models.json`, and
+writes `results.md` / `results.json` to `~/pi-box/evals/<stamp>/`.
+
 ## Tests
 
 ```
 bash pi-box/test/wrapper.sh                           # fake docker, no container
+uv run pi-box/eval/test_eval.py                       # fake pi-box, no Venice
 bash pi-box/test/link.sh                              # temp HOME, fake agent-manager
 zen-lock core-heavy -- bash pi-box/test/boundary.sh   # real image, no model call
 zen-lock core-heavy -- pi-box doctor                  # toolkit, offline
