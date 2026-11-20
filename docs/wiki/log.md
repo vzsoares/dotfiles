@@ -122,3 +122,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-20] feature | agents/link covers Codex and Antigravity (#918)
 `agents/link [--dry-run] [pi] [codex] [agy]` links `.claude/CLAUDE.md` as `AGENTS.md` and the shared skills into `~/.codex` and `~/.gemini/config`, and mirrors the stdio servers in `agents/mcp.json` via `codex mcp add` / `agy mcp add` (never `agent-manager`, never `config.toml`). Existing files move to `.bak.<epoch>`; reruns print `unchanged`. Test: `agents/test/link.sh`.
 Pages updated: overview.md, manjaroi3/fresh-install.md
+
+## [2026-11-20] feature | pi skill (#923)
+`.claude/skills/pi/`: SKILL.md core (pi 1.6.0 vs Claude Code/Codex/agy, modes, agent dir, native MCP exposure, sessions, trust, pi-box) plus paraphrased `references/` per topic. `scripts/refresh.py` re-scrapes docs.pi.dev/latest and diffs page hashes against `references/SOURCES.json` (exit 3 on drift; `--write` records). Linked as a shared skill by `agents/link`; `pi-box/link` copies it into the box. Tests: `agents/test/link.sh`, `pi-box/test/link.sh`, `uv run agents/test/test_pi_refresh.py`.
+Pages updated: overview.md

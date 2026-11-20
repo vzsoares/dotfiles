@@ -123,7 +123,7 @@ Chromium is Playwright's headless shell only; there is no headed browser.
 `storageState`.
 
 `./pi-box/link` copies `skills/*/SKILL.md` (fetch, crawl, browser, extract,
-media) to `~/pi-box/agent/skills`, and creates `~/pi-box/in/cookies/`. Export a
+media) and the shared `.claude/skills/pi` skill to `~/pi-box/agent/skills`, and creates `~/pi-box/in/cookies/`. Export a
 site's cookies there as `<site>.txt` to let the box log in.
 
 Update the Python lock with `uv pip compile requirements.in

@@ -35,7 +35,7 @@ Each tool is symlinked into place (always **absolute paths**) by a `link` script
   then registers each server in `agents/mcp.json` with `claude mcp add-json -s user`
 - `agents/link [--dry-run] [pi] [codex] [agy]` — no target runs all three.
   `.claude/CLAUDE.md` (as `AGENTS.md`) and the shared skills (`wiki`,
-  `second-brain`) go to `~/.pi/agent` + `~/.agents/skills`, `~/.codex`, and
+  `second-brain`, `pi`) go to `~/.pi/agent` + `~/.agents/skills`, `~/.codex`, and
   `~/.gemini/config`; pi also gets `agents/{settings,models,mcp}.json`. Codex
   and agy get the `agents/mcp.json` stdio servers through their own
   `mcp add` (never `config.toml` or agy's settings, which hold private paths).

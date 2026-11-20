@@ -2,7 +2,7 @@
 # Creates the ~/pi-box workspace. Agent templates and config.env are copied,
 # not linked: the repo is not mounted in the box, and pi rewrites settings.json.
 # Existing files are kept; pass --force to overwrite the agent templates.
-# Skills are repo-owned and always refreshed.
+# Skills, including the shared pi skill, are repo-owned and always refreshed.
 
 set -e
 
@@ -37,6 +37,10 @@ for skill in "$SCRIPT_DIR"/skills/*/; do
   cp "$skill/SKILL.md" "$ROOT/agent/skills/$name/SKILL.md"
   echo "copied $ROOT/agent/skills/$name/SKILL.md"
 done
+PI_SKILL="$ROOT/agent/skills/pi"
+rm -rf "$PI_SKILL"
+cp -R "$SCRIPT_DIR/../.claude/skills/pi" "$PI_SKILL"
+echo "copied $PI_SKILL"
 FORCE='' copy "$SCRIPT_DIR/config.env.example" "$ROOT/config.env"
 
 ln -sfn "$SCRIPT_DIR/wrapper" "$ROOT/shim/pi"

@@ -1,0 +1,133 @@
+{
+  "fetched": "2026-11-20",
+  "pages": {
+    "cli": {
+      "sha256": "546369dc5c86106743d04b058183a31e970f5a74e0b1858fa852aa7fc9801cb4"
+    },
+    "cli-integration": {
+      "sha256": "a4fc8a5b8c2f409b24f677d2a7e509eff6a2d5d4cd4ae22e47537ee60cad09af"
+    },
+    "codemode": {
+      "sha256": "2af16187dd1f0a4a20f05f50aa435584ef13ebf90217e88f60abd152322a4c18"
+    },
+    "compaction": {
+      "sha256": "aabf8a0fe383f83c83c6bb212b436f831974c34a92a9c29450821802a050fb98"
+    },
+    "configuration": {
+      "sha256": "a0b56107070417353e867d515e2b7229ea00f220893e67a2cfb40c7242ab4192"
+    },
+    "containerization": {
+      "sha256": "0395024e8c3c8fa6a5d75f94c02124a75a581401eb7675bf1de4f05b1838e5d8"
+    },
+    "custom-provider": {
+      "sha256": "4f46376a931f65e9507bae80e4e479a4b9a773cfecccf6dba339b8ea2e900f17"
+    },
+    "environment-variables": {
+      "sha256": "a1b9aec416ff431df309dc6def04c204e6ea2fb3ed8cc615bb95a337aff85cbc"
+    },
+    "extensions": {
+      "sha256": "241cf2e2841ba819562d331921bda8d394dfb62dd7bf6c63d710f366cc7ea341"
+    },
+    "how-pi-works": {
+      "sha256": "b3114df941cfe74ad8c5b95d1babadd222677122a5dcdea3b71194e49bb4dc55"
+    },
+    "index": {
+      "sha256": "c2861216fdc3d4aef82752828d4d7626e2346d3bf254733d841e3836690cd6ec"
+    },
+    "json": {
+      "sha256": "5060ff03462cd64fe5f1e1769426929371845d0737557d524c99af05ec80f9b0"
+    },
+    "keybindings": {
+      "sha256": "7c3cfe9f43d4dd1bd33023aa0f0f8e493d629f94247d1fde0709e3045be53cf4"
+    },
+    "llama-cpp": {
+      "sha256": "04ad7ac852b1dbd9d82bb714613f820aa98d949acde8e9c493e99f7bab3d5a0f"
+    },
+    "mcp": {
+      "sha256": "ae66b691fb0b61224a5c5d9a7a9cfa1822eea372e8bfee0491bbfcee9d71a830"
+    },
+    "message-types": {
+      "sha256": "84674de7158765aa8a99f2485e214d9d041c93246215b5bcdc721d08138bb512"
+    },
+    "models": {
+      "sha256": "2063cb797fdce0dedd97a5c4aca2ef1b85eb1914152705dfd27159e82ae07f5f"
+    },
+    "models-configuration": {
+      "sha256": "4932dbd62e8bd67789783a357ab7409f20917831c6f53774078b40694e81823e"
+    },
+    "nvidia-rtx-llama-cpp": {
+      "sha256": "0464a9b0522551242d6a29a8a06ac83e73a1700dc811d2b1fdb34c1154cb7353"
+    },
+    "packages": {
+      "sha256": "5e2d52f21f29a5b78142664d996d72d4a439f754dd0a3475eb5ebc57e028d950"
+    },
+    "prompt-templates": {
+      "sha256": "17bd1d8beb137a70b972755b38a7eedf8d8c62353ca44bb73d4ce5260cc0454d"
+    },
+    "providers": {
+      "sha256": "e0272edddafe424c7ec7022d883b9cb740ccbc54243399613c8e831a70e2ac91"
+    },
+    "quickstart": {
+      "sha256": "e88a08dfbfe16496afec8dfb2b1baf06eec775a4d77aa2e10280646993787281"
+    },
+    "rpc": {
+      "sha256": "8219f743e2f2abcaf8e181806a29e454b2828183084c9e34102c1f0410d9cb37"
+    },
+    "rpc-commands": {
+      "sha256": "b0ddf7b3241d2e9ac59cc621c29c39506d8e67b667aa7c77e54b101998cf9de3"
+    },
+    "rpc-extension-ui": {
+      "sha256": "ff562cb821586a4393b1a1d60351f7be1dcdb5356828dd696fe64cf8a01b0976"
+    },
+    "sdk": {
+      "sha256": "1477034d7dc5293ba5633e2c79aa6a3dcd68115c401b262fd43b42fe2439678c"
+    },
+    "security": {
+      "sha256": "88d5bda3e3a11c5990441905735a6556910edd80e0430912d17e241f0601c977"
+    },
+    "session-format": {
+      "sha256": "c5267159d53475b88305ccf5966e36777d2294c7b0200a233806dd355a4d5e8c"
+    },
+    "sessions": {
+      "sha256": "89f02d8c3c14752fe7fa609f15a7fb8b0ac0e2fc3d2b94179de60220e830a6d4"
+    },
+    "settings": {
+      "sha256": "bc4be44271126ceaa64f747953215f5951442be5b567bb9cfa414188f075f9db"
+    },
+    "shell-aliases": {
+      "sha256": "a79c21dfa4ed096ba31a7f63cf26f634a1625ddeb64929cc75e0ba5c2986d683"
+    },
+    "skills": {
+      "sha256": "af91d754d65ad71be9aec232645671fc19e99832637c4f682287f2c6d6900ff5"
+    },
+    "slash-commands": {
+      "sha256": "1ffd15e75b29ecfb9abec7b859679f3aa5fc2e58175b3e89f20e0bdf35c60f37"
+    },
+    "terminal-setup": {
+      "sha256": "b5b6e1d06b4c756b6d22d9f4dfb86fad6cbfb48b59180a5c686e95644520b954"
+    },
+    "termux": {
+      "sha256": "c6a745e1a699cfb29f9acdf3645498912c53e380591a946c412d90201b44a33c"
+    },
+    "themes": {
+      "sha256": "4d68f033a4e7323f02794888bd9d2eabc16f6f3922a75170d49244408c2b399e"
+    },
+    "tmux": {
+      "sha256": "467129cd2b2371c50e47f2db6355671240b941564185eb16191eca2f840fc728"
+    },
+    "tui": {
+      "sha256": "681422aab85be78514398a2c2e0c0c12f1f19baab560e71f7042181cca039bbf"
+    },
+    "usage": {
+      "sha256": "4cecb36a701be8c55123654d9b96f2dc2478385e41f0e0486235eba45019fe0a"
+    },
+    "virtual-models": {
+      "sha256": "13dc53b61d3e1bcfc17a183bbd8f0d4c472b8eecfc5a5ead709a516a57441813"
+    },
+    "windows": {
+      "sha256": "5fa5a71f018c726c5c4ee39379a94f17b6aeb5d3192c55c2e6d8382e93bebf0d"
+    }
+  },
+  "source": "https://docs.pi.dev/latest",
+  "version": "1.6.0"
+}

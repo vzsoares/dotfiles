@@ -48,6 +48,14 @@ grep -q '"glm-5-3-flash-uncensored"' "$R/agent/models.json" &&
   ! grep -q gemma "$R/agent/models.json"
 check "copies the box models.json (default + fallback, no gemma)" $?
 
+[ -f "$R/agent/skills/pi/SKILL.md" ] && [ -f "$R/agent/skills/pi/references/mcp.md" ] &&
+  [ ! -L "$R/agent/skills/pi" ]
+check "copies the pi skill with its references" $?
+echo stale >"$R/agent/skills/pi/stale.md"
+PATH="$base" bash "$LINK" >/dev/null
+[ ! -e "$R/agent/skills/pi/stale.md" ]
+check "a re-run refreshes the pi skill" $?
+
 echo
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failed"

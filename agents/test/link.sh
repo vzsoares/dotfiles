@@ -99,6 +99,10 @@ check "AGENTS.md links point at .claude/CLAUDE.md" $?
   [ "$(readlink "$HOME/.codex/skills/second-brain")" = "$REPO/.claude/skills/second-brain" ] &&
   [ "$(readlink "$HOME/.gemini/config/skills/wiki")" = "$REPO/.claude/skills/wiki" ]
 check "skills link into all three tools" $?
+[ "$(readlink "$HOME/.agents/skills/pi")" = "$REPO/.claude/skills/pi" ] &&
+  [ "$(readlink "$HOME/.codex/skills/pi")" = "$REPO/.claude/skills/pi" ] &&
+  [ "$(readlink "$HOME/.gemini/config/skills/pi")" = "$REPO/.claude/skills/pi" ]
+check "pi skill links into all three tools" $?
 [ "$(readlink "$HOME/.pi/agent/mcp.json")" = "$REPO/agents/mcp.json" ]
 check "pi mcp.json still links" $?
 [ "$(grep -c '^codex mcp add' "$FAKE_LOG")" = 2 ] &&
