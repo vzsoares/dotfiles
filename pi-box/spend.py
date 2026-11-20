@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """pi-box monthly spend ledger and cap. Stdlib only; never calls a model.
 
-  spend.py begin ROOT TASK [--check-only]   reserve a call; exit 4 over the cap
+  spend.py begin ROOT TASK [--check-only] [--pid N]
+                                            reserve a call; exit 4 over the cap
   spend.py end ROOT RUN                     settle a run from the pi sessions
   spend.py cost ROOT [--month YYYY-MM]      spend per model, from the ledger
 
 The cap is a gate at start, not a live limit; the Venice prepaid credit is the
 hard stop. The ledger is ROOT/ledger.jsonl, one JSON object per line. A run is a `begin`
 line (carrying its reserve) and, when it finishes, an `end` line with the real
-cost. A run with no `end` (killed wrapper) and any unreadable line count at
-the reserve, so the cap holds when a cost is unknown.
+cost. A run whose wrapper pid is gone and has no `end` (wrapper SIGKILLed) is
+settled from its sessions by the next `begin` or `cost`; until then, and any
+unreadable line, it counts at the reserve, so the cap holds when a cost is
+unknown.
 """
 
 from __future__ import annotations
 
 import fcntl
 import json
+import os
 import sys
 import time
 import uuid
@@ -25,6 +29,7 @@ DEFAULT_CAP = 10.0
 DEFAULT_WARN_PCT = 80.0
 DEFAULT_RESERVE = 0.10
 EXIT_OVER_CAP = 4
+PIDLESS_GRACE_MS = 6 * 3_600_000
 
 
 def num(value: object) -> float | None:
@@ -144,12 +149,13 @@ def append(root: Path, entry: dict[str, object]) -> None:
         f.write(json.dumps(entry, separators=(",", ":")) + "\n")
 
 
-def begin(root: Path, task: str, check_only: bool) -> int:
+def begin(root: Path, task: str, check_only: bool, pid: int | None = None) -> int:
     limits = Limits(root)
     month = month_of(time.time() * 1000)
     root.mkdir(parents=True, exist_ok=True)
     with (root / ".ledger.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        settle_stale(root, limits)
         spent, _ = month_spend(root, month, limits)
         if spent + limits.reserve > limits.cap:
             print(
@@ -174,6 +180,7 @@ def begin(root: Path, task: str, check_only: bool) -> int:
                 "task": task,
                 "ts": int(time.time() * 1000),
                 "reserve": limits.reserve,
+                "pid": pid,
                 "offsets": offsets(root, task),
             },
         )
@@ -289,15 +296,20 @@ def session_messages(
     return messages, tampered
 
 
-def end(root: Path, run: str) -> int:
-    limits = Limits(root)
-    entries, _ = read_ledger(root)
-    begun = next(
-        (e for e in entries if e.get("kind") == "begin" and e.get("run") == run), None
-    )
-    if begun is None:
-        print(f"pi-box: no ledger entry for run {run}", file=sys.stderr)
-        return 1
+def alive(pid: object) -> bool:
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def settle(root: Path, begun: dict[str, object], limits: Limits) -> float:
+    """Append the `end` line for a begun run; returns the run's cost."""
     task = str(begun.get("task", ""))
     before = begun.get("offsets")
     messages, tampered = session_messages(
@@ -325,16 +337,55 @@ def end(root: Path, run: str) -> int:
         root,
         {
             "kind": "end",
-            "run": run,
+            "run": begun.get("run"),
             "ts": int(time.time() * 1000),
             "models": models,
             "unknown_messages": unknown,
         },
     )
-    spent, _ = month_spend(root, month_of(num(begun.get("ts")) or 0), limits)
+    return sum(models.values())
+
+
+def old_pidless(begun: dict[str, object]) -> bool:
+    """A run from before pids were recorded: settled only once clearly over."""
+    ts = num(begun.get("ts"))
+    return ts is not None and time.time() * 1000 - ts > PIDLESS_GRACE_MS
+
+
+def settle_stale(root: Path, limits: Limits) -> None:
+    """Settle runs with no `end` whose wrapper is gone. Caller holds the lock."""
+    entries, _ = read_ledger(root)
+    ended = {e.get("run") for e in entries if e.get("kind") == "end"}
+    for e in entries:
+        if (
+            e.get("kind") == "begin"
+            and e.get("run") not in ended
+            and not alive(e.get("pid"))
+            and (e.get("pid") is not None or old_pidless(e))
+        ):
+            settle(root, e, limits)
+            ended.add(e.get("run"))
+
+
+def end(root: Path, run: str) -> int:
+    limits = Limits(root)
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / ".ledger.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entries, _ = read_ledger(root)
+        begun = next(
+            (e for e in entries if e.get("kind") == "begin" and e.get("run") == run),
+            None,
+        )
+        if begun is None:
+            print(f"pi-box: no ledger entry for run {run}", file=sys.stderr)
+            return 1
+        if any(e.get("kind") == "end" and e.get("run") == run for e in entries):
+            return 0
+        run_cost = settle(root, begun, limits)
+        spent, _ = month_spend(root, month_of(num(begun.get("ts")) or 0), limits)
     print(
-        f"pi-box: run ${sum(models.values()):.4f}; "
-        f"month ${spent:.4f} of ${limits.cap:.2f}",
+        f"pi-box: run ${run_cost:.4f}; month ${spent:.4f} of ${limits.cap:.2f}",
         file=sys.stderr,
     )
     return 0
@@ -342,6 +393,10 @@ def end(root: Path, run: str) -> int:
 
 def cost(root: Path, month: str) -> int:
     limits = Limits(root)
+    if root.is_dir():
+        with (root / ".ledger.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            settle_stale(root, limits)
     spent, by_model = month_spend(root, month, limits)
     print(f"pi-box spend {month}")
     for name in sorted(by_model):
@@ -355,7 +410,15 @@ def cost(root: Path, month: str) -> int:
 
 def main(argv: list[str]) -> int:
     if len(argv) >= 4 and argv[1] == "begin":
-        return begin(Path(argv[2]), argv[3], "--check-only" in argv[4:])
+        rest = argv[4:]
+        pid = None
+        if "--pid" in rest:
+            after = rest[rest.index("--pid") + 1 :][:1]
+            if not after or not after[0].isdigit():
+                print(__doc__, file=sys.stderr)
+                return 2
+            pid = int(after[0])
+        return begin(Path(argv[2]), argv[3], "--check-only" in rest, pid)
     if len(argv) == 4 and argv[1] == "end":
         return end(Path(argv[2]), argv[3])
     if len(argv) >= 3 and argv[1] == "cost":

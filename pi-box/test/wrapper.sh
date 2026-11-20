@@ -147,6 +147,8 @@ grep -q "warning" "$TMP/err"
 check "warns at 80% of the cap" $?
 grep -q '"task":"t1"' "$L" && grep -q '"kind":"end"' "$L"
 check "a start is recorded and settled in the ledger" $?
+grep -q '"pid":[0-9]' "$L"
+check "a start records the wrapper pid" $?
 mkdir -p "$HOME/pi-box/agent/sessions/--x--"
 export FAKE_SESSION="$HOME/pi-box/agent/sessions/--x--/s.jsonl"
 printf '{"type":"session","cwd":"%s"}\n' "$W/t1" >"$FAKE_SESSION"

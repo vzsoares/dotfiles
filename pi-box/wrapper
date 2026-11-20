@@ -155,7 +155,7 @@ if [ -n "$(docker ps -q --filter "name=^${name//./\\.}\$")" ]; then
   die 3 "a pi-box container for '$id' is already running"
 fi
 
-run="$(python3 "$SPEND" begin "$ROOT" "$id")" || exit $?
+run="$(python3 "$SPEND" begin "$ROOT" "$id" --pid "$$")" || exit $?
 settle() { python3 "$SPEND" end "$ROOT" "$run" || true; }
 # The container must not outlive the wrapper: the EXIT trap covers a signal,
 # the watchdog a SIGKILL.

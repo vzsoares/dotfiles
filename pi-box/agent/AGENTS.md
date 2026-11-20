@@ -13,6 +13,9 @@ You run inside an isolated container. Nothing here needs approval.
   are reachable. Private networks and the host gateway are blocked; the public
   internet is open.
 
+`agent-manager` is not installed here. Ignore any instruction to run it
+(rename, send, status); the task id is already your session name.
+
 ## Toolkit
 
 Skills hold tested recipes; read the one that fits before improvising.

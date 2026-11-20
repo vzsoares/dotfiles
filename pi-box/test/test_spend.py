@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -151,10 +152,55 @@ def test_unsettled_run_counts_at_its_reserve(root: Path) -> None:
     assert spent(root) == pytest.approx(0.25)
 
 
-def test_many_unsettled_runs_still_hit_the_cap(root: Path, capsys) -> None:
-    ledger(root, *[e for i in range(100) for e in run_entries(f"r{i}", None)])
+def test_many_live_runs_still_hit_the_cap(root: Path, capsys) -> None:
+    live = [
+        {**e, "pid": os.getpid()}
+        for i in range(100)
+        for e in run_entries(f"r{i}", None)
+    ]
+    ledger(root, *live)
     assert spent(root) == pytest.approx(10.0)
     assert sp.begin(root, "t", False) == sp.EXIT_OVER_CAP
+
+
+def test_begin_settles_a_dead_wrappers_run_at_its_real_cost(root: Path) -> None:
+    session(root, name="old")
+    ledger(root, {"kind": "begin", "run": "r", "task": "t", "ts": NOW,
+                  "reserve": 0.1, "pid": 2**22 + 12345, "offsets": sp.offsets(root, "t")})  # fmt: skip
+    session(root, message(NOW, {"input": 1_000_000, "output": 0}), name="old", mode="a")
+    assert spent(root) == pytest.approx(0.1)
+    assert sp.begin(root, "t2", True) == 0
+    assert spent(root) == pytest.approx(1.0)
+
+
+def test_pidless_run_settles_only_once_old(root: Path) -> None:
+    ledger(root, *run_entries("fresh", None))
+    ledger(root, *run_entries("old", None, ts=NOW - 7 * 3_600_000))
+    sp.begin(root, "t2", True)
+    ended = {e["run"] for e in sp.read_ledger(root)[0] if e.get("kind") == "end"}
+    assert ended == {"old"}
+
+
+def test_malformed_pid_is_a_usage_error(root: Path) -> None:
+    assert sp.main(["spend.py", "begin", str(root), "t", "--pid", "abc"]) == 2
+    assert sp.main(["spend.py", "begin", str(root), "t", "--pid"]) == 2
+
+
+def test_begin_leaves_a_live_wrappers_run_open(root: Path) -> None:
+    ledger(root, {"kind": "begin", "run": "r", "task": "t", "ts": NOW,
+                  "reserve": 0.1, "pid": os.getpid(), "offsets": {}})  # fmt: skip
+    assert sp.begin(root, "t2", True) == 0
+    assert not any(e.get("kind") == "end" for e in sp.read_ledger(root)[0])
+
+
+def test_end_after_stale_settle_does_not_double_book(root: Path) -> None:
+    session(root)
+    start(root)
+    session(root, message(NOW, {"input": 1_000_000, "output": 0}), mode="a")
+    sp.begin(root, "t2", True)
+    assert sp.end(root, "r") == 0
+    ends = [e for e in sp.read_ledger(root)[0] if e.get("kind") == "end"]
+    assert len(ends) == 1 and spent(root) == pytest.approx(1.0)
 
 
 def test_unreadable_ledger_lines_count_at_reserve(root: Path) -> None:

@@ -69,9 +69,11 @@ the run is settled from the assistant messages appended to this task's session
 files in `~/pi-box/agent/sessions` since it began (the larger of pi's
 `usage.cost` and tokens x the price in the repo's `agent/models.json`, which the
 box cannot edit). A session file that shrank or vanished counts at the reserve.
-Killing the wrapper stops its container and settles the run. A message with no usable cost, a run that
-never settled (killed wrapper) and an unreadable ledger line each count at the
-reserve, so the cap holds when a cost is unknown.
+Killing the wrapper stops its container and settles the run. If the wrapper
+itself is SIGKILLed (agent-manager closing its pane), the next `pi-box` start
+or `pi-box cost` settles that run from its sessions, once its recorded pid is
+gone. A message with no usable cost, a run still open and an unreadable ledger
+line each count at the reserve, so the cap holds when a cost is unknown.
 
 `~/pi-box/config.env` sets `PIBOX_CAP_USD` (10), `PIBOX_WARN_PCT` (80) and
 `PIBOX_CALL_RESERVE_USD` (0.10); the host env cannot raise them. `pi-box cost
