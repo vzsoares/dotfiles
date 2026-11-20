@@ -19,11 +19,13 @@
 #      await.py  --  park until a watched agent-manager session has an event
 #
 #  SYNOPSIS
-#      zen-await <session>... [--timeout 4h] [--new] [--json]
+#      zen-await <session>... [--timeout 4h] [--bg-grace 45m] [--new] [--json]
 #      zen-await --summary <session>... [--json]
 #
 #  OPTIONS
 #      --timeout DUR  Give up after DUR (e.g. 90s, 30m, 4h, 1h30m). Default 4h.
+#      --bg-grace DUR How long a turn that ended with a Bash background run still
+#                     pending counts as working, not idle. Default 45m.
 #      --new          Ignore a final message already there when the wait starts
 #                     (use right after `agent-manager send`).
 #      --summary      Classify each session's last message now, without waiting.
@@ -41,7 +43,11 @@
 #      no turns.
 #      A live session that is not waiting and has no end_turn yet (a worker
 #      still reading its spec) keeps being waited on; after 10m without a reply
-#      it returns idle. A session that is archived, not running, dead or errored
+#      it returns idle. A claude turn that ends without a marker while a Bash
+#      background run it started has no <task-notification> yet is still
+#      working: the run's notification starts its next turn. Past --bg-grace
+#      from the turn's end it is idle, naming the pending run (a dev server).
+#      A session that is archived, not running, dead or errored
 #      is dead unless its last message carries a done marker; an unreadable or
 #      empty sessions list never proves that (retried, then keeps waiting).
 #      Session parsing lives in lib/sessions.py. A background run dies with
@@ -74,6 +80,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated
@@ -97,6 +104,7 @@ STATE_EXIT = {
 
 WAIT_SLICE = "5m"
 STARTUP_GRACE = 600
+BG_GRACE = "45m"
 REREAD_TRIES = 4
 SUMMARY_MAX = 1500
 
@@ -123,6 +131,7 @@ DEAD_STATUSES = _sessions.DEAD_STATUSES
 list_sessions = _sessions.list_sessions
 find_session = _sessions.find_session
 is_live = _sessions.is_live
+pending_background = _sessions.pending_background
 
 
 @dataclass
@@ -282,6 +291,33 @@ def last_end_turn(path: Path) -> tuple[str, str]:
     return "", ""
 
 
+def _end_turn_epoch(rec: dict[str, object]) -> float | None:
+    stamp = rec.get("timestamp")
+    if not isinstance(stamp, str):
+        return None
+    try:
+        return datetime.fromisoformat(stamp).timestamp()
+    except ValueError:
+        return None
+
+
+def pending_runs(
+    session: dict[str, object], root: Path | None = None
+) -> tuple[list[str], float | None]:
+    """(pending Bash background run IDs, epoch the last turn ended) of a claude session."""
+    path = transcript_path(session, root)
+    if is_pi(session) or path is None or not path.exists():
+        return [], None
+    records = _records(path)
+    ended = None
+    for rec in reversed(records):
+        msg = _message(rec)
+        if msg is not None and msg.get("stop_reason") == "end_turn":
+            ended = _end_turn_epoch(rec)
+            break
+    return pending_background(records), ended
+
+
 def last_pi_stop(path: Path) -> tuple[str, str]:
     """Return (entry id, text) of the last pi assistant message that ended its turn."""
     if not path.exists():
@@ -374,11 +410,14 @@ def await_sessions(
     new_only: bool = False,
     root: Path | None = None,
     poll: float = 1.0,
+    bg_grace: float = 2700.0,
 ) -> Event:
     """Block until one watched session stops with a (new) event."""
     deadline = time.monotonic() + timeout
     seen: dict[str, str] = {}
     silent: dict[str, float] = {}
+    # Turn end per (session, reply uuid) when the transcript has no timestamp.
+    first_pending: dict[tuple[str, str], float] = {}
     if new_only:
         for s in sessions:
             seen[str(s["id"])] = last_reply(s, root)[0]
@@ -435,7 +474,21 @@ def await_sessions(
                         state="idle",
                         summary=f"no reply yet after {fmt_duration(STARTUP_GRACE)}",
                     )
-                return event_for(current, root)
+                event = event_for(current, root)
+                pending, ended = (
+                    pending_runs(current, root) if stale else ([], None)
+                )
+                if event.state == "idle" and pending:
+                    if ended is None:
+                        ended = first_pending.setdefault((sid, uuid), time.time())
+                    if time.time() - ended < bg_grace:
+                        time.sleep(poll * 5)
+                        continue
+                    event.summary = summarize(
+                        f"{event.summary}\nbackground run {', '.join(pending)}"
+                        f" still pending after {fmt_duration(bg_grace)}"
+                    )
+                return event
             time.sleep(poll)
     finally:
         for proc in procs.values():
@@ -467,6 +520,9 @@ def main(
         list[str], typer.Argument(help="Session ids or names to watch.")
     ],
     timeout: str = typer.Option("4h", "--timeout", help="Give up after this long."),
+    bg_grace: str = typer.Option(
+        BG_GRACE, "--bg-grace", help="Pending background run counts as working."
+    ),
     new: bool = typer.Option(
         False, "--new", help="Ignore a final message already there."
     ),
@@ -492,7 +548,12 @@ def main(
             emit(event, as_json)
         worst = max(events, key=lambda e: SEVERITY[e.state])
         raise typer.Exit(worst.exit_code)
-    event = await_sessions(watched, parse_duration(timeout), new_only=new)
+    event = await_sessions(
+        watched,
+        parse_duration(timeout),
+        new_only=new,
+        bg_grace=parse_duration(bg_grace),
+    )
     emit(event, as_json)
     raise typer.Exit(event.exit_code)
 

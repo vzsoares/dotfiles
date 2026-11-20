@@ -134,3 +134,10 @@ Pages updated: none
 ## [2026-11-20] feature | Telemetry report charges chained Bash calls to the heaviest exe (#913)
 `jobs.json` gains a `primary` precedence list; `groupKey` picks the first match among the call's `exes` (else the main exe), so `python3 … && zen-lock …` counts as `bash:zen-lock`. Sink-key format and stored rows are unchanged, but regrouped calls leave old `bash:python3` entries/filed keys unmatched (one-time shift).
 Pages updated: architecture/agent-telemetry.md
+
+## 2026-11-20 — zen-await: pending background run is not idle (#914)
+
+zen-await keeps waiting on a claude session whose last turn ended with a Bash
+background run lacking its `<task-notification>` (parsed in
+`scripts/lib/sessions.py`), up to `--bg-grace` (45m); worker rule 10 now says to
+end the turn instead of polling, and bans pgrep/load-average waits.

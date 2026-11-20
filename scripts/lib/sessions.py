@@ -6,6 +6,7 @@ Plain stdlib, no CLI. Scripts load it by path with importlib.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 
 DEAD_STATUSES = ("dead", "errored")
@@ -59,3 +60,53 @@ def find_session(
         if match is not None:
             return match
     return None
+
+
+BG_START_RE = re.compile(r"^Command running in background with ID: ([\w-]+)")
+TASK_ID_RE = re.compile(r"<task-id>([\w-]+)</task-id>")
+
+
+def _user_texts(rec: dict[str, object]) -> tuple[list[str], list[str]]:
+    """(tool_result texts, plain texts) of a main-chain user record."""
+    msg = rec.get("message")
+    if rec.get("type") != "user" or rec.get("isSidechain") or not isinstance(msg, dict):
+        return [], []
+    content = msg.get("content")
+    if isinstance(content, str):
+        return [], [content]
+    if not isinstance(content, list):
+        return [], []
+    results: list[str] = []
+    texts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text":
+            texts.append(str(block.get("text", "")))
+        elif block.get("type") == "tool_result":
+            inner = block.get("content")
+            if isinstance(inner, str):
+                results.append(inner)
+            elif isinstance(inner, list):
+                results.extend(
+                    str(b.get("text", ""))
+                    for b in inner
+                    if isinstance(b, dict) and b.get("type") == "text"
+                )
+    return results, texts
+
+
+def pending_background(records: list[dict[str, object]]) -> list[str]:
+    """IDs of Bash background runs with no later <task-notification> for them."""
+    pending: dict[str, None] = {}
+    for rec in records:
+        results, texts = _user_texts(rec)
+        for result in results:
+            match = BG_START_RE.match(result)
+            if match:
+                pending[match.group(1)] = None
+        for text in texts:
+            if "<task-notification>" in text:
+                for task_id in TASK_ID_RE.findall(text):
+                    pending.pop(task_id, None)
+    return list(pending)

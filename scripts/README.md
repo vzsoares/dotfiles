@@ -15,7 +15,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 |---|---|---|
 | `commit.py` | `zen-commit` | Conventional-Commit helper: stage → secret-scan → AI message (claude haiku) → commit. |
 | `release.py` | `zen-release` | Resumable release orchestrator: version bump, tag, changelog, push, GitHub release. A full release needs `--approval <id>` (exit 3 without); `--dev` refuses prod/main/master and the saved target. |
-| `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). |
+| `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). A turn ending with a Bash background run pending is not idle (up to `--bg-grace`, 45m). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, wontdo, add, note, priority, relate, checklist, stale. |

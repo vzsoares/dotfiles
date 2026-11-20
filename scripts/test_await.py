@@ -618,5 +618,194 @@ def test_cli_summary_unknown_among_several(
     assert out.stdout == ""
 
 
+# --------------------------------------------------------------------------- #
+# Pending background runs                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def _bg_start(task_id: str, tool_id: str = "toolu_1") -> str:
+    text = (
+        f"Command running in background with ID: {task_id}. Output is being"
+        f" written to: /tmp/tasks/{task_id}.output. You will be notified when"
+        " it completes"
+    )
+    return json.dumps(
+        {
+            "type": "user",
+            "isSidechain": False,
+            "message": {
+                "role": "user",
+                "content": [
+                    {"tool_use_id": tool_id, "type": "tool_result", "content": text}
+                ],
+            },
+            "toolUseResult": {"backgroundTaskId": task_id},
+        }
+    )
+
+
+def _notification(task_id: str, summary: str = "completed (exit code 0)") -> str:
+    return json.dumps(
+        {
+            "type": "user",
+            "isSidechain": False,
+            "origin": {"kind": "task-notification"},
+            "message": {
+                "role": "user",
+                "content": (
+                    f"<task-notification>\n<task-id>{task_id}</task-id>\n"
+                    f"<status>completed</status>\n<summary>{summary}</summary>\n"
+                    "</task-notification>"
+                ),
+            },
+        }
+    )
+
+
+def _ended(text: str, uuid: str, seconds_ago: float = 0.0) -> str:
+    rec = json.loads(_assistant(text, msg_id=f"m-{uuid}", uuid=uuid))
+    stamp = time.time() - seconds_ago
+    rec["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(stamp)) + "Z"
+    return json.dumps(rec)
+
+
+def _records_of(lines: list[str]) -> list[dict[str, object]]:
+    return [json.loads(line) for line in lines]
+
+
+def test_pending_background_two_runs_one_notified() -> None:
+    lines = [_bg_start("aaa"), _bg_start("bbb"), _notification("aaa")]
+    assert zen_await.pending_background(_records_of(lines)) == ["bbb"]
+
+
+def test_pending_background_ignores_agent_notification() -> None:
+    lines = [_bg_start("aaa"), _notification("agent-xyz")]
+    assert zen_await.pending_background(_records_of(lines)) == ["aaa"]
+
+
+def test_pending_background_ignores_quoted_text() -> None:
+    quoted = json.loads(_bg_start("aaa"))
+    quoted["message"]["content"][0]["content"] = (
+        "grep hit: Command running in background with ID: aaa"
+    )
+    note = json.loads(_notification("bbb"))
+    note["isSidechain"] = True
+    assert zen_await.pending_background([quoted, json.loads(_bg_start("bbb")), note]) == [
+        "bbb"
+    ]
+
+
+def test_pending_run_keeps_waiting(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    _write_transcript(projects, s, [_bg_start("b1"), _ended("running tests", "e1")])
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=0.4, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("timeout", 124)
+
+
+def test_pending_run_then_done(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    first = [_bg_start("b1"), _ended("running tests", "e1")]
+    _write_transcript(projects, s, first)
+    _reached(fake_am, s)
+    done = [*first, _notification("b1"), _ended("green\nWORKER_DONE 914", "e2")]
+    timer = threading.Timer(0.3, _write_transcript, (projects, s, done))
+    timer.start()
+    started = time.monotonic()
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    timer.join()
+    assert (ev.state, ev.task_id, ev.exit_code) == ("done", "914", 0)
+    assert time.monotonic() - started >= 0.3
+
+
+def test_no_pending_run_is_idle(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    lines = [_bg_start("b1"), _notification("b1"), _ended("stopped here", "e1")]
+    _write_transcript(projects, s, lines)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+    assert "background run" not in ev.summary
+
+
+def test_pending_run_past_grace_is_idle(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    lines = [_bg_start("devsrv"), _ended("server up", "e1", seconds_ago=120)]
+    _write_transcript(projects, s, lines)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions(
+        [s], timeout=10, root=projects, poll=0.01, bg_grace=60
+    )
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+    assert ev.summary.splitlines()[-1] == (
+        "background run devsrv still pending after 1m"
+    )
+
+
+def test_pending_run_grace_without_timestamp(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    _write_transcript(projects, s, [_bg_start("b1"), _assistant("running", uuid="e1")])
+    _reached(fake_am, s)
+    started = time.monotonic()
+    ev = zen_await.await_sessions(
+        [s], timeout=10, root=projects, poll=0.01, bg_grace=0.3
+    )
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+    assert time.monotonic() - started >= 0.3
+
+
+def test_two_runs_one_notified_keeps_waiting(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    lines = [_bg_start("b1"), _bg_start("b2"), _notification("b1"), _ended("x", "e1")]
+    _write_transcript(projects, s, lines)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=0.4, root=projects, poll=0.01)
+    assert ev.state == "timeout"
+
+
+def test_agent_notification_keeps_bash_run_pending(
+    projects: Path, fake_am: Path
+) -> None:
+    s = _session("/repo", status="idle")
+    lines = [_bg_start("b1"), _notification("a7f3agent"), _ended("x", "e1")]
+    _write_transcript(projects, s, lines)
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=0.4, root=projects, poll=0.01)
+    assert ev.state == "timeout"
+
+
+def test_pending_run_with_marker_is_done(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="idle")
+    _write_transcript(projects, s, [_bg_start("b1"), _ended("WORKER_DONE 5", "e1")])
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("done", 0)
+
+
+def test_pending_run_waiting_for_input_is_idle(projects: Path, fake_am: Path) -> None:
+    s = _session("/repo", status="waiting")
+    _write_transcript(projects, s, [_bg_start("b1"), _ended("approve?", "e1")])
+    _reached(fake_am, s)
+    ev = zen_await.await_sessions([s], timeout=10, root=projects, poll=0.01)
+    assert (ev.state, ev.exit_code) == ("idle", 11)
+
+
+def test_cli_timeout_shorter_than_grace(
+    tmp_path: Path, fake_am: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    s = _session("/repo", status="idle")
+    root = tmp_path / ".claude" / "projects"
+    _write_transcript(root, s, [_bg_start("b1"), _ended("running", "e1")])
+    (fake_am / "sessions.json").write_text(json.dumps([s]))
+    _reached(fake_am, s)
+    started = time.monotonic()
+    result = CliRunner().invoke(
+        zen_await.app, ["worker-abc123", "--timeout", "1", "--bg-grace", "45m"]
+    )
+    assert result.exit_code == 124
+    assert time.monotonic() - started < 30
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
