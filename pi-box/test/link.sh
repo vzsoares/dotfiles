@@ -52,9 +52,10 @@ check "copies the box models.json (default + fallback, no gemma)" $?
   [ ! -L "$R/agent/skills/pi" ]
 check "copies the pi skill with its references" $?
 echo stale >"$R/agent/skills/pi/stale.md"
+mkdir -p "$HERE/../../.claude/skills/pi/scripts/__pycache__"
 PATH="$base" bash "$LINK" >/dev/null
-[ ! -e "$R/agent/skills/pi/stale.md" ]
-check "a re-run refreshes the pi skill" $?
+[ ! -e "$R/agent/skills/pi/stale.md" ] && [ ! -e "$R/agent/skills/pi/scripts/__pycache__" ]
+check "a re-run refreshes the pi skill without bytecode caches" $?
 
 echo
 if [ "$FAILS" -gt 0 ]; then

@@ -40,6 +40,7 @@ done
 PI_SKILL="$ROOT/agent/skills/pi"
 rm -rf "$PI_SKILL"
 cp -R "$SCRIPT_DIR/../.claude/skills/pi" "$PI_SKILL"
+find "$PI_SKILL" -name __pycache__ -prune -exec rm -rf {} +
 echo "copied $PI_SKILL"
 FORCE='' copy "$SCRIPT_DIR/config.env.example" "$ROOT/config.env"
 

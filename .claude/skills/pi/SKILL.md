@@ -216,7 +216,9 @@ Source: https://docs.pi.dev/latest/security, https://docs.pi.dev/latest/containe
 
 ## pi-box (how this repo runs pi)
 
-Full detail: `pi-box/README.md`. The short version:
+Full detail: `pi-box/README.md`. Repo paths, `zen-inbox` and `agent-manager`
+below are host-only; inside the box this section is background. The short
+version:
 
 - **Sealed box.** `pi-box` (the `pi-box/wrapper`, on PATH via `./link-bin`)
   runs pi in Docker with only `~/pi-box/work/<task-id>` (rw), `~/pi-box/in`
@@ -243,12 +245,11 @@ Full detail: `pi-box/README.md`. The short version:
 ## Refresh this skill when pi changes
 
 ```
-uv run --no-project python .claude/skills/pi/scripts/refresh.py \
-  --out /tmp/pi-docs
+python3 .claude/skills/pi/scripts/refresh.py
 ```
 
-It fetches every `docs.pi.dev/latest` page (1 s apart), saves their text to
-`--out`, prints the pi version from the changelog feed, and lists pages
+It fetches every `docs.pi.dev/latest` page (1 s apart), saves their text to a
+fresh temp dir (or `--out`), prints the pi version from the changelog feed, and lists pages
 added, removed or changed since `references/SOURCES.json` (exit 3 on drift,
 0 when current). Re-read the changed pages, update the matching
 `references/` file and this core (paraphrase, keep the `Source:` lines),

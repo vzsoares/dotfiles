@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import re
 import sys
@@ -103,7 +104,9 @@ def page_text(html: str) -> str:
 
 
 def latest_version(changelog_xml: str) -> str:
-    m = re.search(r"<item>\s*<title>\s*Pi\s+([0-9][^<\s]*)\s*</title>", changelog_xml)
+    m = re.search(
+        r"<item>\s*<title>\s*(?:<!\[CDATA\[)?\s*Pi\s+([0-9][^<\s\]]*)", changelog_xml
+    )
     if not m:
         raise ValueError("no 'Pi <version>' item in the changelog feed")
     return m.group(1)
@@ -158,7 +161,7 @@ def main(argv: list[str]) -> int:
             (out / f"{name}.md").write_text(text)
             pages[name] = digest(text)
         old = load_manifest(args.manifest)
-    except (OSError, ValueError, TypeError) as e:
+    except (OSError, ValueError, TypeError, http.client.HTTPException) as e:
         print(f"refresh: {e}", file=sys.stderr)
         return 1
 

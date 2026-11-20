@@ -69,6 +69,8 @@ def test_page_text_keeps_article_only_as_markdown() -> None:
 
 def test_latest_version_takes_the_first_item() -> None:
     assert rf.latest_version(FEED) == "1.6.0"
+    cdata = "<item><title><![CDATA[Pi 1.7.0]]></title></item>"
+    assert rf.latest_version(cdata) == "1.7.0"
 
 
 def test_latest_version_rejects_a_feed_without_releases() -> None:
