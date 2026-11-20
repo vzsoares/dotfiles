@@ -138,6 +138,8 @@ type pass struct {
 	recorded []string
 	gone     map[string]bool
 	result   *inbox.Delivery
+	// note is the last typed review note, refilled if the send is amended.
+	note string
 }
 
 // stopped is the flash for leaving the pass; drafts lists what is saved.
@@ -1833,9 +1835,11 @@ func (m *Model) keyReview(k string) (tea.Model, tea.Cmd) {
 	switch choice {
 	case "send":
 		m.busy = sendingText(m.p.answers(), m.sname)
+		m.p.note = ""
 		return m, m.sendCmd("")
 	case "note":
 		m.ti.Reset()
+		m.ti.SetValue(m.p.note)
 		m.scr = scReviewNote
 		return m, m.ti.Focus()
 	case "change":
@@ -1988,7 +1992,8 @@ func (m *Model) keyReviewNote(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		m.busy = sendingText(m.p.answers(), m.sname)
-		return m, m.sendCmd(strings.TrimSpace(m.ti.Value()))
+		m.p.note = strings.TrimSpace(m.ti.Value())
+		return m, m.sendCmd(m.p.note)
 	case "esc":
 		m.scr, m.cursor = scReview, 0
 		return m, nil

@@ -576,9 +576,9 @@ func (ib *Inbox) Describe(res *Delivery, sid, task, name string) (string, error)
 // ------------------------------------------------------------------ message --
 
 // AnswerLine renders one answer; width < 0 keeps the question whole.
-func AnswerLine(d Decision, width int) string { return answerLine(d, width, true) }
+func AnswerLine(d Decision, width int) string { return answerLine(d, width) }
 
-func answerLine(d Decision, width int, withNote bool) string {
+func answerLine(d Decision, width int) string {
 	answer := "free text: " + d.AnswerText
 	if d.AnswerKind == "pick" {
 		answer = d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
@@ -592,47 +592,75 @@ func answerLine(d Decision, width int, withNote bool) string {
 		head += " " + question
 	}
 	line := head + " → " + answer
-	if withNote && d.Note != "" {
+	if d.Note != "" {
 		return line + "\n  Note: " + d.Note
 	}
 	return line
 }
 
-// sharedNotes are the notes on two or more answers, in first-seen order; the
-// message prints each once after the answers (a batch's "send with note").
-func sharedNotes(ds []Decision) []string {
-	count := map[string]int{}
+// sharedNotes maps each note on two or more answers to the ids that carry
+// it, and lists them in first-seen order; the message prints each once after
+// the answers (a batch's "send with note").
+func sharedNotes(ds []Decision) ([]string, map[string][]string) {
+	byNote := map[string][]string{}
 	var order []string
 	for _, d := range ds {
 		if d.Note == "" {
 			continue
 		}
-		if count[d.Note] == 0 {
+		if len(byNote[d.Note]) == 0 {
 			order = append(order, d.Note)
 		}
-		count[d.Note]++
+		byNote[d.Note] = append(byNote[d.Note], d.ID)
 	}
-	return slices.DeleteFunc(order, func(n string) bool { return count[n] < 2 })
+	order = slices.DeleteFunc(order, func(n string) bool { return len(byNote[n]) < 2 })
+	return order, byNote
 }
 
-// BuildMessage clips, then drops, questions to stay under the send limit,
-// and hard-truncates at a UTF-8 boundary as a last resort.
+// noteWidths are the note clips tried once every question is clipped to 0.
+var noteWidths = []int{2000, 1000, 500, 200, 100, 40}
+
+// BuildMessage clips questions, then notes, to stay under the send limit,
+// and hard-truncates at a UTF-8 boundary as a last resort. A shared note
+// names its answers when others (older held ones) are in the message too.
 func BuildMessage(answers []Decision, limit int) string {
 	budget := limit - SendMargin
 	ordered := append([]Decision(nil), answers...)
 	SortByID(ordered)
-	shared := sharedNotes(ordered)
-	var msg string
-	for _, width := range []int{-1, 200, 120, 80, 40, 20, 0} {
+	shared, carriers := sharedNotes(ordered)
+	build := func(width, noteWidth int) string {
+		clip := func(n string) string {
+			if noteWidth < 0 {
+				return n
+			}
+			return pyfmt.Clip(n, noteWidth)
+		}
 		lines := []string{Header}
 		for _, d := range ordered {
-			lines = append(lines, answerLine(d, width, !slices.Contains(shared, d.Note)))
+			if !slices.Contains(shared, d.Note) {
+				d.Note = clip(d.Note)
+			} else {
+				d.Note = ""
+			}
+			lines = append(lines, answerLine(d, width))
 		}
 		for _, n := range shared {
-			lines = append(lines, "Note: "+n)
+			label := "Note: "
+			if len(carriers[n]) < len(ordered) {
+				label = "Note on " + strings.Join(carriers[n], ", ") + ": "
+			}
+			lines = append(lines, label+clip(n))
 		}
-		msg = strings.Join(lines, "\n")
-		if len(msg) <= budget {
+		return strings.Join(lines, "\n")
+	}
+	var msg string
+	for _, width := range []int{-1, 200, 120, 80, 40, 20, 0} {
+		if msg = build(width, -1); len(msg) <= budget {
+			return msg
+		}
+	}
+	for _, noteWidth := range noteWidths {
+		if msg = build(0, noteWidth); len(msg) <= budget {
 			return msg
 		}
 	}

@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 )
 
 // reviewAtThree walks three asks of one task to the review screen.
@@ -79,4 +81,33 @@ func TestReviewNoteRender92x29(t *testing.T) {
 		t.Errorf("note screen:\n%s", v)
 	}
 	golden(t, "review-note-92x29", v)
+}
+
+func TestFailedSendKeepsNoteForRetry(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.reviewAtThree()
+	d.am.fail = "boom"
+	d.keys("n", "keep me", "enter")
+	for _, id := range []string{"7.1", "7.2", "7.3"} {
+		if got := d.get(id); got.Note != "keep me" || got.Delivery != "failed" {
+			t.Errorf("%s = %+v", id, got)
+		}
+	}
+}
+
+func TestAmendedSendRefillsNote(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.reviewAtThree()
+	q := "Which road?"
+	if _, err := d.other.Amend("7.3", "s1", false, inbox.AmendInput{Question: &q, Options: []string{"up", "down"}}); err != nil {
+		t.Fatal(err)
+	}
+	d.keys("n", "keep me", "enter")
+	if d.m.scr != scWalk {
+		t.Fatalf("screen %d\n%s", d.m.scr, d.view())
+	}
+	d.keys("a", "n")
+	if d.m.scr != scReviewNote || d.m.ti.Value() != "keep me" {
+		t.Fatalf("screen %d note %q", d.m.scr, d.m.ti.Value())
+	}
 }
