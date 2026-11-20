@@ -130,3 +130,18 @@ func TestSinkTaskFoldsFiledSinks(t *testing.T) {
 		t.Fatalf("fold without task: %d", code)
 	}
 }
+
+func TestChecklistCloseChainedPrimary(t *testing.T) {
+	fixture(t, []fx{
+		{session: "s1", tool: "Bash", cmd: "python3 -c 'print(1)' && zen-lock core-heavy -- just check", ago: 10 * day, durMS: 100_000, ok: true},
+		{session: "s1", tool: "Bash", cmd: "python3 -c 'print(1)' && zen-lock core-heavy -- just check", ago: 2 * day, durMS: 50_000, ok: true},
+	})
+	runEntryCmd(t, "add", "bash:zen-lock")
+	r, _ := report(t, defaults())
+	if len(r.Checklist.Close) != 1 {
+		t.Fatalf("close %+v", r.Checklist.Close)
+	}
+	if c := r.Checklist.Close[0]; c.Key != "bash:zen-lock" || c.PrevMS != 100_000 || c.CurMS != 50_000 {
+		t.Fatalf("close %+v", c)
+	}
+}

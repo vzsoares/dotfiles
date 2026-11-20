@@ -9,5 +9,11 @@
     "prompt UI": ["bash:gum"]
   },
   "subcommands": ["agent-manager"],
+  "primary": [
+    "zen-await", "zen-lock", "until", "while", "just", "gmake", "make", "bunx", "bun",
+    "go", "docker", "uv", "pytest", "npm", "npx", "zen-gate", "zen-merge", "zen-commit",
+    "zen-release", "zen-board", "zen-inbox", "agent-manager", "curl", "gh", "git",
+    "sleep", "python3"
+  ],
   "exclude": ["Agent", "Task", "AskUserQuestion", "ExitPlanMode"]
 }

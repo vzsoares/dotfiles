@@ -238,6 +238,8 @@ redacted before storage; MCP inputs keep key names only; tool output keeps its s
 only. `report` ranks time sinks (Agent/Task, AskUserQuestion, ExitPlanMode and
 background runs excluded) and compares tools that do the same job per
 `scripts/telemetry/jobs.json`. See `docs/wiki/architecture/agent-telemetry.md`.
+`report` charges a Bash call to the first `primary` executable (jobs.json
+precedence list) among its chained exes, else the main exe.
 
 ### zen-pgp
 ```

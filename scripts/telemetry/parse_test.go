@@ -42,13 +42,37 @@ func TestCommandExes(t *testing.T) {
 
 func TestGroupKeySubcommand(t *testing.T) {
 	sub := []string{"agent-manager"}
-	if k := groupKey("Bash", "agent-manager", "agent-manager wait abc --timeout 5m", sub); k != "bash:agent-manager wait" {
+	if k := groupKey("Bash", "agent-manager", "agent-manager", "agent-manager wait abc --timeout 5m", nil, sub); k != "bash:agent-manager wait" {
 		t.Fatal(k)
 	}
-	if k := groupKey("Bash", "git", "git status", sub); k != "bash:git" {
+	if k := groupKey("Bash", "git", "git", "git status", nil, sub); k != "bash:git" {
 		t.Fatal(k)
 	}
-	if k := groupKey("Read", "", "/x", sub); k != "Read" {
+	if k := groupKey("Read", "", "", "/x", nil, sub); k != "Read" {
+		t.Fatal(k)
+	}
+}
+
+func TestGroupKeyPrimary(t *testing.T) {
+	primary := []string{"just", "zen-lock", "agent-manager", "sleep", "python3"}
+	sub := []string{"agent-manager"}
+	for _, c := range []struct{ exe, exes, input, want string }{
+		{"python3", "python3 zen-lock tail", "python3 x; zen-lock tail", "bash:zen-lock"},
+		{"python3", "python3", "python3 x", "bash:python3"},
+		{"cd", "cd foo", "cd foo", "bash:cd"},
+		{"python3", "python3 agent-manager", "python3 x; agent-manager wait x", "bash:agent-manager wait"},
+		{"sleep", "sleep just", "sleep 1; just check", "bash:just"},
+		{"python3", "python3 /usr/bin/zen-lock", "python3 x", "bash:zen-lock"},
+		{"python3", "python3 /usr/bin/agent-manager", "python3 x; /usr/bin/agent-manager wait x", "bash:agent-manager wait"},
+	} {
+		if k := groupKey("Bash", c.exe, c.exes, c.input, primary, sub); k != c.want {
+			t.Errorf("%q: got %q want %q", c.exes, k, c.want)
+		}
+	}
+	if k := groupKey("Bash", "python3", "python3 zen-lock", "x", nil, sub); k != "bash:python3" {
+		t.Fatalf("no primary list: %s", k)
+	}
+	if k := groupKey("Read", "", "", "/x", primary, sub); k != "Read" {
 		t.Fatal(k)
 	}
 }

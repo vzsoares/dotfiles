@@ -19,6 +19,7 @@ var jobsJSON []byte
 type jobsMap struct {
 	Jobs        map[string][]string `json:"jobs"`
 	Subcommands []string            `json:"subcommands"`
+	Primary     []string            `json:"primary"`
 	Exclude     []string            `json:"exclude"`
 }
 
@@ -126,6 +127,7 @@ type row struct {
 	durMS          int64
 	hasDur         bool
 	tool, exe      string
+	exes           string
 	input          string
 	ok, timedOut   bool
 	background     bool
@@ -155,11 +157,15 @@ func matchAny(patterns []string, key string) bool {
 	return false
 }
 
-// groupKey is the tool name, or bash:<exe> for Bash. Exes listed under
+// groupKey is the tool name, or bash:<exe> for Bash, where <exe> is the first
+// primary entry among the call's exes (else the main exe). Exes listed under
 // subcommands also keep their first non-flag argument (bash:agent-manager wait).
-func groupKey(tool, exe, input string, subcommands []string) string {
+func groupKey(tool, exe, exes, input string, primary, subcommands []string) string {
 	if tool != "Bash" {
 		return tool
+	}
+	if p := primaryExe(exes, primary); p != "" {
+		exe = p
 	}
 	if exe == "" {
 		exe = "?"
@@ -170,7 +176,7 @@ func groupKey(tool, exe, input string, subcommands []string) string {
 			continue
 		}
 		for _, s := range parseCommand(input) {
-			if s.exe != exe {
+			if path.Base(s.exe) != exe {
 				continue
 			}
 			for _, a := range s.args {
@@ -182,6 +188,18 @@ func groupKey(tool, exe, input string, subcommands []string) string {
 		}
 	}
 	return key
+}
+
+func primaryExe(exes string, primary []string) string {
+	fields := strings.Fields(exes)
+	for _, p := range primary {
+		for _, e := range fields {
+			if path.Base(e) == p {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
 func runReport(home string, o reportOpts, stdout io.Writer, now time.Time) (int, error) {
@@ -280,7 +298,7 @@ func fillSessions(db *sql.DB, home string, from, to time.Time) error {
 }
 
 func loadRows(db *sql.DB, from, to time.Time, jobs jobsMap) ([]row, error) {
-	q, err := db.Query(`SELECT c.session_id, c.agent_id, c.ts, c.duration_ms, c.tool, c.exe, c.input,
+	q, err := db.Query(`SELECT c.session_id, c.agent_id, c.ts, c.duration_ms, c.tool, c.exe, c.exes, c.input,
 			c.ok, c.timed_out, c.background, c.out_bytes, COALESCE(s.name, ''), COALESCE(s.repo, '')
 		FROM tool_calls c LEFT JOIN tool_sessions s ON s.session_id = c.session_id
 		WHERE c.ts >= ? AND c.ts <= ?
@@ -296,7 +314,7 @@ func loadRows(db *sql.DB, from, to time.Time, jobs jobsMap) ([]row, error) {
 		var r row
 		var ts string
 		var dur sql.NullInt64
-		if err := q.Scan(&r.session, &r.agent, &ts, &dur, &r.tool, &r.exe, &r.input, &r.ok, &r.timedOut,
+		if err := q.Scan(&r.session, &r.agent, &ts, &dur, &r.tool, &r.exe, &r.exes, &r.input, &r.ok, &r.timedOut,
 			&r.background, &r.outBytes, &r.name, &r.repo); err != nil {
 			return nil, err
 		}
@@ -304,7 +322,7 @@ func loadRows(db *sql.DB, from, to time.Time, jobs jobsMap) ([]row, error) {
 			return nil, fmt.Errorf("bad ts %q: %w", ts, err)
 		}
 		r.durMS, r.hasDur = dur.Int64, dur.Valid
-		r.key = groupKey(r.tool, r.exe, r.input, jobs.Subcommands)
+		r.key = groupKey(r.tool, r.exe, r.exes, r.input, jobs.Primary, jobs.Subcommands)
 		g := gk{r.session, r.agent, r.key}
 		if t, ok := lastFail[g]; ok && r.ts.Sub(t) < retryWindow {
 			r.retry = true

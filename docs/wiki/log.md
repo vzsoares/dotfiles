@@ -130,3 +130,7 @@ Pages updated: overview.md
 ## [2026-11-20] feature | zen-lock is quiet by default (#912)
 `zen-lock` writes the command's full output to `~/.cache/zen/lock-logs/` (pruned past 7 days), prints the last 40 lines plus `exit · waited · ran · log`, and appends a run line to `~/.cache/zen/lock-stats.tsv`. The `worker-rules` rule 10 now says: targeted runs while iterating, about 2 full runs per task, no `test` after a green `check`, never pipe `zen-lock` through grep/head/tail. Re-import the preset with `agent-manager/link`.
 Pages updated: none
+
+## [2026-11-20] feature | Telemetry report charges chained Bash calls to the heaviest exe (#913)
+`jobs.json` gains a `primary` precedence list; `groupKey` picks the first match among the call's `exes` (else the main exe), so `python3 … && zen-lock …` counts as `bash:zen-lock`. Sink-key format and stored rows are unchanged, but regrouped calls leave old `bash:python3` entries/filed keys unmatched (one-time shift).
+Pages updated: architecture/agent-telemetry.md

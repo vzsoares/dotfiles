@@ -95,8 +95,10 @@ fills missing session metadata, then prints:
    entries to `close` because their agent time fell 50% or more against the previous
    window of the same length (`prev > 0 && cur*2 <= prev`).
 
-- **Group key:** the tool name, or `bash:<exe>`. Exes listed under `subcommands` in
-  jobs.json keep their first argument (`bash:agent-manager wait`).
+- **Group key:** the tool name, or `bash:<exe>`, where `<exe>` is the first `primary`
+  entry (jobs.json, precedence order) found among the call's stored `exes`, else the
+  main exe. Exes listed under `subcommands` keep their first argument
+  (`bash:agent-manager wait`). Both report windows use the same rule.
 - **Retry:** the previous call in the same session, agent and group failed less than
   5 min earlier.
 - **Sinks** exclude the jobs.json `exclude` list (Agent/Task, whose inner calls are
