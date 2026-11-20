@@ -30,6 +30,16 @@ func TestCommandExes(t *testing.T) {
 		{"sudo -n apt update", "apt", []string{"apt"}},
 		{"time -p make build", "make", []string{"make"}},
 		{"timeout -s KILL 5 make", "make", []string{"make"}},
+		{"rtk git status", "git", []string{"git"}},
+		{"cd x && rtk git diff", "git", []string{"git"}},
+		{"rtk cargo test | tail", "cargo", []string{"cargo", "tail"}},
+		{"rtk -v git log", "git", []string{"git"}},
+		{"sudo rtk /usr/bin/git status", "git", []string{"git"}},
+		{"rtk read f.go | head", "rtk", []string{"rtk", "head"}},
+		{"rtk recall x && rtk bypass ls", "rtk", []string{"rtk", "rtk"}},
+		{"rtk", "rtk", []string{"rtk"}},
+		{"rtk sudo apt update", "apt", []string{"apt"}},
+		{"rtk FOO=1 make", "make", []string{"make"}},
 		{"", "", nil},
 	}
 	for _, c := range cases {
@@ -50,6 +60,26 @@ func TestGroupKeySubcommand(t *testing.T) {
 	}
 	if k := groupKey("Read", "", "", "/x", nil, sub); k != "Read" {
 		t.Fatal(k)
+	}
+}
+
+func TestGroupKeyRtk(t *testing.T) {
+	primary := []string{"just", "git", "go"}
+	sub := []string{"agent-manager", "rtk"}
+	for _, c := range []struct{ input, want string }{
+		{"rtk git status", "bash:git"},
+		{"cd x && rtk git diff", "bash:git"},
+		{"rtk cargo test | tail", "bash:cargo"},
+		{"rtk read f.go", "bash:rtk read"},
+		{"rtk -v recall foo | head", "bash:rtk recall"},
+		{"rtk bypass ls", "bash:rtk bypass"},
+		{"rtk read f && git status", "bash:git"},
+		{"rtk go test ./...", "bash:go"},
+	} {
+		main, all := commandExes(c.input)
+		if k := groupKey("Bash", main, strings.Join(all, " "), c.input, primary, sub); k != c.want {
+			t.Errorf("%q: got %q want %q", c.input, k, c.want)
+		}
 	}
 }
 

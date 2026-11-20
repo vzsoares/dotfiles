@@ -15,7 +15,9 @@ type segment struct {
 var (
 	assignRe   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 	durationRe = regexp.MustCompile(`^[0-9.]+[smhd]?$`)
-	wrappers   = map[string]bool{"sudo": true, "env": true, "timeout": true, "nice": true, "command": true, "exec": true, "time": true}
+	// rtk subcommands that are not a proxied command.
+	rtkOwn   = map[string]bool{"read": true, "recall": true, "bypass": true, "gain": true, "init": true, "proxy": true}
+	wrappers = map[string]bool{"sudo": true, "env": true, "timeout": true, "nice": true, "command": true, "exec": true, "time": true}
 	// Per-wrapper flags that take a separate value, e.g. `sudo -u root`, `nice -n 5`.
 	wrapperArgFlags = map[string]map[string]bool{
 		"sudo":    {"-u": true, "-g": true, "-C": true, "-D": true, "-h": true, "-p": true, "-r": true, "-t": true, "-U": true},
@@ -28,7 +30,8 @@ var (
 
 // parseCommand splits a shell command into simple commands. It skips env
 // assignments (`export` segments included), `cd` segments and the wrappers sudo, env, timeout, nice, command,
-// exec and time; it does not unwrap `uv run` or `bun run`.
+// exec and time and unwraps `rtk <cmd>` to <cmd> (rtk's own read, recall, bypass,
+// gain, init and proxy stay rtk); it does not unwrap `uv run` or `bun run`.
 func parseCommand(cmd string) []segment {
 	var out []segment
 	for _, words := range splitSegments(cmd) {
@@ -70,7 +73,25 @@ func segmentOf(words []string) (segment, bool) {
 	if exe == "cd" || exe == "export" {
 		return segment{}, false
 	}
-	return segment{exe: exe, args: words[i+1:]}, true
+	args := words[i+1:]
+	if exe == "rtk" {
+		if rest, ok := rtkProxied(args); ok {
+			return segmentOf(rest)
+		}
+	}
+	return segment{exe: exe, args: args}, true
+}
+
+// rtkProxied returns the words of the command rtk proxies; ok is false for
+// rtk's own subcommands or a bare rtk.
+func rtkProxied(args []string) ([]string, bool) {
+	for j, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		return args[j:], !rtkOwn[a]
+	}
+	return nil, false
 }
 
 // splitSegments is a small shell lexer: quotes group words, operators

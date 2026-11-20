@@ -8,7 +8,7 @@
     "waiting": ["bash:zen-await", "bash:agent-manager wait", "mcp__agent-manager__wait_for_session"],
     "prompt UI": ["bash:gum"]
   },
-  "subcommands": ["agent-manager"],
+  "subcommands": ["agent-manager", "rtk"],
   "primary": [
     "zen-await", "zen-lock", "until", "while", "just", "gmake", "make", "bunx", "bun",
     "go", "docker", "uv", "pytest", "npm", "npx", "zen-gate", "zen-merge", "zen-commit",

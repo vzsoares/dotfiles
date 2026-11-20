@@ -50,8 +50,10 @@ code (`Exit code N`), redacted error (300 chars), interrupted, timed out
   OpenAI and Slack tokens, Bearer and Authorization headers, JWTs, URL credentials,
   `*TOKEN*=`/`*SECRET*=`/`*PASSWORD*=`/`*KEY*=` assignments, `--password x`, `-u user:pass`.
 - **Exe parsing** skips env assignments, `cd`, and the wrappers sudo, env, timeout,
-  nice, command, exec and time; it drops redirections and heredoc bodies. It does not
-  unwrap `uv run` or `bun run`.
+  nice, command, exec and time, and unwraps `rtk <cmd>` to `<cmd>` (rtk's own `read`,
+  `recall`, `bypass`, `gain`, `init`, `proxy` stay `rtk`, grouped as `bash:rtk <sub>`
+  via `subcommands`); it drops redirections and heredoc bodies. It does not unwrap
+  `uv run` or `bun run`.
 
 ## Hook
 

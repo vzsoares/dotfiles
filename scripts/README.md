@@ -239,7 +239,8 @@ only. `report` ranks time sinks (Agent/Task, AskUserQuestion, ExitPlanMode and
 background runs excluded) and compares tools that do the same job per
 `scripts/telemetry/jobs.json`. See `docs/wiki/architecture/agent-telemetry.md`.
 `report` charges a Bash call to the first `primary` executable (jobs.json
-precedence list) among its chained exes, else the main exe.
+precedence list) among its chained exes, else the main exe. `rtk <cmd>` is
+unwrapped to `<cmd>`; rtk's own `read`, `recall` and `bypass` key as `bash:rtk <sub>`.
 
 ### zen-pgp
 ```
