@@ -51,6 +51,56 @@ changes. A freshly spawned pane does not source `~/.zshrc.local`, so
 pane's own shell, as on revive inside a live pane). A session outside the
 profile runs host pi.
 
+## Models
+
+`agent/models.json` (copied to `~/pi-box/agent` by `link`) holds Venice only:
+`glm-5-3-flash-uncensored` is the default (eval 29/30, $0.031) and
+`deepseek-v4-1-flash-uncensored` the fallback (30/30, $0.101); Gemma 4 scored
+20/30 and is out. Switch with `pi-box --provider venice -m <id>`. The host
+`agents/models.json` lists a different DeepSeek id
+(`deepseek-v4-1-flash-1017-uncensored`); it is left as is.
+
+## Spend cap
+
+Every start (not `build`/`doctor`) goes through `spend.py`: it refuses with exit
+4 when this month's spend plus a per-call reserve would pass the cap, warns at
+80%, and records the run in `~/pi-box/ledger.jsonl`. When the container exits,
+the run is settled from the assistant messages appended to this task's session
+files in `~/pi-box/agent/sessions` since it began (the larger of pi's
+`usage.cost` and tokens x the price in the repo's `agent/models.json`, which the
+box cannot edit). A session file that shrank or vanished counts at the reserve.
+Killing the wrapper stops its container and settles the run. A message with no usable cost, a run that
+never settled (killed wrapper) and an unreadable ledger line each count at the
+reserve, so the cap holds when a cost is unknown.
+
+`~/pi-box/config.env` sets `PIBOX_CAP_USD` (10), `PIBOX_WARN_PCT` (80) and
+`PIBOX_CALL_RESERVE_USD` (0.10); the host env cannot raise them. `pi-box cost
+[--month [YYYY-MM]]` prints spend per model, the total and the cap.
+
+Limits: the cap is a gate at start, not a live limit, so one long run can pass
+it; `pi-box exec` is gated too (it can run pi). Sessions outside `~/pi-box/agent` (the eval's own agent dir, which has
+its own $3 cap) are not in the ledger; the Venice prepaid credit is the hard
+stop. Two starts at the same instant are serialised by a file lock.
+
+## zen-flow handoff and RESULT.md
+
+Chief files `zen-inbox ask <task> --prod run --repo dotfiles --cmd "<line>"`
+with the line from:
+
+```
+mkdir -p ~/pi-box/work/<task-id>/out
+python3 pi-box/contract.py command <task-id> goal.md
+```
+
+It prints the `agent-manager spawn --tool pi --env pi-box --group pi-box
+--directory ~/pi-box/work/<task-id> --model venice/glm-5-3-flash-uncensored
+--prompt "…"` line; the prompt is the goal plus the output contract. The session
+writes deliverables to `out/` and `RESULT.md` with non-empty `## Summary`,
+`## Sources` and `## Left undone` sections, and ends with `WORKER_DONE
+<task-id>`. After `zen-await` returns, the orchestrator runs
+`python3 pi-box/contract.py check <task-id>` (exit 1 lists the gaps), reads
+`RESULT.md`, adds `pi-box cost` to its note on the task and archives the session.
+
 ## Boundary
 
 | What | How |

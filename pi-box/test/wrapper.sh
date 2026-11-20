@@ -25,13 +25,19 @@ if [ "$1" = ps ]; then
   [ -n "$FAKE_RUNNING" ] && echo abc123
   exit 0
 fi
+if [ "$1" = stop ]; then
+  echo "$*" >>"$FAKE_STOP"
+  exit 0
+fi
+[ -n "$FAKE_SLEEP" ] && sleep "$FAKE_SLEEP"
+[ -n "$FAKE_APPEND" ] && printf '%s\n' "$FAKE_APPEND" >>"$FAKE_SESSION"
 printf '%s\n' "$@" >"$FAKE_LOG"
 echo "CRAWL_DELAY_MS=${CRAWL_DELAY_MS-unset}" >>"$FAKE_LOG"
 echo "VENICE_API_KEY=${VENICE_API_KEY-unset}" >>"$FAKE_LOG"
 FAKE
 chmod +x "$TMP/bin/docker"
-export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/ps"
-unset VENICE_API_KEY CRAWL_DELAY_MS FAKE_RUNNING
+export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/ps" FAKE_STOP="$TMP/stop"
+unset VENICE_API_KEY CRAWL_DELAY_MS FAKE_RUNNING FAKE_SLEEP FAKE_APPEND
 W="$HOME/pi-box/work"
 
 run_in() { # dir, args... -> exit code; stdout in $TMP/out
@@ -121,6 +127,51 @@ check "doctor has no network, no caps, no mounts" $?
 PIBOX_DRY_RUN=1 run_in "$W/t1"
 grep -q -- "--shm-size 512m " "$TMP/out"
 check "pi gets a shm size for chromium" $?
+
+# spend cap: fake ledger, fake docker, no model
+L="$HOME/pi-box/ledger.jsonl"
+now_ms=$(($(date +%s) * 1000))
+rm -f "$L" "$FAKE_LOG"
+printf '{"kind":"begin","run":"a","ts":%s,"reserve":0.1}\n' "$now_ms" >"$L"
+printf '{"kind":"end","run":"a","models":{"glm":9.95}}\n' >>"$L"
+run_in "$W/t1" --version
+expect_rc 4 "refuses to start when spend + reserve crosses the cap (exit 4)"
+[ ! -e "$FAKE_LOG" ]
+check "docker is not started over the cap" $?
+PIBOX_DRY_RUN=1 run_in "$W/t1"
+expect_rc 4 "a dry run reports the refusal too (exit 4)"
+printf '{"kind":"end","run":"a","models":{"glm":8.5}}\n' >>"$L"
+run_in "$W/t1" --version
+check "starts under the cap" $?
+grep -q "warning" "$TMP/err"
+check "warns at 80% of the cap" $?
+grep -q '"task":"t1"' "$L" && grep -q '"kind":"end"' "$L"
+check "a start is recorded and settled in the ledger" $?
+mkdir -p "$HOME/pi-box/agent/sessions/--x--"
+export FAKE_SESSION="$HOME/pi-box/agent/sessions/--x--/s.jsonl"
+printf '{"type":"session","cwd":"%s"}\n' "$W/t1" >"$FAKE_SESSION"
+FAKE_APPEND='{"type":"message","message":{"role":"assistant","model":"m","usage":{"input":1}}}' \
+  run_in "$W/t1" --version
+grep -q '"unknown_messages":1' "$L"
+check "a message with unknown cost is settled at the reserve" $?
+run_in "$W/t1" cost
+check "pi-box cost runs" $?
+grep -q 'total' "$TMP/out" && grep -q 'cap' "$TMP/out"
+check "pi-box cost prints the total and the cap" $?
+rm -f "$L"
+rm -rf "$HOME/pi-box/agent/sessions"
+
+# a killed wrapper stops its container and settles the run
+(cd "$W/t1" && FAKE_SLEEP=30 exec bash "$WRAPPER" >/dev/null 2>&1) &
+wpid=$!
+sleep 1
+kill -TERM "$wpid"
+wait "$wpid" 2>/dev/null || true
+for _ in 1 2 3 4 5 6 7 8; do [ -s "$TMP/stop" ] && break; sleep 1; done
+grep -qx 'stop -t 10 pi-box-t1' "$TMP/stop"
+check "killing the wrapper stops the container" $?
+pkill -f "sleep 30" || true
+rm -f "$L"
 
 # one live container per task
 FAKE_RUNNING=1 run_in "$W/t1"

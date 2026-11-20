@@ -51,8 +51,9 @@ pi-box/       # pi inside a Docker box (no host repos, secrets or services):
               #   wrapper (pi-box on PATH via link-bin), agent/ templates
               #   that ./link copies into ~/pi-box, plus the shim/pi and
               #   agent-manager env profile + group that box agent-manager's
-              #   pi; eval/ is the Venice model eval (dry run by default)
-              #   -- see its README
+              #   pi; eval/ is the Venice model eval (dry run by default);
+              #   spend.py is the $10/month ledger + cap, contract.py the
+              #   zen-flow handoff and RESULT.md check -- see its README
 tmux/         # tmux config
 typst/        # long-form writing (books, TCC): tinymist LSP in nvim +
               #   a book template with citations, figures and quotes.

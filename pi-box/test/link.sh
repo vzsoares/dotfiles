@@ -43,6 +43,11 @@ check "a re-run keeps one shim entry" $?
 ! grep -q create-group "$TMP/am.log"
 check "a re-run keeps the existing group" $?
 
+grep -q '"glm-5-3-flash-uncensored"' "$R/agent/models.json" &&
+  grep -q '"deepseek-v4-1-flash-uncensored"' "$R/agent/models.json" &&
+  ! grep -q gemma "$R/agent/models.json"
+check "copies the box models.json (default + fallback, no gemma)" $?
+
 echo
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failed"

@@ -5,6 +5,10 @@
 #   pi-box exec <cmd...>      a command in the box instead of pi
 #   pi-box build              build the image from this directory
 #   pi-box doctor             offline toolkit check in a throwaway container
+#   pi-box cost [--month [YYYY-MM]]   spend per model from the ledger
+#
+# Every start is checked against the monthly cap (config.env PIBOX_CAP_USD,
+# default 10) and recorded in ~/pi-box/ledger.jsonl; exit 4 when over.
 #
 # ~/pi-box/shim/pi links here, so the agent-manager pi-box env profile boxes
 # every pi it launches.
@@ -16,6 +20,7 @@ set -e
 IMAGE=pi-box
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SRC_DIR="$(dirname "$SELF")"
+SPEND="$SRC_DIR/spend.py"
 
 # Passed from the host env when set; never a value on the command line.
 PASS_ENV=(VENICE_API_KEY TERM COLORTERM LANG)
@@ -59,6 +64,13 @@ if [ "${1:-}" = doctor ]; then
 fi
 
 ROOT="$(real_dir "$HOME/pi-box")" || die 2 "$HOME/pi-box is missing or a symlink; run pi-box/link"
+command -v python3 >/dev/null || die 5 "python3 is required for the spend cap"
+
+if [ "${1:-}" = cost ]; then
+  shift
+  exec python3 "$SPEND" cost "$ROOT" "$@"
+fi
+
 for d in work agent; do
   real_dir "$ROOT/$d" >/dev/null || die 2 "$ROOT/$d is missing or a symlink"
 done
@@ -132,6 +144,7 @@ else
 fi
 
 if [ "${PIBOX_DRY_RUN:-}" = 1 ]; then
+  python3 "$SPEND" begin "$ROOT" "$id" --check-only || exit $?
   printf '%q ' docker "${args[@]}"
   echo
   exit 0
@@ -141,4 +154,27 @@ fi
 if [ -n "$(docker ps -q --filter "name=^${name//./\\.}\$")" ]; then
   die 3 "a pi-box container for '$id' is already running"
 fi
-exec docker "${args[@]}"
+
+run="$(python3 "$SPEND" begin "$ROOT" "$id")" || exit $?
+settle() { python3 "$SPEND" end "$ROOT" "$run" || true; }
+# The container must not outlive the wrapper: the EXIT trap covers a signal,
+# the watchdog a SIGKILL.
+stop_box() { docker stop -t 10 "$name" >/dev/null 2>&1 || true; }
+(
+  while kill -0 "$$" 2>/dev/null; do sleep 2; done
+  stop_box
+  settle
+) </dev/null >/dev/null 2>&1 &
+watchdog=$!
+finished=
+# shellcheck disable=SC2329
+cleanup() {
+  [ -n "$finished" ] || stop_box
+  kill "$watchdog" 2>/dev/null || true
+  settle
+}
+trap cleanup EXIT
+rc=0
+docker "${args[@]}" || rc=$?
+finished=1
+exit "$rc"

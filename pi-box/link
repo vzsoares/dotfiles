@@ -28,7 +28,7 @@ copy() { # src, dest
 }
 
 [ "${1:-}" = --force ] && FORCE=1
-for f in AGENTS.md settings.json mcp.json; do
+for f in AGENTS.md settings.json models.json mcp.json; do
   copy "$SCRIPT_DIR/agent/$f" "$ROOT/agent/$f"
 done
 for skill in "$SCRIPT_DIR"/skills/*/; do

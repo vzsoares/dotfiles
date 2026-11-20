@@ -451,7 +451,26 @@ refreshes the local `origin/HEAD` that `zen-sweep` checks.
 
 ## Paid API models (pi)
 
-pi runs pay-per-use API models (Featherless, abliteration.ai; keys in `~/.zshrc.local`).
-Agents never start pi, spawn a pi session, or call those APIs on their own: each use is a
+pi runs pay-per-use API models inside `pi-box` (Docker box, no repos, secrets or host
+services; see `pi-box/README.md`). Agents never start pi, spawn a pi session, or call
+those APIs on their own: each use is a
 `zen-inbox ask <task> --prod run --repo dotfiles --cmd "<exact command>"` that the user
 approves in the cockpit, then chief runs it. The user's own pi use needs no ask.
+
+Route a task to pi-box, not a claude worker, when it is public-web research, crawling or
+scraping at volume, media download or transcoding, content Claude refuses, or bulk data
+gathering into files. Code changes in a repo stay with claude workers; pi's `out/` can
+feed one.
+
+- **Ask command:** `mkdir -p ~/pi-box/work/<id>/out`, then
+  `python3 pi-box/contract.py command <id> <goal-file>` in the dotfiles repo prints the
+  exact `agent-manager spawn --tool pi --env pi-box --group pi-box --directory
+  ~/pi-box/work/<id> --model venice/glm-5-3-flash-uncensored --prompt "…"` line (default
+  GLM 5.3 Flash Uncensored; fallback `venice/deepseek-v4-1-flash-uncensored`).
+- **Contract:** the session writes deliverables to `out/` and `RESULT.md` with non-empty
+  `## Summary`, `## Sources`, `## Left undone`, and ends with `WORKER_DONE <id>`.
+- **After `zen-await` returns:** run `python3 pi-box/contract.py check <id>` (exit 1 lists
+  the gaps), read `RESULT.md`, note it on the task with the `pi-box cost` figure, archive
+  the session. There is no merge step.
+- **Cap:** the wrapper refuses to start (exit 4) once the month's spend plus a reserve
+  would pass $10 and warns at 80%; the ask line should quote `pi-box cost`.

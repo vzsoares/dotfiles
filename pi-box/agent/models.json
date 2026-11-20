@@ -1,0 +1,68 @@
+{
+    "$schema": "https://pi.dev/schemas/models.schema.json",
+    "providers": {
+        "venice": {
+            "name": "Venice",
+            "baseUrl": "https://api.venice.ai/api/v1",
+            "api": "openai-completions",
+            "apiKey": "$VENICE_API_KEY",
+            "compat": {
+                "thinkingFormat": "openai"
+            },
+            "models": [
+                {
+                    "id": "glm-5-3-flash-uncensored",
+                    "name": "GLM 5.3 Flash Uncensored (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": null,
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": [
+                        "text",
+                        "image"
+                    ],
+                    "contextWindow": 65536,
+                    "maxTokens": 4096,
+                    "cost": {
+                        "input": 0.165,
+                        "output": 0.55,
+                        "cacheRead": 0.165,
+                        "cacheWrite": 0.165
+                    }
+                },
+                {
+                    "id": "deepseek-v4-1-flash-uncensored",
+                    "name": "DeepSeek V4.1 Flash Uncensored (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": [
+                        "text",
+                        "image"
+                    ],
+                    "contextWindow": 65536,
+                    "maxTokens": 4096,
+                    "cost": {
+                        "input": 0.33,
+                        "output": 1.32,
+                        "cacheRead": 0.33,
+                        "cacheWrite": 0.33
+                    }
+                }
+            ]
+        }
+    }
+}

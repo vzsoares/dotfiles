@@ -31,6 +31,7 @@ or read a browser profile.
 ## Output contract
 
 - Put every deliverable in `out/` inside the task folder.
-- Write `RESULT.md` in the task folder: a summary, the sources you used, and
-  anything left undone.
+- Write `RESULT.md` in the task folder with three non-empty sections,
+  `## Summary`, `## Sources` (every URL or file used) and `## Left undone`
+  (`nothing` if so).
 - End your final message with `WORKER_DONE <task-id>`.
