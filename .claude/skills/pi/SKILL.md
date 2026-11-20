@@ -254,3 +254,6 @@ added, removed or changed since `references/SOURCES.json` (exit 3 on drift,
 0 when current). Re-read the changed pages, update the matching
 `references/` file and this core (paraphrase, keep the `Source:` lines),
 then record the new state with `--write`.
+
+Limit: it only finds pages linked from the docs index (the site has no
+sitemap or `llms.txt`), so a page reachable only from another page is missed.
