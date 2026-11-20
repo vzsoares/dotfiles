@@ -62,6 +62,12 @@ Claude's setup instead of copying it. `agents/link` symlinks into `~/.pi/agent/`
 It also links the `wiki` and `second-brain` skills from `.claude/skills/` into
 `~/.agents/skills/`, the Agent Skills dir pi reads by default.
 
+`agents/link` also sets up Codex (`~/.codex`) and Antigravity (`agy`,
+`~/.gemini/config`) the same way: `AGENTS.md`, the two skills, and the
+`agents/mcp.json` servers added with `codex mcp add` / `agy mcp add`.
+Pick targets with `agents/link [--dry-run] [pi] [codex] [agy]`; `--dry-run`
+prints what would change. Existing files are moved to `<name>.bak.<epoch>`.
+
 Models are abliterated API models in `agents/models.json` (Featherless and
 abliteration.ai). Keys come from env vars set in `~/.zshrc.local`:
 `FEATHERLESS_API_KEY` and `ABLITERATION_API_KEY`. Switch models with

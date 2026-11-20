@@ -1,29 +1,245 @@
 #!/usr/bin/env bash
 
-# Links file by file: pi keeps auth.json and session state in its agent dir,
-# and other tools may add their own skills to ~/.agents/skills.
-# PI_CODING_AGENT_DIR overrides the pi agent dir.
+# Links agent-neutral config into pi, Codex and Antigravity (agy).
+# File by file, never whole dirs: each tool keeps auth and state in its own dir.
+# Existing files are moved to <target>.bak.<epoch>; --dry-run changes nothing.
+# PI_CODING_AGENT_DIR / CODEX_HOME override the pi and Codex dirs;
+# AGENTS_MCP_JSON overrides the MCP server list.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(dirname "$SCRIPT_DIR")"
 PI_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-SKILLS_DIR="$HOME/.agents/skills"
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
+AGY_DIR="$HOME/.gemini/config"
+AGY_MCP="$AGY_DIR/mcp_config.json"
+MCP_JSON="${AGENTS_MCP_JSON:-$SCRIPT_DIR/mcp.json}"
 SHARED_SKILLS=(wiki second-brain)
+DRY=0
+TARGETS=()
+SERVERS=()
+HAVE_JQ=1
 
-link() {
-  mkdir -p "$(dirname "$2")"
-  rm -f "$2"
-  ln -s "$1" "$2"
-  echo "linked $2 -> $1"
+usage() {
+  echo "usage: agents/link [--dry-run] [pi] [codex] [agy]"
+  echo "  no target links all three; --dry-run prints 'would ...' and changes nothing"
 }
 
-link "$SCRIPT_DIR/settings.json" "$PI_DIR/settings.json"
-link "$SCRIPT_DIR/models.json" "$PI_DIR/models.json"
-link "$SCRIPT_DIR/mcp.json" "$PI_DIR/mcp.json"
-link "$REPO/.claude/CLAUDE.md" "$PI_DIR/AGENTS.md"
+link_one() {
+  local src="$1" dst="$2" cur backup
+  if [ -L "$dst" ]; then
+    cur="$(readlink "$dst")"
+    if [ "$cur" = "$src" ]; then
+      echo "unchanged $dst"
+      return
+    fi
+    if [ "$DRY" = 1 ]; then
+      echo "would replace $dst (was -> $cur) with -> $src"
+      return
+    fi
+    rm -f "$dst"
+    ln -s "$src" "$dst"
+    echo "replaced $dst (was -> $cur) with -> $src"
+    return
+  fi
+  if [ -e "$dst" ]; then
+    backup="$dst.bak.$(date +%s)"
+    if [ "$DRY" = 1 ]; then
+      echo "would move $dst to $backup, then link -> $src"
+      return
+    fi
+    mv "$dst" "$backup"
+    ln -s "$src" "$dst"
+    echo "moved $dst to $backup; linked $dst -> $src"
+    return
+  fi
+  if [ "$DRY" = 1 ]; then
+    echo "would link $dst -> $src"
+    return
+  fi
+  mkdir -p "$(dirname "$dst")"
+  ln -s "$src" "$dst"
+  echo "linked $dst -> $src"
+}
 
-for skill in "${SHARED_SKILLS[@]}"; do
-  link "$REPO/.claude/skills/$skill" "$SKILLS_DIR/$skill"
+link_skills() {
+  local dir="$1" skill
+  for skill in "${SHARED_SKILLS[@]}"; do
+    link_one "$REPO/.claude/skills/$skill" "$dir/$skill"
+  done
+}
+
+# Prints the {command,args,env} of server $1 from mcp.json, sorted and compact.
+wanted_json() {
+  jq -cS --arg n "$1" \
+    '.mcpServers[$n] | {command, args: (.args // []), env: (.env // {})}' "$MCP_JSON"
+}
+
+load_servers() {
+  local name
+  SERVERS=()
+  while IFS= read -r name; do
+    if [ -n "$name" ]; then SERVERS+=("$name"); fi
+  done < <(jq -r '.mcpServers | to_entries[]
+    | select((.value.url == null) and ((.value.type // "stdio") == "stdio"))
+    | .key' "$MCP_JSON")
+  while IFS= read -r name; do
+    if [ -n "$name" ]; then echo "warning: skipping non-stdio MCP server '$name'"; fi
+  done < <(jq -r '.mcpServers | to_entries[]
+    | select((.value.url != null) or ((.value.type // "stdio") != "stdio"))
+    | .key' "$MCP_JSON")
+}
+
+# mcp_add <codex|agy> <name>
+mcp_add() {
+  local tool="$1" name="$2" cmd kv
+  local envs=() cmdline=()
+  while IFS= read -r kv; do
+    if [ -n "$kv" ]; then envs+=(--env "$kv"); fi
+  done < <(jq -r --arg n "$name" '(.mcpServers[$n].env // {})
+    | to_entries[] | "\(.key)=\(.value)"' "$MCP_JSON")
+  cmd="$(jq -r --arg n "$name" '.mcpServers[$n].command' "$MCP_JSON")"
+  cmdline=("$cmd")
+  while IFS= read -r kv; do
+    cmdline+=("$kv")
+  done < <(jq -r --arg n "$name" '(.mcpServers[$n].args // [])[]' "$MCP_JSON")
+  if [ "$tool" = codex ]; then
+    CODEX_HOME="$CODEX_DIR" codex mcp add "$name" "${envs[@]}" -- "${cmdline[@]}" >/dev/null
+  else
+    agy mcp add "${envs[@]}" "$name" -- "${cmdline[@]}" >/dev/null
+  fi
+}
+
+sync_codex_mcp() {
+  local name want cur
+  for name in "${SERVERS[@]}"; do
+    want="$(wanted_json "$name")"
+    cur="$(CODEX_HOME="$CODEX_DIR" codex mcp get "$name" --json 2>/dev/null |
+      jq -cS '.transport | {command, args: (.args // []), env: (.env // {})}' 2>/dev/null || true)"
+    if [ "$cur" = "$want" ]; then
+      echo "unchanged codex mcp $name"
+    elif [ -z "$cur" ]; then
+      if [ "$DRY" = 1 ]; then
+        echo "would add codex mcp $name"
+      else
+        mcp_add codex "$name"
+        echo "added codex mcp $name"
+      fi
+    elif [ "$DRY" = 1 ]; then
+      echo "would update codex mcp $name (remove, then add)"
+    else
+      CODEX_HOME="$CODEX_DIR" codex mcp remove "$name" >/dev/null
+      mcp_add codex "$name"
+      echo "updated codex mcp $name"
+    fi
+  done
+}
+
+sync_agy_mcp() {
+  local name want cur parsed=1
+  if [ ! -s "$AGY_MCP" ]; then
+    :
+  elif ! jq -e . "$AGY_MCP" >/dev/null 2>&1; then
+    parsed=0
+    echo "note: $AGY_MCP is not plain JSON; adding every managed server"
+  fi
+  for name in "${SERVERS[@]}"; do
+    want="$(wanted_json "$name")"
+    cur=""
+    if [ "$parsed" = 1 ] && [ -s "$AGY_MCP" ]; then
+      cur="$(jq -cS --arg n "$name" '.mcpServers[$n] // empty
+        | {command, args: (.args // []), env: (.env // {})}' "$AGY_MCP")"
+    fi
+    if [ "$cur" = "$want" ]; then
+      echo "unchanged agy mcp $name"
+    elif [ "$DRY" = 1 ]; then
+      echo "would add agy mcp $name"
+    else
+      mcp_add agy "$name"
+      echo "added agy mcp $name"
+    fi
+  done
+}
+
+# run_mcp <codex|agy>
+run_mcp() {
+  local tool="$1"
+  if [ "$HAVE_JQ" = 0 ]; then
+    echo "warning: jq missing, skipping $tool MCP servers"
+  elif ! command -v "$tool" >/dev/null 2>&1; then
+    echo "warning: $tool not on PATH, skipping $tool MCP servers"
+  elif [ "$tool" = codex ]; then
+    sync_codex_mcp
+  else
+    sync_agy_mcp
+  fi
+}
+
+do_pi() {
+  link_one "$SCRIPT_DIR/settings.json" "$PI_DIR/settings.json"
+  link_one "$SCRIPT_DIR/models.json" "$PI_DIR/models.json"
+  link_one "$SCRIPT_DIR/mcp.json" "$PI_DIR/mcp.json"
+  link_one "$REPO/.claude/CLAUDE.md" "$PI_DIR/AGENTS.md"
+  link_skills "$HOME/.agents/skills"
+}
+
+do_codex() {
+  link_one "$REPO/.claude/CLAUDE.md" "$CODEX_DIR/AGENTS.md"
+  link_skills "$CODEX_DIR/skills"
+  run_mcp codex
+}
+
+do_agy() {
+  link_one "$REPO/.claude/CLAUDE.md" "$AGY_DIR/AGENTS.md"
+  link_skills "$AGY_DIR/skills"
+  run_mcp agy
+}
+
+has_target() {
+  local t
+  for t in "${TARGETS[@]}"; do
+    [ "$t" = "$1" ] && return 0
+  done
+  return 1
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --dry-run) DRY=1 ;;
+    pi | codex | agy)
+      if ! has_target "$arg"; then TARGETS+=("$arg"); fi
+      ;;
+    *)
+      echo "unknown argument: $arg" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+if [ "${#TARGETS[@]}" = 0 ]; then TARGETS=(pi codex agy); fi
+
+if command -v jq >/dev/null 2>&1; then
+  if ! jq -e '.mcpServers' "$MCP_JSON" >/dev/null 2>&1; then
+    echo "error: $MCP_JSON is missing or has no mcpServers object" >&2
+    exit 1
+  fi
+  if jq -e '.mcpServers["agent-manager"]' "$MCP_JSON" >/dev/null 2>&1; then
+    echo "error: $MCP_JSON names agent-manager, which agent-manager registers itself" >&2
+    exit 1
+  fi
+  load_servers
+else
+  HAVE_JQ=0
+fi
+
+if [ "$DRY" = 1 ]; then echo "dry run: nothing will change"; fi
+
+for t in "${TARGETS[@]}"; do
+  echo "== $t"
+  "do_$t"
 done

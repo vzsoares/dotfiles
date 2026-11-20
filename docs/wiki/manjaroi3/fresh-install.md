@@ -64,6 +64,8 @@ From the repo root:
 ```bash
 ./link            # .zshrc, .gitconfig, biome.json → ~
 ./link-claude     # .claude/{CLAUDE.md,settings.json,skills,agents} → ~/.claude/
+agents/link --dry-run   # preview pi/codex/agy links and MCP servers
+agents/link             # needs codex/agy on PATH for their MCP servers
 ( cd alacritty && ./link )
 ( cd i3 && ./link )
 ( cd nvim && ./link )

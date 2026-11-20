@@ -33,8 +33,14 @@ Each tool is symlinked into place (always **absolute paths**) by a `link` script
 - `./link` — `.zshrc`, `.gitconfig`, `biome.json` → `~` (requires oh-my-zsh already installed)
 - `./link-claude` — `.claude/{CLAUDE.md,settings.json,skills,agents}` → `~/.claude/`,
   then registers each server in `agents/mcp.json` with `claude mcp add-json -s user`
-- `agents/link` — `agents/{settings,models,mcp}.json` and `.claude/CLAUDE.md`
-  (as `AGENTS.md`) → `~/.pi/agent/`; shared skills → `~/.agents/skills/`
+- `agents/link [--dry-run] [pi] [codex] [agy]` — no target runs all three.
+  `.claude/CLAUDE.md` (as `AGENTS.md`) and the shared skills (`wiki`,
+  `second-brain`) go to `~/.pi/agent` + `~/.agents/skills`, `~/.codex`, and
+  `~/.gemini/config`; pi also gets `agents/{settings,models,mcp}.json`. Codex
+  and agy get the `agents/mcp.json` stdio servers through their own
+  `mcp add` (never `config.toml` or agy's settings, which hold private paths).
+  Links are file by file; a real file is moved to `<target>.bak.<epoch>`;
+  `--dry-run` prints `would …` lines and changes nothing
 - `alacritty/link` — `.alacritty.toml` → `~/.config/alacritty/alacritty.toml`,
   plus `macos.toml`/`linux.toml` (chosen by `uname`) → `local.toml`, which the
   shared config pulls in via `[general] import`

@@ -18,12 +18,17 @@ agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
               #   saved prompts as JSON; ./link imports (or `export`s back)
               #   since it stores config in SQLite. Groups live in the vault.
               #   The `am` zsh function exports on quit
-agents/       # agent-neutral config for Claude and pi (not .claude/agents/,
-              #   Claude's subagents): mcp.json is the one MCP server list
-              #   (./link-claude registers it with `claude mcp add-json`);
-              #   pi's settings/models.json. agents/link links them plus
-              #   .claude/CLAUDE.md (as AGENTS.md) into ~/.pi/agent and shared
-              #   skills into ~/.agents/skills
+agents/       # agent-neutral config for Claude, pi, Codex and agy (not
+              #   .claude/agents/, Claude's subagents): mcp.json is the one
+              #   MCP server list (./link-claude registers it with
+              #   `claude mcp add-json`); pi's settings/models.json.
+              #   `agents/link [--dry-run] [pi] [codex] [agy]` links
+              #   .claude/CLAUDE.md as AGENTS.md (~/.pi/agent, ~/.codex,
+              #   ~/.gemini/config) and the shared skills (~/.agents/skills,
+              #   ~/.codex/skills, ~/.gemini/config/skills), and adds the
+              #   mcp.json servers via `codex mcp add` / `agy mcp add`.
+              #   File by file, existing files backed up to .bak.<epoch>;
+              #   test: `bash agents/test/link.sh`
 aerospace/    # AeroSpace window manager config (macOS); mirrors i3/'s
               #   keybindings and workflow — mod is alt, not i3's Mod4/Super
 cava/         # console audio visualizer (Rose Piné, tuned for a narrow pane)

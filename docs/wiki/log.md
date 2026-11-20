@@ -118,3 +118,7 @@ Pages updated: architecture/agent-telemetry.md
 ## [2026-11-18] feature | Cockpit threads (#861)
 One collapsible `#task` thread per task replaces the Asks and Notes groups; task-less notes sit in `No task`. `enter` opens a timeline of the task's notes, replies, decisions and chats. `zen-inbox refile` / `T` move a note between threads. Schema v10 adds `chats`; `c` from a thread sends `[#task title] …` and stores it.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-20] feature | agents/link covers Codex and Antigravity (#918)
+`agents/link [--dry-run] [pi] [codex] [agy]` links `.claude/CLAUDE.md` as `AGENTS.md` and the shared skills into `~/.codex` and `~/.gemini/config`, and mirrors the stdio servers in `agents/mcp.json` via `codex mcp add` / `agy mcp add` (never `agent-manager`, never `config.toml`). Existing files move to `.bak.<epoch>`; reruns print `unchanged`. Test: `agents/test/link.sh`.
+Pages updated: overview.md, manjaroi3/fresh-install.md
