@@ -18,6 +18,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `await.py` | `zen-await` | Waits on agent-manager sessions and classifies the last message (done, escalation, idle, dead). A turn ending with a Bash background run pending is not idle (up to `--bg-grace`, 45m). |
 | `gate.py` | `zen-gate` | Flags skipped tests, widened timeouts, auth bypasses and other fake greens in a branch diff. |
 | `merge.py` | `zen-merge` | Lands a worker branch: gate, ff-merge, dev release, session + worktree cleanup. Resumable; `--dry-run` prints `dry-run, nothing changed` and JSON `cleanup: dry-run`. |
+| `role.py` | `zen-role` | Per-role Claude Code config for agent-manager sessions, from `agent-manager/roles.json`: `list`, `show <name> [--json]` (flags and settings overlay a role resolves to), `check` (validates the file against the presets, the skill dirs and `agent-manager/roles/`), `build` (sets one env profile `role-<name>` per role: `ZEN_ROLE` and a `PATH` led by `agent-manager/shim`; idempotent, never removes a profile). `agent-manager/shim/claude` calls its `launch` for a session with `ZEN_ROLE` set. Tests: `uv run scripts/test_role.py`, `bash agent-manager/test/shim.sh`. |
 | `board.py` | `zen-board` | Everyday Notion board ops over REST: check, next, start, done, wontdo, add, note, priority, relate, checklist, stale. |
 | `sweep.py` | `zen-sweep` | Read-only report of dirty trees, unpushed work, stashes, orphan branches/worktrees, `branch-model` drift and `hooks-path` repos that skip the global pre-push hook. |
 | `lock.sh` | `zen-lock` | `zen-lock <name> [--wait SECS] -- <cmd>` runs cmd holding `~/.cache/zen/<name>.lock` (mkdir, owner file, released on exit/INT/TERM; stale owner taken over; a takeover guard left by a killed waiter expires after 60 s or when its pid dies; exit 75 on timeout). Quiet by default: full output goes to `~/.cache/zen/lock-logs/*.log` (pruned past 7 days), only the last 40 lines plus `zen-lock: <name> exit N · waited Ns · ran Ns · log <path>` print, and the exit status passes through; each run appends a tab-separated line (UTC time, name, session, waited, ran, exit, command cut to 200) to `~/.cache/zen/lock-stats.tsv`. Don't pipe it through grep/head/tail. `status <name>` (also reports a leftover guard), `break <name>` (also removes it). Tests: `bash scripts/test_lock.sh`. |
@@ -297,6 +298,8 @@ uv run scripts/test_gate.py
 uv run scripts/test_merge.py
 uv run scripts/test_board.py
 uv run scripts/test_sweep.py
+uv run scripts/test_role.py
+bash agent-manager/test/shim.sh
 uv run scripts/test_prepush.py
 (cd scripts/telemetry && gofmt -l . && go vet ./... && go test ./...)
 uv run scripts/lib/test_sessions.py

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# First on PATH in the agent-manager env profiles `role-<name>` (zen-role build).
+# With ZEN_ROLE set, an interactive launch gets the role's flags and settings;
+# everything else runs the real CLI untouched, without starting an interpreter.
+
+set -e
+
+self="${BASH_SOURCE[0]}"
+real=""
+IFS=: read -r -a dirs <<<"$PATH"
+for dir in "${dirs[@]}"; do
+  candidate="${dir:-.}/claude"
+  if [ -f "$candidate" ] && [ -x "$candidate" ] && [ ! "$candidate" -ef "$self" ]; then
+    real="$candidate"
+    break
+  fi
+done
+if [ -z "$real" ]; then
+  echo "zen-role: no real claude on PATH besides the shim ($self)" >&2
+  exit 127
+fi
+
+[ -n "${ZEN_ROLE:-}" ] || exec "$real" "$@"
+
+case "${1:-}" in
+  mcp | auth | config | plugin | update | doctor | agents | install | setup-token | logs)
+    exec "$real" "$@"
+    ;;
+esac
+for arg in "$@"; do
+  case "$arg" in
+    -p | --print | --version | -v | --help | -h) exec "$real" "$@" ;;
+  esac
+done
+
+here="$(cd "$(dirname "$self")" && pwd -P)"
+exec "$here/../../scripts/role.py" launch "$real" "$@"

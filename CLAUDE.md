@@ -17,7 +17,12 @@ alacritty/    # terminal emulator config; .alacritty.toml is shared, and
 agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
               #   saved prompts as JSON; ./link imports (or `export`s back)
               #   since it stores config in SQLite. Groups live in the vault.
-              #   The `am` zsh function exports on quit
+              #   The `am` zsh function exports on quit. roles.json gives each
+              #   agent role its Claude Code config (model, effort, window,
+              #   skills, settings overlay); `zen-role build` (run by ./link)
+              #   sets one env profile `role-<name>` per role, whose PATH
+              #   starts at shim/, and shim/claude applies the role at launch.
+              #   test: `bash agent-manager/test/shim.sh`
 agents/       # agent-neutral config for Claude, pi, Codex and agy (not
               #   .claude/agents/, Claude's subagents): mcp.json is the one
               #   MCP server list (./link-claude registers it with

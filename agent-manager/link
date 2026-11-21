@@ -3,6 +3,8 @@
 # agent-manager keeps config in SQLite, so files here are imported, not linked.
 # Groups hold private repo paths: they live in the vault, not this public repo.
 # Restart a running agent-manager afterwards to load the import.
+# Import also sets the role-<name> env profiles (zen-role build); they hold PATH
+# as a literal, so re-run after PATH changes.
 
 set -e
 
@@ -24,6 +26,7 @@ case "${1:-import}" in
       sed "s|\\\$HOME|$HOME|g" "$groups" | agent-manager import --groups -
       echo "imported groups from $groups"
     fi
+    ../scripts/role.py build
     ;;
   export)
     rm -f config.json

@@ -1,0 +1,62 @@
+{
+  "chief": {
+    "saved": "chief",
+    "model": "fable",
+    "effort": "high",
+    "autocompact": 300000,
+    "settings": {
+      "enabledPlugins": { "figma@claude-plugins-official": false }
+    },
+    "skills": {
+      "only": [
+        "zen-flow",
+        "pi",
+        "second-brain",
+        "wiki",
+        "wrapup",
+        "anthropic-skills:chrome-browser"
+      ]
+    }
+  },
+  "orchestrator": {
+    "saved": "orchestrator",
+    "model": "opus",
+    "effort": "high",
+    "autocompact": 300000,
+    "settings": {
+      "enabledPlugins": { "figma@claude-plugins-official": false }
+    },
+    "skills": { "only": ["zen-flow"] }
+  },
+  "spec-writer": {
+    "saved": "spec-writer",
+    "model": "opus",
+    "effort": "high",
+    "settings": {
+      "outputStyle": "default",
+      "enabledPlugins": { "figma@claude-plugins-official": false }
+    },
+    "skills": { "only": ["zen-flow"] }
+  },
+  "worker": {
+    "saved": "worker-rules",
+    "model": "opus",
+    "effort": "medium",
+    "settings": {
+      "outputStyle": "default",
+      "enabledPlugins": { "figma@claude-plugins-official": false }
+    },
+    "skills": { "only": ["zen-flow", "anthropic-skills:chrome-browser"] }
+  },
+  "designer": {
+    "saved": "designer",
+    "model": "fable",
+    "effort": "high",
+    "settings": {
+      "enabledPlugins": { "figma@claude-plugins-official": false }
+    },
+    "skills": {
+      "only": ["zen-flow", "diagram", "anthropic-skills:chrome-browser"]
+    }
+  }
+}

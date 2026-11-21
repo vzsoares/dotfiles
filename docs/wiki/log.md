@@ -149,3 +149,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-20] feature | zen-inbox manual-step asks: Done takes a typed y (#929)
 `zen-inbox ask <task> --manual -q …` files a step the user runs by hand with fixed options Done/Later (schema v12: `decisions.kind`, `decisions.confirmed_at`, additive). In the panel Done opens a confirm showing the step again; only `y` stages it. The CLI refuses Done on one, the answer is delivered as `a: Done (confirmed)`, and rows carry a `MANUAL` marker. The chief and orchestrator presets and the zen-flow skill file Human Only steps this way.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-21] ingest | Agent roles (zen-role), overlay mode
+Added `agent-manager/roles.json`, `scripts/role.py` (`zen-role list|show|check|build`) and the `agent-manager/shim/claude` launcher: each agent-manager role gets its own model, effort, compaction window, skills, output style and plugins through an env profile `role-<name>`. Overlay mode only; isolate mode is rejected by `check` until it lands. Found that the CLI keeps only the last `--settings`, so the shim merges agent-manager's file with the role overlay, and that a spawn naming no profile inherits its spawner's, so the presets name one on every `create_session` line.
+Pages created: architecture/agent-roles.md

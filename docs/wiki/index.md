@@ -5,6 +5,7 @@
 - [[release-tooling]] — zen-release design: orchestrator phases, config tiers, resumable state
 - [[decision-inbox]] — zen-inbox (Go): SQLite decision inbox, batched delivery, Bubble Tea watcher with tmux talk
 - [[agent-telemetry]] — zen-telemetry: Go hook logging agent tool calls to zen-flow.db, transcript import, weekly time-sink report
+- [[agent-roles]] — zen-role: per-role Claude Code config (roles.json, role-<name> env profiles, the claude shim), overlay mode, reverting a cut
 
 ## Manjaro i3
 - [[fresh-install]] — Step-by-step bring-up on a new Manjaro i3 machine

@@ -197,17 +197,22 @@ Triage, block, reopen and title/body edits stay on MCP.
 
 ## Agent roles
 
-Five agent-manager presets (`agent-manager/config.json`). Presets hold instructions
-only; model and effort are set per session (`create_session` `model`/`effort`, or
-`agent-manager spawn --model --effort`).
+Five agent-manager presets (`agent-manager/config.json`) hold the instructions.
+`agent-manager/roles.json` holds each role's Claude Code config: model, effort,
+compaction window, skills, output style, plugins. A session gets it from its env
+profile `role-<name>` (`create_session` `environment`, or `agent-manager spawn
+--env`); pass `model` or `effort` only to override the role. A spawn that names no
+profile inherits its group's, else its spawner's, so every spawn names one.
+`zen-role show <name>` prints what a role resolves to; see
+`docs/wiki/architecture/agent-roles.md`.
 
-| Role         | Preset         | Model · effort          | Session                                               |
+| Role         | Preset         | Profile             | Session                                               |
 | --- | --- | --- | --- |
-| chief        | `chief`        | Opus · max              | the one the user talks to; group `chief`              |
-| spec-writer  | `spec-writer`  | Opus · high             | one per task, short-lived; project group; no worktree |
-| orchestrator | `orchestrator` | Opus · high             | one, long-running; group `chief`; no worktree         |
-| worker       | `worker-rules` | Opus or Sonnet · medium | one per task and repo; project group; worktree        |
-| designer     | `designer`     | Fable 5.2 · high        | design or Fable entries; project group; worktree      |
+| chief        | `chief`        | `role-chief`        | the one the user talks to; group `chief`              |
+| spec-writer  | `spec-writer`  | `role-spec-writer`  | one per task, short-lived; project group; no worktree |
+| orchestrator | `orchestrator` | `role-orchestrator` | one, long-running; group `chief`; no worktree         |
+| worker       | `worker-rules` | `role-worker`       | one per task and repo; project group; worktree        |
+| designer     | `designer`     | `role-designer`     | design or Fable entries; project group; worktree      |
 
 - **chief** reads the board, gets the user's approval, spawns a spec-writer per task
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
@@ -427,8 +432,7 @@ agent-manager spawn \
   --name chief \
   --saved chief \
   --tool claude \
-  --model opus \
-  --effort max \
+  --env role-chief \
   --group chief \
   --prompt "Start: check the board."
 ```
