@@ -1451,6 +1451,10 @@ func (m *Model) scrollBy(k string) int {
 		return half
 	case "ctrl+u", "ctrl+b":
 		return -half
+	case "J":
+		return 3
+	case "K":
+		return -3
 	}
 	if m.scr == scFull || m.scr == scNote || m.scr == scThread || m.scr == scConfirm {
 		switch k {

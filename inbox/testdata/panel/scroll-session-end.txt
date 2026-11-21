@@ -27,4 +27,4 @@ b) no
   Review all
   Talk
   Back
-↑↓ · enter · r review · t talk · esc back · ? help · ^u/^d scroll
+↑↓ · enter · r review · t talk · esc back · ? help · ^u/^d J/K scroll

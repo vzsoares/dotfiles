@@ -189,18 +189,18 @@ var helps = map[screen]string{
 		" T moves a note to another task, r retries a failed delivery, c writes to chief (about the thread under the cursor).",
 	scThread: "Everything about this task, oldest first: notes with their replies, decisions with their answers, your messages to chief." +
 		" tab and shift+tab move the › mark; enter opens the marked note or open ask; f replies to the marked note (else the newest)," +
-		" m marks the thread's notes read, a answers its open asks, c writes to chief about it, T moves the marked note to another task. g and G jump to the top and end; y then a number copies that code block.",
+		" m marks the thread's notes read, a answers its open asks, c writes to chief about it, T moves the marked note to another task. J/K scroll 3 lines; g and G jump to the top and end; y then a number copies that code block.",
 	scRefile:  "Type the task to move this note to, then ctrl+d; - or empty moves it to No task.",
 	scSession: "Answer walks the questions one by one; Review all shows every open decision on one screen; Talk opens the agent in a popup. y then a number copies that code block.",
-	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn scroll; enter walks from the marked one, t talks to the agent about picked ones; y then a number copies that code block.",
-	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything, y then a number copies that code block. ← or shift+tab goes back a question, → forward, esc or l lists them all. Answers are kept as drafts, even across leaving and restarts, and recorded only at Send. Approve on a prod ask asks y/N first, and Done on a manual ask asks whether you ran it.",
+	scAll:     "Every open decision of this session. ↑↓ moves the › mark, pgup/pgdn or J/K scroll; enter walks from the marked one, t talks to the agent about picked ones; y then a number copies that code block.",
+	scWalk:    "a-d picks, f writes free text, s skips, t talks to the agent, v shows everything, y then a number copies that code block. ← or shift+tab goes back a question, → forward, esc or l lists them all. Answers are kept as drafts, even across leaving and restarts, and recorded only at Send. J/K scroll the question. Approve on a prod ask asks y/N first, and Done on a manual ask asks whether you ran it.",
 	scJump: "Every decision of this session: ○ open, ● drafted, – skipped; changed: review means it was amended after you drafted it, so it is asked again before Send." +
 		" Dimmed ones closed meanwhile. enter opens one on its draft; esc goes back to the cockpit list.",
 	scReview:        "Send records the staged answers; n or Send with note adds one note to every answer, delivered once; Change one or l lists the questions to jump to one; ← goes back to the last.",
 	scLocked:        "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal. y then a number copies that code block.",
 	scConfirm:       "y stages Approve for this exact sha; any other key goes back without staging it.",
-	scConfirmManual: "y stages Done for the step shown; ↑↓ and pgup/pgdn scroll it; any other key goes back without staging it.",
-	scNote:          "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. y then a number copies that code block.",
+	scConfirmManual: "y stages Done for the step shown; ↑↓, J/K and pgup/pgdn scroll it; any other key goes back without staging it.",
+	scNote:          "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. y then a number J/K scroll the text. y then a number copies that code block.",
 	scChief:         "ctrl+d sends the message to the live chief session, enter adds a line. esc cancels and keeps the draft for the next c.",
 	scReply:         "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }
@@ -253,7 +253,7 @@ func scrollKey(s screen) key {
 	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReviewNote || s == scReply || s == scChief || s == scRefile {
 		return key{"pgup/dn", "scroll"}
 	}
-	return key{"^u/^d", "scroll"}
+	return key{"^u/^d J/K", "scroll"}
 }
 
 func footerLines(s screen, width int, scroll bool) []string {

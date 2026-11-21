@@ -26,4 +26,4 @@ cockpit · ◷ chief is down · 1 queued · sends when back                     
   ✉ you → chief · 0s · waiting for chief
   status?
 ↑↓ · tab next · enter open · f reply · a answer · m read · c chief · T refile · esc back
-? help · ^u/^d scroll
+? help · ^u/^d J/K scroll

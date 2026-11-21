@@ -365,7 +365,7 @@ func TestOverflowingOptionsScrollInsteadOfClipping(t *testing.T) {
 			t.Errorf("option %d never fully shown", i)
 		}
 	}
-	if !strings.Contains(d.view(), "^u/^d scroll") {
+	if !strings.Contains(d.view(), "^u/^d J/K scroll") {
 		t.Error("footer does not offer scrolling")
 	}
 }

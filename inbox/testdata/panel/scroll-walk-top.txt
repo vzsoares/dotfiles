@@ -27,4 +27,4 @@ b) lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod lorem i
   View full
   Back
 ↑↓ · enter · a-d pick · f free · s skip · t talk · v full · y copy · ←→ move · esc list
-? help · ^u/^d scroll
+? help · ^u/^d J/K scroll
