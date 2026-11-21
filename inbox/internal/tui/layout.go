@@ -200,7 +200,7 @@ var helps = map[screen]string{
 	scLocked:        "This panel runs inside an agent session, so it cannot answer a prod ask; answer it from the cockpit terminal. y then a number copies that code block.",
 	scConfirm:       "y stages Approve for this exact sha; any other key goes back without staging it.",
 	scConfirmManual: "y stages Done for the step shown; ↑↓, J/K and pgup/pgdn scroll it; any other key goes back without staging it.",
-	scNote:          "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. y then a number J/K scroll the text. y then a number copies that code block.",
+	scNote:          "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. J/K scroll the text. y then a number copies that code block.",
 	scChief:         "ctrl+d sends the message to the live chief session, enter adds a line. esc cancels and keeps the draft for the next c.",
 	scReply:         "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }
