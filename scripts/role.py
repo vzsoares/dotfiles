@@ -398,21 +398,39 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _read(path: Path) -> str | None:
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return None
+
+
 def prune(keep: Path) -> None:
-    """Drop run sets whose launcher file, or launching process, is gone."""
+    """Drop run sets whose launcher file and CLI process are both gone."""
     for entry in run_root().iterdir():
         if entry == keep or not entry.is_dir():
             continue
-        if entry.name.startswith("pid-"):
-            pid = entry.name.removeprefix("pid-")
-            stale = pid.isdigit() and not _alive(int(pid))
-        else:
-            try:
-                stale = not Path((entry / "launcher").read_text().strip()).exists()
-            except OSError:
-                stale = False
-        if stale:
+        pid = _read(entry / "pid") or entry.name.removeprefix("pid-")
+        if pid.isdigit() and _alive(int(pid)):
+            continue
+        launcher = _read(entry / "launcher")
+        named_by_pid = entry.name.startswith("pid-")
+        if named_by_pid or (launcher is not None and not Path(launcher).exists()):
             shutil.rmtree(entry, ignore_errors=True)
+
+
+def host_env(env: dict[str, str]) -> dict[str, str]:
+    """`env` without what `uv run` adds for this script: its venv's bin dir on
+    PATH and VIRTUAL_ENV, which would otherwise reach the CLI and the profiles."""
+    out = dict(env)
+    if sys.prefix == sys.base_prefix or out.get("VIRTUAL_ENV") != sys.prefix:
+        return out
+    del out["VIRTUAL_ENV"]
+    own = str(Path(sys.prefix) / "bin")
+    out["PATH"] = ":".join(
+        part for part in out.get("PATH", "").split(":") if part.rstrip("/") != own
+    )
+    return out
 
 
 def launch_argv(name: str, real: str, args: list[str]) -> list[str]:
@@ -430,6 +448,8 @@ def launch_argv(name: str, real: str, args: list[str]) -> list[str]:
     run.mkdir(parents=True, exist_ok=True)
     if source:
         write_atomic(run / "launcher", f"{source}\n")
+    # exec keeps the pid, so it names the CLI process that reads this set.
+    write_atomic(run / "pid", f"{os.getpid()}\n")
     settings = run / "settings.json"
     flags = role_flags(role, rest, str(settings))
     write_atomic(settings, json.dumps(merged, indent=2) + "\n")
@@ -530,6 +550,13 @@ def _manager(*args: str) -> str:
     return proc.stdout
 
 
+def _manager_json(*args: str) -> object:
+    try:
+        return json.loads(_manager(*args))
+    except ValueError as exc:
+        raise RoleError(f"agent-manager {' '.join(args[:3])}: not JSON: {exc}") from exc
+
+
 def profile_path(shim: str, path: str) -> str:
     """The shim dir once, in front; relative entries mean nothing in a stored profile."""
     rest = [
@@ -542,11 +569,18 @@ def profile_path(shim: str, path: str) -> str:
 
 def cmd_build() -> int:
     roles = load_roles()
+    if (REPO / ".git").is_file():
+        raise RoleError(
+            f"build runs from the main checkout; {REPO} is a linked worktree "
+            "and its shim path would not outlive it"
+        )
     if shutil.which("agent-manager") is None:
         raise RoleError("agent-manager is not on PATH")
     shim = str(shim_dir())
-    path = profile_path(shim, os.environ.get("PATH", ""))
-    listed = json.loads(_manager("env", "list", "--json"))
+    path = profile_path(shim, host_env(dict(os.environ)).get("PATH", ""))
+    listed = _manager_json("env", "list", "--json")
+    if not isinstance(listed, list):
+        raise RoleError("agent-manager env list --json: not a list of profiles")
     existing = {
         entry["name"]
         for entry in listed
@@ -556,7 +590,7 @@ def cmd_build() -> int:
         profile = PROFILE_PREFIX + role.name
         wanted = {"ZEN_ROLE": role.name, "PATH": path}
         if profile in existing:
-            shown = json.loads(_manager("env", "show", profile, "--json"))
+            shown = _manager_json("env", "show", profile, "--json")
             current = shown.get("vars") if isinstance(shown, dict) else None
             if isinstance(current, dict) and all(
                 current.get(key) == value for key, value in wanted.items()
@@ -579,7 +613,7 @@ def main(argv: list[str]) -> int:
                 raise RoleError("launch needs the real claude path")
             name = os.environ.get("ZEN_ROLE", "")
             command = launch_argv(name, argv[1], argv[2:])
-            os.execv(command[0], command)
+            os.execve(command[0], command, host_env(dict(os.environ)))
         parser = argparse.ArgumentParser(
             prog="zen-role", description="Per-role Claude Code config."
         )

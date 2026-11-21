@@ -76,6 +76,8 @@ for arg in "$@"; do
   [ "$prev" = --settings ] && cp "$arg" "$out/settings.json"
   prev="$arg"
 done
+printf '%s\n' "$PATH" >"$out/path"
+printf '%s\n' "${VIRTUAL_ENV:-}" >"$out/venv"
 echo run >>"$out/runs"
 exit "${FAKE_EXIT:-0}"
 FAKE
@@ -120,7 +122,9 @@ same_argv "no role: argv unchanged" --model opus "$PROMPT" --settings "$LAUNCHER
 
 # --- pass-through under a role -------------------------------------------------
 export ZEN_ROLE=full
-for sub in mcp auth config plugin update doctor agents install setup-token logs; do
+for sub in mcp auth config plugin plugins update upgrade doctor agents install \
+  setup-token logs attach auto-mode gateway import purge respawn rm stop kill \
+  ultrareview; do
   FAKE_EXIT=3 shim "$sub" list --settings "$LAUNCHER"
   code=$?
   if [ "$code" = 3 ] && [ "$(argv_of "$sub" list --settings "$LAUNCHER")" = "$(cat "$FAKE_OUT/argv")" ]; then
@@ -154,6 +158,8 @@ same_argv "launch: one --settings, the rest unchanged" \
   --settings "$MERGED" --model sonnet --effort low "$PROMPT" --mcp-config "$MCP"
 check "launch: launcher env survives" \
   "$([ "$(setting .env.AGENT_MANAGER_SESSION)" = 6c328783 ] && echo 0 || echo 1)"
+check "launch: PATH and VIRTUAL_ENV as the caller had them" \
+  "$([ "$(cat "$FAKE_OUT/path")" = "$BASE_PATH" ] && [ -z "$(cat "$FAKE_OUT/venv")" ] && echo 0 || echo 1)"
 check "launch: no source restriction" \
   "$(grep -q -e '--setting-sources' -e '--strict-mcp-config' "$FAKE_OUT/argv" && echo 1 || echo 0)"
 
@@ -232,6 +238,9 @@ rm -rf "$RUN"
 mkdir -p "$RUN/gone.settings.json" "$RUN/pid-999999"
 echo "$TMP/hooks/gone.settings.json" >"$RUN/gone.settings.json/launcher"
 echo '{}' >"$RUN/gone.settings.json/settings.json"
+mkdir -p "$RUN/live.settings.json"
+echo "$TMP/hooks/live.settings.json" >"$RUN/live.settings.json/launcher"
+echo "$$" >"$RUN/live.settings.json/pid"
 for id in aaaa bbbb cccc; do
   jq --arg id "$id" '.env.AGENT_MANAGER_SESSION = $id' "$LAUNCHER" >"$TMP/hooks/$id.settings.json"
 done
@@ -248,6 +257,8 @@ done
 check "run files: three launches together, each set complete" "$complete"
 check "run files: a set whose launcher file is gone is pruned" \
   "$([ ! -e "$RUN/gone.settings.json" ] && echo 0 || echo 1)"
+check "run files: a set whose process still runs is kept" \
+  "$([ -d "$RUN/live.settings.json" ] && echo 0 || echo 1)"
 check "run files: a set whose process is gone is pruned" \
   "$([ ! -e "$RUN/pid-999999" ] && echo 0 || echo 1)"
 shim "$PROMPT" --settings "$TMP/hooks/aaaa.settings.json"

@@ -360,6 +360,15 @@ def test_build_refuses_an_invalid_file(
     assert "r.autocompact" in capsys.readouterr().err
 
 
+def test_build_refuses_a_linked_worktree(
+    repo: Path, manager: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (repo / ".git").write_text("gitdir: /elsewhere\n")
+    assert role.main(["build"]) == 1
+    assert calls(manager, "set") == []
+    assert "linked worktree" in capsys.readouterr().err
+
+
 def test_build_without_agent_manager(
     repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

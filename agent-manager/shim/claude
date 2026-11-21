@@ -23,7 +23,9 @@ fi
 [ -n "${ZEN_ROLE:-}" ] || exec "$real" "$@"
 
 case "${1:-}" in
-  mcp | auth | config | plugin | update | doctor | agents | install | setup-token | logs)
+  mcp | auth | config | plugin | plugins | update | upgrade | doctor | agents | install | \
+    setup-token | logs | attach | auto-mode | gateway | import | purge | respawn | rm | \
+    stop | kill | ultrareview)
     exec "$real" "$@"
     ;;
 esac

@@ -22,7 +22,7 @@ agent-manager) is unchanged.
 | Shim | `agent-manager/shim/claude` | with `ZEN_ROLE` set, adds the role's flags and settings, then runs the real CLI |
 
 `zen-role build` writes the profiles (`agent-manager/link` runs it after the import).
-It stores `PATH` as a literal, so re-run it when `PATH` changes. It never removes a
+It stores `PATH` as a literal, so re-run it when `PATH` changes. It refuses to run from a linked worktree, never removes a
 profile and reports a `role-*` profile that has no entry in the file.
 
 A spawn names the profile: `environment role-worker` on `create_session`,
@@ -78,12 +78,14 @@ The window is set three ways so the role wins over the global file: the
 `modelSettings.<model>.autoCompactWindow` for each model the global file pins.
 
 Run files live in `~/.cache/zen/roles/run/<launcher settings file name>/`, rewritten
-on each launch. A set whose launcher file is gone is pruned on a later launch.
+on each launch. A set is pruned on a later launch once its launcher file and its CLI process are both gone.
 
 ### What a role does not touch
 
-Subcommands (`mcp`, `auth`, `config`, `plugin`, `update`, `doctor`, `agents`,
-`install`, `setup-token`, `logs`), `-p`/`--print`, `--version` and `--help` run the
+Subcommands (`mcp`, `auth`, `config`, `plugin`/`plugins`, `update`/`upgrade`,
+`doctor`, `agents`, `install`, `setup-token`, `logs`, `attach`, `auto-mode`,
+`gateway`, `import`, `purge`, `respawn`, `rm`, `stop`/`kill`, `ultrareview`),
+`-p`/`--print`, `--version` and `--help` run the
 real CLI with the same argv, in bash, with no interpreter started. So headless calls
 made inside a role session (`zen-commit`, the wrap-up hook, probes) keep the global
 config, the `wrapup` skill included.
