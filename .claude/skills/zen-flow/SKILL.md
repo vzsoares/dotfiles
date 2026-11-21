@@ -239,7 +239,7 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   scope, required tests, expected load, settled decisions, out of scope, Human Only
   steps. Open decisions go to the inbox, one `zen-inbox ask` each; the answers arrive
   together in one message. Its only board write is that
-  page body. Ends with `SPEC_READY <id>`.
+  page body. Ends with `SPEC_READY <id>`, then archives itself (`archive_self`).
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
   cross-cutting work, Sonnet for pattern or spec work; max 3 core workers, or 2 while the
   5-minute load average (middle number of `uptime`) is over 150, checked before each core
@@ -261,6 +261,27 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
   code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
   ponytail" coding rules, adopted from ponytail.
+
+### One task, one session
+
+A reused session re-reads its whole old conversation on every call, so new work
+starts in a fresh session. agent-manager's built-in advice to "reuse a relevant
+idle session" does not apply to this workflow.
+
+- A session works the task named in its creation prompt, or a batch of up to 3
+  small tasks that share files, all named there; nothing joins later.
+- `send_session` to an existing session only steers its own task: answers to its
+  escalation, rebase, gate and review fixes. A worker still mid-task may take a
+  small addition on the files it is already editing, committed under that
+  addition's own task ID.
+- A new task, a new phase, or new scope after `WORKER_DONE` / `SPEC_READY` is a
+  fresh session, with the handoff in the prompt and on the task page.
+- `revive_session` is for a session that died mid-task. A finished or archived
+  session is never revived or restored for new work.
+- Finished sessions leave the list at once: `zen-merge` archives and stops
+  workers, spec-writers and support sessions call `archive_self` after their
+  final message, a replaced worker is archived when its successor starts.
+- chief and the orchestrator are long-running by design and are the exception.
 
 ### Scripts
 
