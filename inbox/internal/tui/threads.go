@@ -226,6 +226,8 @@ type waitRow struct {
 	// oldest is when the oldest item was written; n counts the items.
 	oldest string
 	n      int
+	// behind is a chat row held only by an earlier chat, not by chief being down.
+	behind bool
 }
 
 // waitRows are the deliveries kept for a session that is down: answers per
@@ -247,7 +249,8 @@ func (m *Model) waitRows() []waitRow {
 	}
 	if cs := m.snap.waitingChats; len(cs) > 0 {
 		out = append(out, waitRow{value: "cw:", name: am.ChiefName, reason: cs[0].Error, oldest: cs[0].SentAt, n: len(cs),
-			label: "waiting " + am.ChiefName + ": " + strconv.Itoa(len(cs)) + " message(s)"})
+			label:  "waiting " + am.ChiefName + ": " + strconv.Itoa(len(cs)) + " message(s)",
+			behind: strings.HasPrefix(cs[0].Error, inbox.QueuedBehind)})
 	}
 	return out
 }

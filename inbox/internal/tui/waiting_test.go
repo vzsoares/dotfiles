@@ -46,6 +46,28 @@ func later(t *testing.T, by time.Duration) {
 	t.Setenv("ZEN_INBOX_NOW", at.Add(by).Format(time.RFC3339))
 }
 
+// A chat held only behind a chat being sent is not chief being down.
+func TestChatQueuedBehindOneBeingSentIsNotShownAsChiefDown(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 29)
+	d.chiefIs("idle")
+	if c, err := d.ib.AddChat("", "in flight"); err != nil || c.Status != "sending" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	d.keys("c", "next", "ctrl+d")
+	if c := d.chat(2); c.Status != "waiting" || c.Error != "queued behind c1" {
+		t.Fatalf("%+v", c)
+	}
+	if h := d.head(); h != "cockpit · ◷ queued behind c1 · 1 held" {
+		t.Fatalf("header %q", h)
+	}
+	later(t, 20*time.Minute)
+	d.pollPass()
+	if h := d.head(); strings.Contains(h, "down") || len(d.am.notices) != 0 {
+		t.Fatalf("header %q notices %q", h, d.am.notices)
+	}
+}
+
 func TestChiefDownQueuesTheChatAndAPassSendsIt(t *testing.T) {
 	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	d := newDrv(t, 92, 29)

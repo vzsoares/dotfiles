@@ -49,8 +49,8 @@ type Chat struct {
 
 func (c Chat) Label() string { return "c" + strconv.FormatInt(c.ID, 10) }
 
-// queuedBehind starts the Error of a chat held back by an earlier chat.
-const queuedBehind = "queued behind c"
+// QueuedBehind starts the Error of a chat held back by an earlier chat.
+const QueuedBehind = "queued behind c"
 
 // ChatMessage is what chief receives: a thread's message leads with its task
 // and title, and one delivered lateAfter or more after written says so; it
@@ -80,7 +80,7 @@ func (ib *Inbox) AddChat(task, text string) (Chat, error) {
 		err := ib.conn.QueryRowContext(ctx, "SELECT id FROM chats WHERE status IN ('waiting', 'sending') ORDER BY id DESC LIMIT 1").Scan(&behind)
 		switch {
 		case err == nil:
-			c.Status, c.Error = "waiting", queuedBehind+strconv.FormatInt(behind, 10)
+			c.Status, c.Error = "waiting", QueuedBehind+strconv.FormatInt(behind, 10)
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		default:
@@ -167,7 +167,7 @@ func (ib *Inbox) claimChat() (c Chat, ok bool, err error) {
 			return err
 		}
 		c, ok = cs[0], true
-		c.Waited = c.Status == "waiting" && !strings.HasPrefix(c.Error, queuedBehind)
+		c.Waited = c.Status == "waiting" && !strings.HasPrefix(c.Error, QueuedBehind)
 		c.Status, c.ClaimedAt = "sending", stamp()
 		return ib.exec("UPDATE chats SET status = 'sending', claimed_at = ? WHERE id = ?", c.ClaimedAt, c.ID)
 	})

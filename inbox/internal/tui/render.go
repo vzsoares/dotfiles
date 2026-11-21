@@ -344,6 +344,9 @@ func (m *Model) waitedLong(stamp string) bool {
 // are and how much is queued; red once the oldest item waited loudAfter.
 func (m *Model) waitingHeader(name string) (string, lipgloss.Style) {
 	rows := m.waitRows()
+	if !slices.ContainsFunc(rows, func(r waitRow) bool { return !r.behind }) {
+		return pyfmt.Clip(name+"◷ "+rows[0].reason+" · "+strconv.Itoa(rows[0].n)+" held", m.w), headerStyle
+	}
 	var names []string
 	queued, oldest := 0, rows[0].oldest
 	for _, r := range rows {
@@ -374,6 +377,9 @@ func (m *Model) nag() []tea.Cmd {
 	byName := map[string]down{}
 	var order []string
 	for _, r := range m.waitRows() {
+		if r.behind {
+			continue
+		}
 		d, ok := byName[r.name]
 		if !ok {
 			order = append(order, r.name)
