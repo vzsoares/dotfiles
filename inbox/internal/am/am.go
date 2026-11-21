@@ -149,7 +149,7 @@ func Status(s Session) string {
 	if s == nil || !pyfmt.Truthy(s["running"]) || pyfmt.Truthy(s["archived"]) {
 		return "gone"
 	}
-	if st, ok := s["status"].(string); ok && (st == "dead" || st == "errored") {
+	if st, ok := s["status"].(string); ok && st == "dead" {
 		return "gone"
 	}
 	if !pyfmt.Truthy(s["status"]) {

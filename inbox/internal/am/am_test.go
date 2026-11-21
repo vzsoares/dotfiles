@@ -203,3 +203,20 @@ func TestCanPopupNeedsTmuxServer(t *testing.T) {
 		t.Fatal("popup without a tmux server")
 	}
 }
+
+func TestErroredRunningSessionIsLive(t *testing.T) {
+	cases := []struct {
+		name string
+		s    Session
+		live bool
+	}{
+		{"errored running", Session{"id": "s1", "status": "errored", "running": true}, true},
+		{"errored not running", Session{"id": "s1", "status": "errored", "running": false}, false},
+		{"dead", Session{"id": "s1", "status": "dead", "running": true}, false},
+	}
+	for _, c := range cases {
+		if got := Live(c.s); got != c.live {
+			t.Errorf("%s: Live = %v, want %v", c.name, got, c.live)
+		}
+	}
+}

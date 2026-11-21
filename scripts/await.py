@@ -125,14 +125,20 @@ def load_sessions() -> ModuleType:
 
 
 _sessions = load_sessions()
-DEAD_STATUSES = _sessions.DEAD_STATUSES
+DEAD_STATUSES = (*_sessions.DEAD_STATUSES, "errored")
 list_sessions = _sessions.list_sessions
 find_session = _sessions.find_session
-is_live = _sessions.is_live
 pending_background = _sessions.pending_background
 project_slug = _sessions.project_slug
 pi_slug = _sessions.pi_slug
 is_pi = _sessions.is_pi
+
+
+def is_live(session: dict[str, object]) -> bool:
+    """Live for a send, and not errored: a waited-on session that errored is exit 20."""
+    return _sessions.is_live(session) and session.get("status") not in DEAD_STATUSES
+
+
 transcript_path = _sessions.transcript_path
 last_end_turn = _sessions.last_end_turn
 _records = _sessions.records

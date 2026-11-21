@@ -717,3 +717,17 @@ func TestPruneDropsTheRepliesOfPrunedNotes(t *testing.T) {
 		t.Fatalf("%d rows, %v", n, err)
 	}
 }
+
+func TestWaitingChatSendsOnceErroredChiefIsRunning(t *testing.T) {
+	ib, fake, _ := open(t)
+	addNote(t, ib, "", "a")
+	fake.sessions = am.Sessions{session("c1", "chief", "dead")}
+	if res, err := ib.Reply(1, "hi"); err != nil || !res.Waiting {
+		t.Fatalf("%+v %v", res, err)
+	}
+	fake.sessions = am.Sessions{session("c1", "chief", "errored")}
+	pass(t, ib)
+	if len(fake.sends) != 1 || fake.sends[0][0] != "c1" {
+		t.Fatalf("%q", fake.sends)
+	}
+}

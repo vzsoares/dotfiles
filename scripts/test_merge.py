@@ -208,9 +208,7 @@ def test_kills_the_worker_after_archiving_it(setup: Setup) -> None:
     assert state.stopped == "killed"
 
 
-@pytest.mark.parametrize(
-    "dead", [{"status": "dead"}, {"status": "errored"}, {"running": False}]
-)
+@pytest.mark.parametrize("dead", [{"status": "dead"}, {"running": False}])
 def test_skips_kill_when_already_dead(setup: Setup, dead: dict[str, object]) -> None:
     setup.fake.sessions[0].update(dead)
     state = merge.land("task", "dev")

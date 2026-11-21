@@ -12,7 +12,9 @@ import re
 import subprocess
 from pathlib import Path
 
-DEAD_STATUSES = ("dead", "errored")
+# "errored" is not here: a usage limit leaves it set on a running session
+# until its next turn, and a send still lands.
+DEAD_STATUSES = ("dead",)
 
 
 def agent_manager(*args: str) -> tuple[int, str]:
