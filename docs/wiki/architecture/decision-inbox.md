@@ -2,7 +2,7 @@
 title: Decision Inbox — zen-inbox
 category: architecture
 updated: 2026-11-21
-related: [overview, release-tooling]
+related: [overview, release-tooling, agent-rotation]
 ---
 
 # Decision Inbox — zen-inbox
@@ -199,6 +199,12 @@ that release's one push (`pushed_sha`, `pushed_at`, `pushed_by`, default
 `$AGENT_MANAGER_SESSION_ID` else `user`) in one `BEGIN IMMEDIATE`; not answered
 Approve, not used, already pushed, or a repo/branch mismatch is exit 1. The pre-push
 hook checks the pushed content against the approved sha before calling it.
+
+`approval open [--json]` is read-only too: one `<id> <approved|used> <action> <repo>
+<branch>@<sha12>` line (a run: `<id> approved run in <repo>: <cmd>`) per prod ask
+answered `Approve` in the last 12 hours that is unused, or a used release not yet
+pushed; exit 1 when none. zen-rotate holds a restart while it lists anything; see
+[[agent-rotation]].
 
 `zen-inbox ask <task> --prod run --repo R --cmd "<exact command>"` (#736) files an
 approval for a script or migration run against prod. It binds the repo (the main

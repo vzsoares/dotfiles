@@ -13,6 +13,7 @@ Run with:  uv run scripts/lib/test_sessions.py
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -120,6 +121,31 @@ def test_find_session_falls_back_to_archived() -> None:
 )
 def test_is_live(session: dict[str, object], live: bool) -> None:
     assert sessions.is_live(session) is live
+
+
+def _turn(text: str, uuid: str, stop: str = "end_turn") -> str:
+    message = {
+        "id": f"m-{uuid}",
+        "stop_reason": stop,
+        "content": [{"type": "text", "text": text}],
+    }
+    return json.dumps({"type": "assistant", "uuid": uuid, "message": message})
+
+
+def test_transcript_path_of_a_claude_session(tmp_path: Path) -> None:
+    session = {"directory": "/Users/me/dot.files", "agent_session_id": "conv-1"}
+    expected = tmp_path / "-Users-me-dot-files" / "conv-1.jsonl"
+    assert sessions.transcript_path(session, tmp_path) == expected
+    assert sessions.transcript_path({"directory": "/x"}, tmp_path) is None
+
+
+def test_last_end_turn_reads_the_last_finished_turn(tmp_path: Path) -> None:
+    path = tmp_path / "t.jsonl"
+    assert sessions.last_end_turn(path) == ("", "")
+    lines = [_turn("first", "a"), "not json", _turn("calling a tool", "b", "tool_use")]
+    path.write_text("\n".join(lines) + "\n")
+    assert sessions.last_end_turn(path) == ("a", "first")
+    assert len(sessions.records(path)) == 2
 
 
 if __name__ == "__main__":

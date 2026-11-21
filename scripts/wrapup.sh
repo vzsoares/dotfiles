@@ -28,7 +28,8 @@ usage: zen-wrapup hook
   digest   print the condensed transcript the skill reads
 
   model: $ZEN_WRAPUP_MODEL, else zen.json wrapup.model, else sonnet
-  skips sessions under $ZEN_WRAPUP_MIN_TURNS / wrapup.minUserTurns (3) turns
+  skips sessions under $ZEN_WRAPUP_MIN_TURNS / wrapup.minUserTurns (3) turns,
+  and a /clear typed by zen-rotate (reason clear plus its clearing-<id> marker)
 EOF
 }
 
@@ -87,6 +88,12 @@ hook() {
     [ -z "$ZEN_WRAPUP" ] || exit 0
     local input transcript cwd
     input=$(cat)
+    # zen-rotate's /clear carries the session on from its own handoff note.
+    if [ "$(jq -r '.reason // empty' <<<"$input")" = clear ] &&
+        [ -n "${AGENT_MANAGER_SESSION_ID:-}" ] &&
+        [ -e "${ZEN_ROTATE_STATE:-$HOME/.cache/zen/rotate}/clearing-$AGENT_MANAGER_SESSION_ID" ]; then
+        exit 0
+    fi
     transcript=$(jq -r '.transcript_path // empty' <<<"$input")
     cwd=$(jq -r '.cwd // empty' <<<"$input")
     [ -n "$transcript" ] && [ -f "$transcript" ] || exit 0

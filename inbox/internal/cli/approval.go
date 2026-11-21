@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
+	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
 )
 
 func usageErr(msg string) error { return &inbox.Error{Msg: msg, Code: 2} }
@@ -35,7 +36,7 @@ func prodFlags(cmd *cobra.Command) error {
 
 func (a *App) approval() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "approval (use | check | pending | push)",
+		Use:   "approval (use | check | pending | push | open)",
 		Short: "Check or consume an approved prod-action ask, or a used release's push.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -45,7 +46,7 @@ func (a *App) approval() *cobra.Command {
 	}
 	cmd.AddCommand(a.approvalCmd("use", "Consume the approval once; exit 1 with the reason if it does not match."),
 		a.approvalCmd("check", "Validate the approval without consuming it."),
-		a.approvalPending(), a.approvalPush())
+		a.approvalPending(), a.approvalPush(), a.approvalOpen())
 	return cmd
 }
 
@@ -167,5 +168,42 @@ func (a *App) approvalPush() *cobra.Command {
 	f.StringVar(&branch, "branch", "", "target branch")
 	f.StringVar(&sha, "sha", "", "full 40-char sha being pushed")
 	f.StringVar(&by, "by", "", "who pushes (default $AGENT_MANAGER_SESSION_ID, else user)")
+	return cmd
+}
+
+func (a *App) approvalOpen() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "open [--json]",
+		Short: "Print each prod ask approved in the last 12 hours and not yet run (unused, or a used release not pushed); exit 1 when none. Read-only.",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			ib, err := a.open()
+			if err != nil {
+				return err
+			}
+			defer ib.Close()
+			found, err := ib.ApprovalsOpen()
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				objs := make([]pyfmt.Object, len(found))
+				for i, o := range found {
+					objs[i] = o.JSON()
+				}
+				a.out(pyfmt.Dumps(objs))
+			} else {
+				for _, o := range found {
+					a.out(o.Line())
+				}
+			}
+			if len(found) == 0 {
+				return exitCode(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the approvals as a JSON list")
 	return cmd
 }

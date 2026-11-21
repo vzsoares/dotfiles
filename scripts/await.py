@@ -71,10 +71,8 @@
 
 from __future__ import annotations
 
-import glob
 import importlib.util
 import json
-import os
 import re
 import subprocess
 import sys
@@ -132,6 +130,14 @@ list_sessions = _sessions.list_sessions
 find_session = _sessions.find_session
 is_live = _sessions.is_live
 pending_background = _sessions.pending_background
+project_slug = _sessions.project_slug
+pi_slug = _sessions.pi_slug
+is_pi = _sessions.is_pi
+transcript_path = _sessions.transcript_path
+last_end_turn = _sessions.last_end_turn
+_records = _sessions.records
+_message = _sessions.assistant_message
+_text_of = _sessions.text_of
 
 
 @dataclass
@@ -190,105 +196,6 @@ def parse_duration(value: str) -> float:
 # --------------------------------------------------------------------------- #
 # Transcripts                                                                  #
 # --------------------------------------------------------------------------- #
-
-
-def project_slug(directory: str) -> str:
-    return re.sub(r"[^A-Za-z0-9]", "-", directory)
-
-
-def pi_slug(directory: str) -> str:
-    """pi's session dir name for a cwd (session-manager getDefaultSessionDirPath)."""
-    return "--" + re.sub(r"[/\\:]", "-", re.sub(r"^[/\\]", "", directory)) + "--"
-
-
-def is_pi(session: dict[str, object]) -> bool:
-    return session.get("tool") == "pi"
-
-
-def transcript_path(
-    session: dict[str, object], root: Path | None = None
-) -> Path | None:
-    directory = session.get("directory")
-    agent_id = session.get("agent_session_id")
-    if not isinstance(directory, str) or not isinstance(agent_id, str):
-        return None
-    if is_pi(session):
-        # Boxed pi (pi-box env profile) first, then host pi. The box names the
-        # dir after the physical cwd (pwd -P).
-        bases = (
-            [root]
-            if root is not None
-            else [
-                Path.home() / "pi-box" / "agent" / "sessions",
-                Path.home() / ".pi" / "agent" / "sessions",
-            ]
-        )
-        pattern = f"*_{glob.escape(agent_id)}.jsonl"
-        for base in bases:
-            for d in dict.fromkeys([directory, os.path.realpath(directory)]):
-                found = sorted((base / pi_slug(d)).glob(pattern))
-                if found:
-                    return found[-1]
-        return None
-    base = root if root is not None else Path.home() / ".claude" / "projects"
-    return base / project_slug(directory) / f"{agent_id}.jsonl"
-
-
-def _records(path: Path) -> list[dict[str, object]]:
-    out: list[dict[str, object]] = []
-    for line in path.read_text(errors="replace").splitlines():
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(rec, dict):
-            out.append(rec)
-    return out
-
-
-def _message(rec: dict[str, object]) -> dict[str, object] | None:
-    if rec.get("type") != "assistant" or rec.get("isSidechain"):
-        return None
-    msg = rec.get("message")
-    return msg if isinstance(msg, dict) else None
-
-
-def _text_of(msg: dict[str, object]) -> str:
-    content = msg.get("content")
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ""
-    return "\n".join(
-        str(block.get("text", ""))
-        for block in content
-        if isinstance(block, dict) and block.get("type") == "text"
-    )
-
-
-def last_end_turn(path: Path) -> tuple[str, str]:
-    """Return (uuid, text) of the last end_turn assistant message, or ("", "").
-
-    One API message can span several jsonl records (one per content block), so
-    text is gathered from every record sharing the end_turn message's id.
-    """
-    if not path.exists():
-        return "", ""
-    records = _records(path)
-    for i in range(len(records) - 1, -1, -1):
-        msg = _message(records[i])
-        if msg is None or msg.get("stop_reason") != "end_turn":
-            continue
-        msg_id = msg.get("id")
-        parts: list[str] = []
-        for rec in records[: i + 1]:
-            other = _message(rec)
-            if other is not None and (
-                other is msg or (msg_id and other.get("id") == msg_id)
-            ):
-                parts.append(_text_of(other))
-        return str(records[i].get("uuid", i)), "\n".join(p for p in parts if p).strip()
-    return "", ""
 
 
 def _end_turn_epoch(rec: dict[str, object]) -> float | None:

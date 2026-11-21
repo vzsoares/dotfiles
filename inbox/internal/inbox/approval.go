@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -284,6 +285,69 @@ func (ib *Inbox) ReleasesPending(repo, branch string) ([]Pending, error) {
 			return nil, dbErr(err)
 		}
 		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, dbErr(err)
+	}
+	return out, nil
+}
+
+// OpenFor is how long after its answer an approved prod action counts as open.
+const OpenFor = 12 * time.Hour
+
+// OpenApproval is an approved prod action still to run: State is "approved"
+// (unused) or "used" (a release consumed and not yet pushed).
+type OpenApproval struct {
+	ID, State, AnsweredAt string
+	ProdAction
+}
+
+// Line is `<id> <state> <the ask's question without its ?>`.
+func (o OpenApproval) Line() string {
+	return o.ID + " " + o.State + " " + strings.TrimSuffix(ProdQuestion(o.ProdAction), "?")
+}
+
+// JSON is the --json shape; key order is part of the output.
+func (o OpenApproval) JSON() pyfmt.Object {
+	return pyfmt.Object{
+		{Key: "id", Value: o.ID},
+		{Key: "state", Value: o.State},
+		{Key: "action", Value: o.Action},
+		{Key: "repo", Value: o.Repo},
+		{Key: "branch", Value: o.Branch},
+		{Key: "sha", Value: o.Sha},
+		{Key: "cmd", Value: o.Cmd},
+		{Key: "answered_at", Value: o.AnsweredAt},
+	}
+}
+
+// ApprovalsOpen lists the prod asks answered Approve within OpenFor that are
+// unused, or a used release not yet pushed, oldest first. It never writes.
+func (ib *Inbox) ApprovalsOpen() ([]OpenApproval, error) {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	rows, err := ib.conn.QueryContext(ctx, "SELECT d.id, d.answered_at, a.action, a.repo, a.branch, a.sha, a.cmd, a.used_at"+
+		" FROM decisions d"+
+		" JOIN prod_actions a ON a.decision_id = d.id"+
+		" JOIN decision_options o ON o.decision_id = d.id AND o.letter = d.answer_option"+
+		" WHERE d.status = 'answered' AND d.answer_kind = 'pick' AND o.text = 'Approve'"+
+		" AND d.answered_at >= ?"+
+		" AND (a.used_at = '' OR (a.action = ? AND a.pushed_at = ''))"+
+		" ORDER BY d.created_at, d.rowid", Stamp(Now().Add(-OpenFor)), ReleaseAction)
+	if err != nil {
+		return nil, dbErr(err)
+	}
+	defer rows.Close()
+	var out []OpenApproval
+	for rows.Next() {
+		o := OpenApproval{State: "approved"}
+		if err := rows.Scan(&o.ID, &o.AnsweredAt, &o.Action, &o.Repo, &o.Branch, &o.Sha, &o.Cmd, &o.UsedAt); err != nil {
+			return nil, dbErr(err)
+		}
+		if o.UsedAt != "" {
+			o.State = "used"
+		}
+		out = append(out, o)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, dbErr(err)

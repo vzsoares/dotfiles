@@ -2,15 +2,18 @@
 set -u
 
 # zen-resume-watch [--once]
-# Revives chief when its process dies and resumes sessions a Claude usage limit
-# stopped. A screen match alone resumes nothing: a haiku probe must fail first.
+# Revives chief when its process dies, resumes sessions a Claude usage limit
+# stopped, and runs `zen-rotate tick`. A screen match alone resumes nothing: a
+# haiku probe must fail first.
 
 usage() {
 	cat <<'USAGE'
 usage: zen-resume-watch [--once]
 
   every minute   a session named chief that is not archived and not running
-                 gets `agent-manager revive` (at most once per 5 min)
+                 gets `agent-manager revive` (at most once per 5 min);
+                 `zen-rotate tick` runs (not while a confirmed usage limit
+                 is waited out)
   every 5 min    running claude sessions whose screen tail shows a usage limit
                  are resumed once a `claude -p --model haiku` probe passes
                  (re-probed every 10 min); a failed send is retried at the
@@ -88,6 +91,18 @@ revive_chief() {
 	fi
 }
 
+# A failing or missing zen-rotate never stops the watcher.
+rotate_tick() {
+	local out rc
+	out=$(zen-rotate tick 2>&1)
+	rc=$?
+	if [ "$rc" -ne 0 ]; then
+		echo "$(stamp) zen-rotate tick failed (exit $rc): $(printf '%s' "$out" | tail -1)"
+	elif [ -n "$out" ]; then
+		printf '%s\n' "$out"
+	fi
+}
+
 send_continue() {
 	agent-manager send "$1" "The Claude usage limit has reset. Continue exactly where you left off." </dev/null >/dev/null 2>&1
 }
@@ -149,6 +164,7 @@ scan_limits() {
 if [ "${1:-}" = "--once" ]; then
 	revive_chief
 	scan_limits
+	rotate_tick
 	exit 0
 fi
 
@@ -157,6 +173,7 @@ tick=0
 while true; do
 	revive_chief
 	[ $((tick % 5)) -eq 0 ] && scan_limits
+	rotate_tick
 	tick=$((tick + 1))
 	sleep 60
 done

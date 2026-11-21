@@ -614,3 +614,72 @@ func TestMigrateV7MarksUsedAsPushed(t *testing.T) {
 		t.Fatalf("%v %v", got, err)
 	}
 }
+
+func openLines(t *testing.T, ib *Inbox) []string {
+	t.Helper()
+	found, err := ib.ApprovalsOpen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := make([]string, len(found))
+	for i, o := range found {
+		lines[i] = o.Line()
+	}
+	return lines
+}
+
+func TestApprovalsOpen(t *testing.T) {
+	at(t, "2026-11-20T12:00:00Z")
+	ib, _, _ := open(t)
+	ib.User = true
+	const target = " release dotfiles prod@0123456789ab"
+	unused, used, pushed, held := askProd(t, ib, "s1"), askProd(t, ib, "s1"), askProd(t, ib, "s1"), askProd(t, ib, "s1")
+	askProd(t, ib, "s1")
+	if got := openLines(t, ib); len(got) != 0 {
+		t.Fatalf("open asks listed: %v", got)
+	}
+	approve(ib, unused)
+	approve(ib, used)
+	approve(ib, pushed)
+	if _, err := ib.Answer(held, p("b"), nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{used, pushed} {
+		if _, err := ib.Approval(id, prodWant(), "rel"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := ib.ReleasePush(pushed, "dotfiles", "prod", pushSha, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{unused + " approved" + target, used + " used" + target}
+	if got := openLines(t, ib); !slices.Equal(got, want) {
+		t.Fatalf("%v", got)
+	}
+
+	run := ProdAction{Action: RunAction, Repo: "core", Cmd: "just migrate"}
+	d, err := ib.AskProd(AskInput{Task: "736", SessionID: "s1", Name: "spec-s1"}, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approve(ib, d.ID)
+	if got := openLines(t, ib); !slices.Equal(got, append(want, d.ID+" approved run in core: just migrate")) {
+		t.Fatalf("%v", got)
+	}
+	// A consumed non-release action has no push to wait for.
+	if _, err := ib.Approval(d.ID, run, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := openLines(t, ib); !slices.Equal(got, want) {
+		t.Fatalf("%v", got)
+	}
+
+	at(t, "2026-11-21T00:00:00Z")
+	if got := openLines(t, ib); !slices.Equal(got, want) {
+		t.Fatalf("at 12h: %v", got)
+	}
+	at(t, "2026-11-21T00:00:01Z")
+	if got := openLines(t, ib); len(got) != 0 {
+		t.Fatalf("past 12h: %v", got)
+	}
+}

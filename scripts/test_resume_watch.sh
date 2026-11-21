@@ -31,7 +31,25 @@ n=$(cat "$STUB_DIR/probes" 2>/dev/null || echo 0)
 echo $((n + 1)) >"$STUB_DIR/probes"
 if [ "$n" -lt "${STUB_PROBE_FAILS:-0}" ]; then echo "usage limit reached"; else echo OK; fi
 STUB
-chmod +x "$TMP/bin/agent-manager" "$TMP/bin/claude"
+# Records the probe count at each tick; STUB_ROTATE_FAIL makes it fail.
+cat >"$TMP/bin/zen-rotate" <<'STUB'
+#!/usr/bin/env bash
+echo "$* probes=$(cat "$STUB_DIR/probes" 2>/dev/null || echo 0)" >>"$STUB_DIR/rotate"
+if [ -n "${STUB_ROTATE_FAIL:-}" ]; then
+	echo "zen-rotate: boom" >&2
+	exit 1
+fi
+[ -z "${STUB_ROTATE_OUT:-}" ] || echo "$STUB_ROTATE_OUT"
+STUB
+# Never sleeps; with STUB_PASSES set it ends the watcher's loop after that many.
+cat >"$TMP/bin/sleep" <<'STUB'
+#!/usr/bin/env bash
+[ -n "${STUB_PASSES:-}" ] || exit 0
+n=$(cat "$STUB_DIR/sleeps" 2>/dev/null || echo 0)
+echo $((n + 1)) >"$STUB_DIR/sleeps"
+[ $((n + 1)) -lt "$STUB_PASSES" ] || kill -TERM "$PPID"
+STUB
+chmod +x "$TMP/bin/agent-manager" "$TMP/bin/claude" "$TMP/bin/zen-rotate" "$TMP/bin/sleep"
 
 export STUB_DIR="$TMP/state"
 export PATH="$TMP/bin:$PATH"
@@ -42,6 +60,7 @@ bad() { echo "FAIL $1"; FAILS=$((FAILS + 1)); }
 check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 reset() { rm -rf "$STUB_DIR"; mkdir -p "$STUB_DIR"; }
 calls() { cat "$STUB_DIR/calls" 2>/dev/null; }
+ticks() { cat "$STUB_DIR/rotate" 2>/dev/null; }
 
 LIMIT_SCREEN="You've hit your usage limit. Your limit will reset at 3pm."
 
@@ -109,6 +128,40 @@ for _ in 1 2 3; do bash "$WATCH" --once >>"$TMP/out3"; done
 bash "$WATCH" --once >>"$TMP/out3"
 if [ "$(grep -c 'giving up on w1' "$TMP/out3")" = 1 ] && [ "$(calls | wc -l | tr -d ' ')" = 4 ]; then ok "gives up after 3 retries and sends nothing more"; else bad "gives up after 3 retries and sends nothing more"; fi
 unset STUB_SEND_FAILS ZEN_RESUME_STATE
+
+IDLE='[{"id":"w1","name":"worker","tool":"claude","running":true,"archived":false}]'
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+STUB_ROTATE_OUT="12:00 rotated orchestrator" bash "$WATCH" --once >"$TMP/out"
+if [ "$(ticks)" = "tick probes=0" ] && grep -qx '12:00 rotated orchestrator' "$TMP/out"; then ok "--once runs zen-rotate tick once and shows its output"; else bad "--once runs zen-rotate tick once and shows its output"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+STUB_PASSES=3 bash "$WATCH" >/dev/null
+if [ "$(ticks | wc -l | tr -d ' ')" = 3 ] && [ "$(cat "$STUB_DIR/sleeps")" = 3 ]; then ok "the loop ticks once per minute pass"; else bad "the loop ticks once per minute pass"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+echo "$LIMIT_SCREEN" >"$STUB_DIR/screen-w1"
+STUB_PROBE_FAILS=3 bash "$WATCH" --once >/dev/null
+if [ "$(ticks)" = "tick probes=4" ]; then ok "no tick while a confirmed limit is waited out"; else bad "no tick while a confirmed limit is waited out"; fi
+
+reset
+echo '{"sessions":[{"id":"c1","name":"chief","tool":"claude","running":false,"archived":false}]}' >"$STUB_DIR/sessions.json"
+STUB_ROTATE_FAIL=1 STUB_PASSES=2 bash "$WATCH" >"$TMP/out"
+rc=$?
+if [ "$rc" = 0 ] && [ "$(grep -c 'zen-rotate tick failed (exit 1): zen-rotate: boom$' "$TMP/out")" = 2 ] \
+	&& [ "$(calls)" = "revive c1" ]; then ok "a failing tick prints one line per pass and the loop goes on"; else bad "a failing tick prints one line per pass and the loop goes on"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+mv "$TMP/bin/zen-rotate" "$TMP/zen-rotate.off"
+PATH="$TMP/bin:/usr/bin:/bin" bash "$WATCH" --once >"$TMP/out"
+rc=$?
+mv "$TMP/zen-rotate.off" "$TMP/bin/zen-rotate"
+if [ "$rc" = 0 ] && [ "$(grep -c 'zen-rotate tick failed (exit 127)' "$TMP/out")" = 1 ] \
+	&& [ "$(wc -l <"$TMP/out" | tr -d ' ')" = 1 ]; then ok "a missing zen-rotate prints one line"; else bad "a missing zen-rotate prints one line"; fi
 
 echo
 if [ "$FAILS" = 0 ]; then

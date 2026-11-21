@@ -283,6 +283,10 @@ idle session" does not apply to this workflow.
   fresh session, with the handoff in the prompt and on the task page.
 - `revive_session` is for a session that died mid-task. A finished or archived
   session is never revived or restored for new work.
+- The two long-running sessions, chief and the orchestrator, are the exception to
+  "fresh session": every 6 hours `zen-rotate` clears their conversation in place (same
+  session id) and they carry on from a handoff note they wrote themselves, in
+  `~/.cache/zen/handoff/<role>/`. A `[zen-rotate]` message is part of that restart.
 - Finished sessions leave the list at once: `zen-merge` archives and stops
   workers, spec-writers and support sessions call `archive_self` after their
   final message, a replaced worker is archived when its successor starts.
@@ -295,6 +299,9 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 
 - `zen-await <session>...` (orchestrator, run_in_background): waits until a worker
   stops; 0 done marker, 10 escalation, 11 idle, 20 dead, 124 timeout.
+- `zen-rotate tick|status|now <role>|check-note <path>|resume <role>` (`zen-resume-watch`
+  ticks it every minute): restarts chief and the orchestrator in place every 6 h from a
+  handoff note the session writes itself; off until `rotate.roles.<role>.enabled` is set.
 - `zen-report tick|status|run <job>` (launchd agent, every 15 min): queues chief's scheduled
   routines (06h/12h/18h reports, Monday survey and board sweep) via `zen-chief`; the schedule lives in
   zen.json `report.jobs`.
@@ -381,7 +388,7 @@ is back (`zen-inbox retry --waiting` runs the same pass); `answer` then prints
   <id>`. Anything the user must choose stays a `zen-inbox ask`.
 - Chief keeps two un-nested terminals running in group `chief`: `cockpit`
   (`zen-inbox watch`) and `resume-watch` (`zen-resume-watch`: revives a dead chief,
-  resumes sessions a usage limit stopped). It checks `agent-manager terminal list --json`
+  resumes sessions a usage limit stopped, runs `zen-rotate tick`). It checks `agent-manager terminal list --json`
   at start and after an agent-manager restart. For a terminal that is missing or idle at
   a shell prompt it runs `agent-manager terminal create --name <name> --group chief
   --nest=false --json`, then `tmux -L agentmgr send-keys -t am_<terminal id> '<cmd>'

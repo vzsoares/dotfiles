@@ -44,6 +44,14 @@
       }
     ]
   },
+  "rotate": {
+    "hours": 6,
+    "defer_minutes": 30,
+    "roles": {
+      "chief": { "enabled": false, "quiet_minutes": 10 },
+      "orchestrator": { "enabled": false, "quiet_minutes": 2 }
+    }
+  },
   "wrapup": {
     "model": "sonnet",
     "minUserTurns": 3

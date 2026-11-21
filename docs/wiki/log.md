@@ -161,3 +161,8 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-21] update | Agent roles: isolate mode
 `"isolate": true` on a role now builds its settings, instructions and a skills plugin at launch and passes `--setting-sources local`. Found with the real CLI that this source restriction drops the user-scope MCP servers but not the account connectors or auto-memory, and that `--mcp-config agents/mcp.json` restores the servers; kept skills are listed as `role:<name>`. Off for all five roles.
 Pages updated: architecture/agent-roles.md
+
+## [2026-11-21] feature | zen-rotate: chief and the orchestrator restart in place from their own handoff note (#940)
+New `scripts/rotate.py` (`zen-rotate tick|status|now|check-note|resume`), ticked by `zen-resume-watch`: when a role session is 6 h old and at rest it is asked for a handoff note, cleared with a typed `/clear` (same session id) and resumed from the note plus its preset. `zen-inbox approval open` (read-only) blocks a restart while an approved prod action is open; `zen-wrapup hook` skips a rotation's clear. Both roles ship off. A live probe on a throwaway session confirmed the id change, the same process and model, and that a background run left alive notifies the cleared conversation.
+Pages created: architecture/agent-rotation.md
+Pages updated: architecture/decision-inbox.md

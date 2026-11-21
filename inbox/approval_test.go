@@ -357,3 +357,42 @@ func TestProdRunUsageErrors(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestApprovalOpenCLI(t *testing.T) {
+	f := newFake(t)
+	now := []string{"ZEN_INBOX_NOW=2026-01-01T06:00:00+00:00"}
+	open := []string{"approval", "open"}
+	f.zen(nil, append([]string{"ask", "680", "--session", "s1"}, prodArgs...)...)
+	if r := f.zen(now, open...); r.code != 1 || r.stdout != "" || r.stderr != "" {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(now, "approval", "open", "--json"); r.code != 1 || r.stdout != "[]\n" {
+		t.Fatalf("%+v", r)
+	}
+	f.approve("680.1")
+	if r := f.zen(now, open...); r.code != 0 || r.stdout != "680.1 approved release dotfiles prod@0123456789ab\n" {
+		t.Fatalf("%+v", r)
+	}
+	f.zen(now, approvalArgs("use", "680.1")...)
+	if r := f.zen(now, open...); r.code != 0 || r.stdout != "680.1 used release dotfiles prod@0123456789ab\n" {
+		t.Fatalf("%+v", r)
+	}
+	wantJSON := `[{"id": "680.1", "state": "used", "action": "release", "repo": "dotfiles", "branch": "prod", "sha": "` +
+		sha40 + `", "cmd": "", "answered_at": "2026-01-01T00:00:00"}]` + "\n"
+	if r := f.zen(now, "approval", "open", "--json"); r.code != 0 || r.stdout != wantJSON {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen([]string{"ZEN_INBOX_NOW=2026-01-01T12:00:01+00:00"}, open...); r.code != 1 || r.stdout != "" {
+		t.Fatalf("past 12h: %+v", r)
+	}
+	if got := f.sqlite("SELECT used_by, pushed_at FROM prod_actions"); got != "user|\n" {
+		t.Fatalf("open wrote the row: %q", got)
+	}
+	f.zen(now, "approval", "push", "680.1", "--repo", "dotfiles", "--branch", "prod", "--sha", pushed40)
+	if r := f.zen(now, open...); r.code != 1 || r.stdout != "" {
+		t.Fatalf("pushed: %+v", r)
+	}
+	if r := f.zen(now, "approval", "open", "680.1"); r.code != 2 {
+		t.Fatalf("%+v", r)
+	}
+}

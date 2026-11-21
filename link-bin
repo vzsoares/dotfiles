@@ -24,6 +24,7 @@ LINKS=(
     "zen-role:scripts/role.py"
     "zen-lock:scripts/lock.sh"
     "zen-resume-watch:scripts/resume-watch.sh"
+    "zen-rotate:scripts/rotate.py"
     "zen-inbox:inbox/zen-inbox"
     "zen-cockpit:scripts/cockpit.sh"
     "zen-board:scripts/board.py"
