@@ -255,7 +255,8 @@ only; model and effort are set per session (`create_session` `model`/`effort`, o
   tasks and never files a task per step.
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
   trailer), never pushes or releases (a prod push it needs goes in its final
-  message), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`.
+  message), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`,
+  sent to the orchestrator with send_session. It runs the full suite at most twice.
   Ending a turn with a background run pending is not idle: its notification wakes it.
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
   code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
