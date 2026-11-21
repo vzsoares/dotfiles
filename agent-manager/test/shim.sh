@@ -25,7 +25,8 @@ FAKE_REPO="$TMP/repo"
 SHIM_DIR="$FAKE_REPO/agent-manager/shim"
 SHIM="$SHIM_DIR/claude"
 mkdir -p "$SHIM_DIR" "$FAKE_REPO/scripts" "$FAKE_REPO/agent-manager/roles" \
-  "$TMP/bin" "$TMP/out" "$TMP/hooks"
+  "$FAKE_REPO/agents" "$TMP/bin" "$TMP/out" "$TMP/hooks" "$TMP/project" "$TMP/bare"
+echo '{"mcpServers": {}}' >"$FAKE_REPO/agents/mcp.json"
 cp "$REPO/agent-manager/shim/claude" "$SHIM"
 cp "$REPO/scripts/role.py" "$FAKE_REPO/scripts/role.py"
 echo "Role instructions." >"$FAKE_REPO/agent-manager/roles/full.md"
@@ -50,6 +51,17 @@ write_roles() {
     "skills": {"only": ["zen-flow"], "off": ["figma:figma-use"]},
     "tools": {"deny": ["WebSearch", "mcp__x__y"]},
     "append": "full.md"
+  },
+  "iso": {
+    "saved": "worker-rules",
+    "isolate": true,
+    "settings": {
+      "outputStyle": "default",
+      "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "role-stop"}]}]}
+    },
+    "skills": {"only": ["zen-flow"]},
+    "instructions": {"keep": ["Tools", "User"]},
+    "append": "full.md"
   }
 }
 JSON
@@ -61,8 +73,32 @@ SKILLS="$HOME/.claude/skills"
 mkdir -p "$SKILLS/zen-flow" "$SKILLS/wiki" "$SKILLS/synced/bucket/zen-flow"
 touch "$SKILLS/zen-flow/SKILL.md" "$SKILLS/wiki/SKILL.md"
 cat >"$HOME/.claude/settings.json" <<'JSON'
-{"autoCompactWindow": 800000, "modelSettings": {"claude-fable-5-2": {"autoCompactWindow": 300000}, "claude-opus-5-5": {"effortLevel": "high"}}}
+{
+  "autoCompactWindow": 800000,
+  "modelSettings": {"claude-fable-5-2": {"autoCompactWindow": 300000}, "claude-opus-5-5": {"effortLevel": "high"}},
+  "outputStyle": "adhd",
+  "statusLine": "global",
+  "permissions": {"allow": ["Bash(git status)"]},
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": "global-stop"}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "global-end"}]}]
+  }
+}
 JSON
+cat >"$HOME/.claude/CLAUDE.md" <<'MD'
+# User
+
+- zsh
+
+# Board
+
+Write the board.
+
+# Tools
+
+Use uv.
+MD
+printf '# Project\n\nCodeword.\n' >"$TMP/project/CLAUDE.md"
 RUN="$HOME/.cache/zen/roles/run"
 
 cat >"$TMP/bin/claude" <<'FAKE'
@@ -74,6 +110,8 @@ prev=""
 for arg in "$@"; do
   printf '%s\n--ARG--\n' "$arg" >>"$out/argv"
   [ "$prev" = --settings ] && cp "$arg" "$out/settings.json"
+  [ "$prev" = --append-system-prompt-file ] && cp "$arg" "$out/instructions.md"
+  [ "$prev" = --plugin-dir ] && ls "$arg/skills" >"$out/skills"
   prev="$arg"
 done
 printf '%s\n' "$PATH" >"$out/path"
@@ -201,6 +239,34 @@ shim "$PROMPT"
 check "no launcher --settings: overlay alone" \
   "$([ "$(setting .outputStyle)" = default ] && echo 0 || echo 1)"
 
+# --- isolate ---------------------------------------------------------------------
+export ZEN_ROLE=iso
+ISO="$RUN/6c328783.settings.json"
+(cd "$TMP/project" && shim "$PROMPT" --mcp-config "$MCP" --settings "$LAUNCHER")
+same_argv "isolate: flags" \
+  --setting-sources local --plugin-dir "$ISO/plugin" \
+  --mcp-config "$FAKE_REPO/agents/mcp.json" \
+  --append-system-prompt-file "$ISO/instructions.md" \
+  --settings "$ISO/settings.json" "$PROMPT" --mcp-config "$MCP"
+check "isolate: MCP servers are not restricted" \
+  "$(grep -q -e '--strict-mcp-config' "$FAKE_OUT/argv" && echo 1 || echo 0)"
+check "isolate: every global hook, then the role's, then the launcher's" \
+  "$([ "$(setting '[.hooks.Stop[].hooks[].command] | join(",")')" = "global-stop,role-stop,am-stop" ] &&
+    [ "$(setting '.hooks.SessionEnd[0].hooks[0].command')" = global-end ] &&
+    [ "$(setting '.hooks.Notification[0].hooks[0].command')" = am-notify ] && echo 0 || echo 1)"
+check "isolate: global permissions kept, overlay over global, launcher over both" \
+  "$([ "$(setting '.permissions.allow[0] + "|" + .outputStyle + "|" + .statusLine + "|" + .env.AGENT_MANAGER_SESSION')" = "Bash(git status)|default|launcher|6c328783" ] && echo 0 || echo 1)"
+EXPECTED="$(printf '# User\n\n- zsh\n\n# Tools\n\nUse uv.\n\n# Project instructions (%s)\n\n# Project\n\nCodeword.\n\nRole instructions.' "$TMP/project/CLAUDE.md")"
+check "isolate: kept sections in file order, project CLAUDE.md, append" \
+  "$([ "$(cat "$FAKE_OUT/instructions.md")" = "$EXPECTED" ] && echo 0 || echo 1)"
+check "isolate: only the kept skills are in the plugin dir" \
+  "$([ "$(cat "$FAKE_OUT/skills")" = zen-flow ] && echo 0 || echo 1)"
+(cd "$TMP/bare" && shim "$PROMPT" --settings "$LAUNCHER")
+EXPECTED="$(printf '# User\n\n- zsh\n\n# Tools\n\nUse uv.\n\nRole instructions.')"
+check "isolate: a working directory without CLAUDE.md" \
+  "$([ "$(cat "$FAKE_OUT/instructions.md")" = "$EXPECTED" ] && echo 0 || echo 1)"
+export ZEN_ROLE=full
+
 # --- errors: one line, no CLI ----------------------------------------------------
 fails_clean() { # name, expected text, command...
   local name="$1" text="$2" out code
@@ -223,6 +289,12 @@ fails_clean "error: unreadable roles.json" "cannot read" shim "$PROMPT"
 echo '{"full": {"saved": "worker-rules", "autocompact": 5}}' >"$ROLES"
 fails_clean "error: invalid role" "full.autocompact" shim "$PROMPT"
 write_roles
+sed -i.bak 's/^# Tools$/# Tooling/' "$HOME/.claude/CLAUDE.md"
+ZEN_ROLE=iso fails_clean "error: a kept section is gone" "iso.instructions.keep: 'Tools'" shim "$PROMPT"
+mv "$HOME/.claude/CLAUDE.md.bak" "$HOME/.claude/CLAUDE.md"
+mv "$HOME/.claude/settings.json" "$HOME/.claude/settings.json.bak"
+ZEN_ROLE=iso fails_clean "error: isolate without the global settings" "cannot read" shim "$PROMPT"
+mv "$HOME/.claude/settings.json.bak" "$HOME/.claude/settings.json"
 fails_clean "error: unreadable launcher settings" "launcher --settings" \
   shim --settings "$TMP/hooks/gone.settings.json" "$PROMPT"
 no_real() { PATH="$SHIM_DIR:$SHIM_DIR/" "$BASH" "$SHIM" "$@"; }

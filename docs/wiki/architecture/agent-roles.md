@@ -44,6 +44,8 @@ All optional except `saved`.
 | `skills.off` | literal skill names to turn off, any namespace |
 | `tools.deny` | built-in or MCP tool names to disallow |
 | `append` | a file under `agent-manager/roles/` appended to the system prompt |
+| `isolate` | `true` turns on isolate mode; needs `skills.only` and `instructions` |
+| `instructions.keep` | the top-level section titles of the global `CLAUDE.md` an isolated role keeps |
 
 `skills.only` reads the skill dirs at launch: `~/.claude/skills/*/SKILL.md` and
 `~/.claude/skills/synced/<bucket>/*/`. A newly synced skill is therefore off for a
@@ -52,13 +54,15 @@ skill goes off unless it is listed too. Bundled skills (`code-review`) and plugi
 skills (`clawd-status:clawd`) are untouched; use `skills.off` for those.
 
 `zen-role check` validates the file: unknown keys, types, the window minimum, `saved`
-against the presets, `skills.only` names against the disk, the `append` file.
-`zen-role show <name> [--json]` prints the flags and the settings overlay a role
-resolves to on this machine.
+against the presets, `skills.only` names against the disk, the `append` file, and for
+an isolated role its `instructions.keep` titles against the global `CLAUDE.md`.
+`zen-role show <name> [--json]` prints the mode, the flags and the settings overlay a
+role resolves to on this machine, plus the kept sections and skill names of an
+isolated role.
 
 ## Overlay mode
 
-The only mode so far. The global layer (`~/.claude/settings.json`, the user and
+The default, and what all five roles use. The global layer (`~/.claude/settings.json`, the user and
 project `CLAUDE.md`, MCP servers, connectors) loads as always and the role's values
 are laid over it.
 
@@ -101,6 +105,51 @@ missing `append` file, an unreadable launcher settings file, or no real `claude`
 global config. A `skills.only` name that is not on disk does not stop a launch (a
 skill may not have synced yet); `zen-role check` reports it.
 
+## Isolate mode
+
+`"isolate": true` on a role. The session loads only what the role names instead of
+laying it over everything. No role has it on; it exists so a role can drop global
+instructions, which overlay cannot.
+
+On top of the overlay steps the shim passes `--setting-sources local` and builds three
+things at launch, from the live files, into the run set. Nothing generated is tracked,
+so there is no copy to keep in step.
+
+| Built | From |
+|---|---|
+| `settings.json` | the live `~/.claude/settings.json` (every hook, the permission rules, the status line), then the role overlay, then agent-manager's file |
+| `instructions.md` | the `instructions.keep` sections of the global `CLAUDE.md` in file order, then the working directory's root `CLAUDE.md` when there is one, then the role's `append` file; passed as `--append-system-prompt-file` |
+| `plugin/` | a plugin named `role` whose `skills/` links to each `skills.only` skill; passed as `--plugin-dir` |
+
+A kept skill is therefore listed as `role:<name>` (`role:zen-flow`,
+`role:chrome-browser`), not under its usual name. A preset that says "use the zen-flow
+skill" still finds it. A role cannot keep both a skill and its `anthropic-skills:`
+twin, since both would be `role:<name>`.
+
+`--setting-sources local` also drops the user-scope MCP servers, so the shim passes
+`--mcp-config <repo>/agents/mcp.json` beside agent-manager's own. Checked against the
+real CLI (2.1.330): the session lists `agent-manager`, the `agents/mcp.json` servers
+and the account connectors (Notion included). There is no `--strict-mcp-config`.
+
+### What an isolated role does not load
+
+Confirmed with headless runs of a throwaway isolated role, one of them inside this
+repo:
+
+- the user `CLAUDE.md`, beyond the kept sections
+- the user and synced skill dirs, beyond `skills.only`
+- the project layer: `.claude/settings.json`, `.claude/skills/`, and nested
+  `CLAUDE.md` files such as `.claude/CLAUDE.md` (only the root one is appended)
+- plugins that load from the user skills dir (`clawd-status`)
+- MCP servers added by hand with `claude mcp add` and absent from `agents/mcp.json`
+
+Still loaded: auto-memory (the project's memory dir), `.claude/settings.local.json`,
+bundled skills, and whatever `enabledPlugins` holds after the merge.
+
+A kept section that no longer exists in the global `CLAUDE.md`, or an unreadable
+global `settings.json`, stops the launch with one line: a renamed section must not
+silently drop its rules.
+
 ## Reverting a cut
 
 Each cut is one line in `roles.json`. Delete it and the next launch or revive of that
@@ -112,6 +161,7 @@ role runs without it; agent-manager needs no restart.
 | the output style | `settings.outputStyle` |
 | the plugin cut | the entry under `settings.enabledPlugins` |
 | the compaction window | `autocompact` |
+| isolate mode | `isolate` (the role falls back to overlay; `instructions` is then unused) |
 | the role altogether | spawn without `environment` / `--env`, or `unset ZEN_ROLE` in the profile |
 
 ## Tests
@@ -127,3 +177,4 @@ bash agent-manager/test/shim.sh
 worker role's overlay lists the `default` style, no figma plugin, and of the user and
 synced skills only `zen-flow` and `anthropic-skills:chrome-browser`. The compaction
 window cannot be observed that way; it shows only when a session first compacts.
+Isolate mode was checked the same way with a throwaway role.

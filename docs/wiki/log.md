@@ -157,3 +157,7 @@ Pages created: architecture/agent-roles.md
 ## [2026-11-21] feature | zen-inbox queues messages for a session that is down (#933)
 Answers, note replies and `c` chats whose target is down (no live `chief`; an asker still listed, not archived, dead) are stored `waiting` and sent by `inbox.Pass`: the panel at start and every 15 s, or `zen-inbox retry --waiting`. One message per target per pass, each item claimed in its own transaction (schema v13: `chats.claimed_at`, additive). Answers fall back to the one live session with the asker's name. `zen-chief` exits 3 for "no live chief". The panel gains a `Waiting` group and header, red plus one banner after 15 minutes; late chats and replies say when they were written.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-21] update | Agent roles: isolate mode
+`"isolate": true` on a role now builds its settings, instructions and a skills plugin at launch and passes `--setting-sources local`. Found with the real CLI that this source restriction drops the user-scope MCP servers but not the account connectors or auto-memory, and that `--mcp-config agents/mcp.json` restores the servers; kept skills are listed as `role:<name>`. Off for all five roles.
+Pages updated: architecture/agent-roles.md

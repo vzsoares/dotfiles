@@ -19,7 +19,8 @@ agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
               #   since it stores config in SQLite. Groups live in the vault.
               #   The `am` zsh function exports on quit. roles.json gives each
               #   agent role its Claude Code config (model, effort, window,
-              #   skills, settings overlay); `zen-role build` (run by ./link)
+              #   skills, settings overlay; `isolate` loads only what the
+              #   role names); `zen-role build` (run by ./link)
               #   sets one env profile `role-<name>` per role, whose PATH
               #   starts at shim/, and shim/claude applies the role at launch.
               #   test: `bash agent-manager/test/shim.sh`

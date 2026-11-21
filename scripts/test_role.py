@@ -32,6 +32,24 @@ _spec.loader.exec_module(role)
 TRACKED = Path(__file__).resolve().parents[1]
 FIGMA = "figma@claude-plugins-official"
 
+GLOBAL_CLAUDE = """# User
+
+- zsh
+
+# Rules
+
+Run this:
+
+```
+# not a section
+make
+```
+
+# Tools
+
+Use uv.
+"""
+
 FAKE_MANAGER = """#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -79,6 +97,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         (bucket / name).mkdir(parents=True)
     (bucket / "manifest.json").write_text("{}")
     (skills / "synced" / ".bucket-1").write_text("")
+    (home / ".claude" / "CLAUDE.md").write_text(GLOBAL_CLAUDE)
     monkeypatch.setattr(role, "REPO", root)
     monkeypatch.setenv("HOME", str(home))
     return root
@@ -146,10 +165,35 @@ REJECTED = [
     ({"saved": "chief", "skills": {"only": ["half-made"]}}, "r.skills.only:"),
     ({"saved": "chief", "append": "missing.md"}, "r.append:"),
     ({"saved": "chief", "append": "../config.json"}, "r.append: must be a file under"),
-    ({"saved": "chief", "isolate": True}, "r.isolate: not yet supported"),
+    ({"saved": "chief", "isolate": "yes"}, "r.isolate: must be true or false"),
     (
-        {"saved": "chief", "instructions": {"keep": []}},
-        "r.instructions: not yet supported",
+        {"saved": "chief", "isolate": True, "instructions": {"keep": []}},
+        "r.isolate: requires skills.only",
+    ),
+    (
+        {"saved": "chief", "isolate": True, "skills": {"only": ["wiki"]}},
+        "r.isolate: requires instructions",
+    ),
+    ({"saved": "chief", "instructions": {}}, "r.instructions.keep: required"),
+    ({"saved": "chief", "instructions": {"drop": []}}, "r.instructions.drop:"),
+    ({"saved": "chief", "instructions": ["Rules"]}, "r.instructions:"),
+    (
+        {
+            "saved": "chief",
+            "isolate": True,
+            "skills": {"only": ["zen-flow", "anthropic-skills:zen-flow"]},
+            "instructions": {"keep": []},
+        },
+        "r.skills.only: an isolated role cannot keep a skill and its",
+    ),
+    (
+        {
+            "saved": "chief",
+            "isolate": True,
+            "skills": {"only": ["wiki"]},
+            "instructions": {"keep": ["Rules", "Gone"]},
+        },
+        "r.instructions.keep: 'Gone' is no section of",
     ),
     ("opus", "r: must be an object"),
 ]
@@ -303,6 +347,86 @@ def test_list(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# isolate                                                                       #
+# --------------------------------------------------------------------------- #
+
+ISOLATED = {
+    "saved": "chief",
+    "isolate": True,
+    "skills": {"only": ["wiki", "anthropic-skills:pdf", "not-synced-yet"]},
+    "instructions": {"keep": ["Tools", "User"]},
+    "append": "extra.md",
+}
+
+
+def test_sections_skip_fenced_blocks() -> None:
+    found = role.sections("intro\n" + GLOBAL_CLAUDE)
+    assert [title for title, _ in found] == ["User", "Rules", "Tools"]
+    assert "# not a section" in found[1][1]
+    assert "".join(body for _, body in found) == GLOBAL_CLAUDE
+
+
+def test_isolated_instructions(repo: Path, tmp_path: Path) -> None:
+    (repo / "agent-manager" / "roles" / "extra.md").write_text("Role extra.\n")
+    parsed = role.parse_role("r", ISOLATED)
+    project = tmp_path / "project"
+    project.mkdir()
+    bare = "# User\n\n- zsh\n\n# Tools\n\nUse uv.\n\nRole extra.\n"
+    assert role.build_instructions(parsed, project) == bare
+    (project / "CLAUDE.md").write_text("# Project\n\nCodeword.\n\n")
+    assert role.build_instructions(parsed, project) == (
+        "# User\n\n- zsh\n\n# Tools\n\nUse uv.\n\n"
+        f"# Project instructions ({project}/CLAUDE.md)\n\n# Project\n\nCodeword.\n\n"
+        "Role extra.\n"
+    )
+
+
+def test_isolated_plugin_links_the_kept_skills(repo: Path, tmp_path: Path) -> None:
+    parsed = role.parse_role("r", ISOLATED)
+    target = tmp_path / "plugin"
+    (target / "skills" / "stale").mkdir(parents=True)
+    role.build_plugin(parsed, target)
+    manifest = json.loads((target / ".claude-plugin" / "plugin.json").read_text())
+    assert manifest["name"] == "role"
+    links = {link.name: link.resolve() for link in (target / "skills").iterdir()}
+    skills = (Path.home() / ".claude" / "skills").resolve()
+    assert links == {
+        "wiki": skills / "wiki",
+        "pdf": skills / "synced" / "bucket-1" / "pdf",
+    }
+
+
+def test_isolated_flags_and_show(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (repo / "agent-manager" / "roles" / "extra.md").write_text("Role extra.\n")
+    write_roles(repo, {"r": ISOLATED})
+    assert role.role_flags(role.load_role("r"), [], "R") == [
+        "--setting-sources",
+        "local",
+        "--plugin-dir",
+        "R/plugin",
+        "--mcp-config",
+        str(repo / "agents" / "mcp.json"),
+        "--append-system-prompt-file",
+        "R/instructions.md",
+        "--settings",
+        "R/settings.json",
+    ]
+    assert role.main(["show", "r", "--json"]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["mode"] == "isolate"
+    assert shown["sections"] == ["User", "Tools"]
+    assert shown["skills"] == ["role:wiki", "role:pdf", "role:not-synced-yet"]
+    assert role.main(["show", "r"]) == 0
+    assert "sections: User; Tools" in capsys.readouterr().out
+
+
+def test_tracked_file_isolates_no_role(tracked: None) -> None:
+    assert [r.name for r in role.load_roles() if r.isolate or r.keep] == []
+
+
+# --------------------------------------------------------------------------- #
 # build                                                                         #
 # --------------------------------------------------------------------------- #
 
@@ -450,13 +574,13 @@ def test_tracked_file_is_the_day_one_table(tracked: None) -> None:
 
 def test_tracked_worker_resolves(tracked: None) -> None:
     worker = role.load_role("worker")
-    assert role.role_flags(worker, [], "S") == [
+    assert role.role_flags(worker, [], "R") == [
         "--model",
         "opus",
         "--effort",
         "medium",
         "--settings",
-        "S",
+        "R/settings.json",
     ]
     off = role.skill_overrides(worker, role.disk_skills())
     assert set(off) == {

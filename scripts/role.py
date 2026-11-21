@@ -26,7 +26,8 @@
 #  DESCRIPTION
 #      agent-manager/roles.json declares each agent role: model, effort,
 #      compaction window, a settings overlay, skills, denied tools and an
-#      appended instructions file.
+#      appended instructions file. `"isolate": true` loads only what the role
+#      names instead of laying it over the global config.
 #
 #        list   the role names
 #        show   what a role resolves to: flags and the settings overlay
@@ -80,6 +81,7 @@ EFFORTS = ("low", "medium", "high", "xhigh", "max")
 MIN_WINDOW = 100_000
 SYNCED_PREFIX = "anthropic-skills:"
 PROFILE_PREFIX = "role-"
+PLUGIN = "role"
 
 
 class RoleError(Exception):
@@ -98,6 +100,8 @@ class Role:
     off: list[str] = field(default_factory=list)
     deny: list[str] = field(default_factory=list)
     append: str | None = None
+    isolate: bool = False
+    keep: list[str] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -117,12 +121,24 @@ def append_dir() -> Path:
     return REPO / "agent-manager" / "roles"
 
 
+def mcp_file() -> Path:
+    return REPO / "agents" / "mcp.json"
+
+
 def shim_dir() -> Path:
     return REPO / "agent-manager" / "shim"
 
 
 def skills_root() -> Path:
     return Path.home() / ".claude" / "skills"
+
+
+def global_settings() -> Path:
+    return Path.home() / ".claude" / "settings.json"
+
+
+def global_claude() -> Path:
+    return Path.home() / ".claude" / "CLAUDE.md"
 
 
 def run_root() -> Path:
@@ -166,9 +182,6 @@ def parse_role(name: str, raw: object) -> Role:
     for key in raw:
         if key not in KEYS:
             raise RoleError(f"{name}.{key}: unknown key")
-    for key in ("isolate", "instructions"):
-        if key in raw:
-            raise RoleError(f"{name}.{key}: not yet supported")
     if "saved" not in raw:
         raise RoleError(f"{name}.saved: required")
     role = Role(name=name, saved=_text(f"{name}.saved", raw["saved"]))
@@ -207,6 +220,26 @@ def parse_role(name: str, raw: object) -> Role:
         base = append_dir().resolve()
         if not (base / role.append).resolve().is_relative_to(base):
             raise RoleError(f"{name}.append: must be a file under agent-manager/roles/")
+    if "instructions" in raw:
+        group = _group(f"{name}.instructions", raw["instructions"], ("keep",))
+        if "keep" not in group:
+            raise RoleError(f"{name}.instructions.keep: required")
+        role.keep = _names(f"{name}.instructions.keep", group["keep"])
+    if "isolate" in raw:
+        if not isinstance(raw["isolate"], bool):
+            raise RoleError(f"{name}.isolate: must be true or false")
+        role.isolate = raw["isolate"]
+    if role.isolate:
+        if role.only is None:
+            raise RoleError(f"{name}.isolate: requires skills.only")
+        if "instructions" not in raw:
+            raise RoleError(f"{name}.isolate: requires instructions")
+        bare = [skill.removeprefix(SYNCED_PREFIX) for skill in role.only]
+        if len(set(bare)) != len(bare):
+            raise RoleError(
+                f"{name}.skills.only: an isolated role cannot keep a skill "
+                "and its anthropic-skills twin"
+            )
     return role
 
 
@@ -239,18 +272,19 @@ def load_roles() -> list[Role]:
 # --------------------------------------------------------------------------- #
 
 
-def disk_skills() -> set[str]:
-    """User skills by name and synced ones as `anthropic-skills:<name>`.
+def skill_sources() -> dict[str, Path]:
+    """Skill dirs on disk: user skills by name, synced ones as
+    `anthropic-skills:<name>`.
 
     A dir without SKILL.md (a plugin such as clawd-status) is not a skill.
     """
     root = skills_root()
-    names: set[str] = set()
+    found: dict[str, Path] = {}
     if not root.is_dir():
-        return names
+        return found
     for entry in root.iterdir():
         if entry.name != "synced" and (entry / "SKILL.md").is_file():
-            names.add(entry.name)
+            found[entry.name] = entry
     synced = root / "synced"
     if synced.is_dir():
         for bucket in synced.iterdir():
@@ -258,8 +292,12 @@ def disk_skills() -> set[str]:
                 continue
             for entry in bucket.iterdir():
                 if entry.is_dir() and not entry.name.startswith("."):
-                    names.add(SYNCED_PREFIX + entry.name)
-    return names
+                    found[SYNCED_PREFIX + entry.name] = entry
+    return found
+
+
+def disk_skills() -> set[str]:
+    return set(skill_sources())
 
 
 def skill_overrides(role: Role, disk: set[str]) -> dict[str, str]:
@@ -286,7 +324,7 @@ def merge(base: Obj, top: Obj) -> Obj:
 def window_models() -> list[str]:
     """Models whose window the global settings pin; a role's window overrides each."""
     try:
-        data = json.loads((Path.home() / ".claude" / "settings.json").read_text())
+        data = json.loads(global_settings().read_text())
     except (OSError, ValueError):
         return []
     models = data.get("modelSettings") if isinstance(data, dict) else None
@@ -322,11 +360,89 @@ def append_file(role: Role) -> Path | None:
     return path
 
 
+def sections(text: str) -> list[tuple[str, str]]:
+    """Top-level `# ` sections as (title, text). A `# ` line inside a fenced
+    block is a shell comment, not a title."""
+    found: list[tuple[str, str]] = []
+    fenced = False
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("# "):
+            found.append((line[2:].strip(), ""))
+        if found:
+            title, body = found[-1]
+            found[-1] = (title, body + line)
+    return found
+
+
+def kept_sections(role: Role) -> list[tuple[str, str]]:
+    """The sections of the global CLAUDE.md an isolated role keeps, in file order."""
+    path = global_claude()
+    try:
+        have = sections(path.read_text())
+    except OSError as exc:
+        raise RoleError(f"cannot read {path}: {exc.strerror}") from exc
+    titles = [title for title, _ in have]
+    for title in role.keep:
+        if title not in titles:
+            raise RoleError(
+                f"{role.name}.instructions.keep: '{title}' is no section of {path}"
+            )
+    return [(title, body) for title, body in have if title in role.keep]
+
+
+def build_instructions(role: Role, cwd: Path) -> str:
+    """Kept global sections, then the working directory's CLAUDE.md, then `append`."""
+    parts = [body.rstrip() + "\n" for _, body in kept_sections(role)]
+    project = cwd / "CLAUDE.md"
+    if project.is_file():
+        text = project.read_text().rstrip()
+        parts.append(f"# Project instructions ({project})\n\n{text}\n")
+    appended = append_file(role)
+    if appended is not None:
+        parts.append(appended.read_text().rstrip() + "\n")
+    return "\n".join(parts)
+
+
+def build_plugin(role: Role, target: Path) -> None:
+    """A plugin dir holding links to the kept skills, listed as `role:<skill>`."""
+    shutil.rmtree(target, ignore_errors=True)
+    (target / ".claude-plugin").mkdir(parents=True)
+    (target / "skills").mkdir()
+    manifest = {
+        "name": PLUGIN,
+        "version": "0.0.0",
+        "description": f"skills of the agent role {role.name}",
+    }
+    (target / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest) + "\n")
+    sources = skill_sources()
+    for skill in role.only or []:
+        if skill in sources:
+            link = target / "skills" / skill.removeprefix(SYNCED_PREFIX)
+            link.symlink_to(sources[skill], target_is_directory=True)
+
+
+def isolated_base() -> Obj:
+    """The live global settings: an isolated role loads no settings layer, so
+    its one --settings file carries them."""
+    path = global_settings()
+    try:
+        data = json.loads(path.read_text())
+    except OSError as exc:
+        raise RoleError(f"cannot read {path}: {exc.strerror}") from exc
+    except ValueError as exc:
+        raise RoleError(f"{path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RoleError(f"{path}: must be a JSON object")
+    return data
+
+
 def has_flag(args: list[str], flag: str) -> bool:
     return any(arg == flag or arg.startswith(flag + "=") for arg in args)
 
 
-def role_flags(role: Role, args: list[str], settings: str) -> list[str]:
+def role_flags(role: Role, args: list[str], run: str) -> list[str]:
     """Flags laid in front of the launch argv. --settings stays last: it ends
     the variadic --disallowedTools before the prompt argument."""
     flags: list[str] = []
@@ -338,10 +454,16 @@ def role_flags(role: Role, args: list[str], settings: str) -> list[str]:
         flags += ["--autocompact", str(role.autocompact)]
     if role.deny:
         flags += ["--disallowedTools", ",".join(role.deny)]
-    appended = append_file(role)
-    if appended is not None:
-        flags += ["--append-system-prompt-file", str(appended)]
-    return [*flags, "--settings", settings]
+    if role.isolate:
+        flags += ["--setting-sources", "local", "--plugin-dir", f"{run}/plugin"]
+        # Without the user source the CLI drops the user-scope MCP servers.
+        flags += ["--mcp-config", str(mcp_file())]
+        flags += ["--append-system-prompt-file", f"{run}/instructions.md"]
+    else:
+        appended = append_file(role)
+        if appended is not None:
+            flags += ["--append-system-prompt-file", str(appended)]
+    return [*flags, "--settings", f"{run}/settings.json"]
 
 
 # --------------------------------------------------------------------------- #
@@ -442,7 +564,14 @@ def launch_argv(name: str, real: str, args: list[str]) -> list[str]:
         data, path = read_launcher(value)
         launcher = merge(launcher, data)
         source = path or source
-    merged = merge(overlay(role, disk_skills(), window_models()), launcher)
+    layered = overlay(role, disk_skills(), window_models())
+    instructions = ""
+    if role.isolate:
+        if not mcp_file().is_file():
+            raise RoleError(f"{role.name}.isolate: {mcp_file()} is not a file")
+        layered = merge(isolated_base(), layered)
+        instructions = build_instructions(role, Path.cwd())
+    merged = merge(layered, launcher)
 
     run = run_root() / (source.name if source else f"pid-{os.getpid()}")
     run.mkdir(parents=True, exist_ok=True)
@@ -450,9 +579,11 @@ def launch_argv(name: str, real: str, args: list[str]) -> list[str]:
         write_atomic(run / "launcher", f"{source}\n")
     # exec keeps the pid, so it names the CLI process that reads this set.
     write_atomic(run / "pid", f"{os.getpid()}\n")
-    settings = run / "settings.json"
-    flags = role_flags(role, rest, str(settings))
-    write_atomic(settings, json.dumps(merged, indent=2) + "\n")
+    flags = role_flags(role, rest, str(run))
+    write_atomic(run / "settings.json", json.dumps(merged, indent=2) + "\n")
+    if role.isolate:
+        write_atomic(run / "instructions.md", instructions)
+        build_plugin(role, run / "plugin")
     prune(run)
     return [real, *flags, *rest]
 
@@ -495,6 +626,8 @@ def check_errors() -> list[str]:
                 errors.append(f"{name}.skills.only: '{skill}' is not on disk")
         try:
             append_file(role)
+            if role.isolate:
+                kept_sections(role)
         except RoleError as exc:
             errors.append(str(exc))
     return errors
@@ -518,25 +651,37 @@ def cmd_list() -> int:
 
 def cmd_show(name: str, as_json: bool) -> int:
     role = load_role(name)
-    resolved: Obj = {
-        "name": role.name,
-        "saved": role.saved,
-        "mode": "overlay",
-        "profile": PROFILE_PREFIX + role.name,
-        "flags": role_flags(role, [], "<run>/settings.json"),
-        "settings": overlay(role, disk_skills(), window_models()),
-    }
+    mode = "isolate" if role.isolate else "overlay"
+    profile = PROFILE_PREFIX + role.name
+    flags = role_flags(role, [], "<run>")
+    settings = overlay(role, disk_skills(), window_models())
+    kept = [title for title, _ in kept_sections(role)] if role.isolate else []
+    skills = [f"{PLUGIN}:{s.removeprefix(SYNCED_PREFIX)}" for s in role.only or []]
     if as_json:
+        resolved: Obj = {
+            "name": role.name,
+            "saved": role.saved,
+            "mode": mode,
+            "profile": profile,
+            "flags": flags,
+            "settings": settings,
+        }
+        if role.isolate:
+            resolved["sections"] = kept
+            resolved["skills"] = skills
         print(json.dumps(resolved, indent=2))
         return 0
-    flags = resolved["flags"]
-    assert isinstance(flags, list)
     print(f"role:     {role.name} (saved {role.saved})")
-    print(f"mode:     {resolved['mode']}")
-    print(f"profile:  {resolved['profile']}")
+    print(f"mode:     {mode}")
+    print(f"profile:  {profile}")
     print(f"flags:    {' '.join(flags)}")
-    print("settings:")
-    print(json.dumps(resolved["settings"], indent=2))
+    if role.isolate:
+        print(f"sections: {'; '.join(kept)}")
+        print(f"skills:   {' '.join(skills)}")
+        print("settings (over the global settings.json):")
+    else:
+        print("settings:")
+    print(json.dumps(settings, indent=2))
     return 0
 
 
