@@ -26,8 +26,8 @@ type passRun struct {
 	sent     map[string]bool
 }
 
-// skip is why t gets nothing this pass, "" when it may be sent to.
-func (ib *Inbox) skip(p *passRun, t target) string {
+// holdBack is why t gets nothing this pass, "" when it may be sent to.
+func (ib *Inbox) holdBack(p *passRun, t target) string {
 	switch {
 	case p.sessions == nil:
 		return "agent-manager could not list sessions"
@@ -94,7 +94,7 @@ func (ib *Inbox) Pass() ([]Outcome, error) {
 func (ib *Inbox) passAnswers(p *passRun, b Batch) (*Outcome, error) {
 	o := &Outcome{Kind: "answers", Name: b.Decisions[0].SessionName, Count: len(b.Decisions)}
 	t := answerTarget(p.sessions, b.SessionID, o.Name)
-	if why := ib.skip(p, t); why != "" {
+	if why := ib.holdBack(p, t); why != "" {
 		o.Text = "waiting " + strings.Join(ids(b.Decisions), ", ") + " for " + o.Name + ": " + why
 		return o, nil
 	}
@@ -126,7 +126,7 @@ func (ib *Inbox) passAnswers(p *passRun, b Batch) (*Outcome, error) {
 func (ib *Inbox) passReply(p *passRun, n Note) (*Outcome, error) {
 	o := &Outcome{Kind: "reply", Name: n.SessionName, Count: 1}
 	t := replyTarget(p.sessions, n)
-	if why := ib.skip(p, t); why != "" {
+	if why := ib.holdBack(p, t); why != "" {
 		o.Text = "waiting reply " + n.Label() + " for " + o.Name + ": " + why
 		return o, nil
 	}
@@ -152,7 +152,7 @@ func (ib *Inbox) passChat(p *passRun, chats []Chat) (*Outcome, error) {
 	if len(live) > 0 {
 		t = target{id: live[0]}
 	}
-	if why := ib.skip(p, t); why != "" {
+	if why := ib.holdBack(p, t); why != "" {
 		o.Text = fmt.Sprintf("waiting %d message(s) for %s: %s", len(chats), o.Name, why)
 		return o, nil
 	}
