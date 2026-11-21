@@ -143,6 +143,15 @@ repo:
 - plugins that load from the user skills dir (`clawd-status`)
 - MCP servers added by hand with `claude mcp add` and absent from `agents/mcp.json`
 
+Limits to know before turning it on for a role:
+
+- Only `CLAUDE.md` in the launch directory is appended, as plain text: a launch from
+  a subdirectory gets none, and `@path` imports in it are not expanded.
+- The global settings ride in the `--settings` file, which the CLI ranks above
+  `.claude/settings.local.json`, so a local scalar that overrides the global one in
+  overlay mode loses to it here.
+- A fence left open in the global `CLAUDE.md` hides the titles after it.
+
 Still loaded: auto-memory (the project's memory dir), `.claude/settings.local.json`,
 bundled skills, and whatever `enabledPlugins` holds after the merge.
 

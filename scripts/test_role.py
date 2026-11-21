@@ -366,6 +366,34 @@ def test_sections_skip_fenced_blocks() -> None:
     assert "".join(body for _, body in found) == GLOBAL_CLAUDE
 
 
+def test_sections_skip_tilde_fences() -> None:
+    found = role.sections("# A\n\n~~~\n# comment\n~~~\n\n# B\n")
+    assert [title for title, _ in found] == ["A", "B"]
+
+
+def test_unreadable_project_instructions_fail_cleanly(
+    repo: Path, tmp_path: Path
+) -> None:
+    parsed = role.parse_role("r", {**ISOLATED, "append": None} | {"append": "x.md"})
+    (repo / "agent-manager" / "roles" / "x.md").write_text("x")
+    (tmp_path / "CLAUDE.md").write_bytes(b"caf\xe9")
+    with pytest.raises(role.RoleError, match=r"CLAUDE\.md"):
+        role.build_instructions(parsed, tmp_path)
+
+
+def test_check_reports_each_isolate_problem(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_roles(
+        repo, {"r": {**ISOLATED, "instructions": {"keep": ["Gone"]}, "append": "no.md"}}
+    )
+    assert role.main(["check"]) == 1
+    err = capsys.readouterr().err
+    assert "r.append:" in err
+    assert "r.instructions.keep: 'Gone'" in err
+    assert "mcp.json" in err
+
+
 def test_isolated_instructions(repo: Path, tmp_path: Path) -> None:
     (repo / "agent-manager" / "roles" / "extra.md").write_text("Role extra.\n")
     parsed = role.parse_role("r", ISOLATED)

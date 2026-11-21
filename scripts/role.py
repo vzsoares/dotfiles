@@ -366,7 +366,7 @@ def sections(text: str) -> list[tuple[str, str]]:
     found: list[tuple[str, str]] = []
     fenced = False
     for line in text.splitlines(keepends=True):
-        if line.lstrip().startswith("```"):
+        if line.lstrip().startswith(("```", "~~~")):
             fenced = not fenced
         elif not fenced and line.startswith("# "):
             found.append((line[2:].strip(), ""))
@@ -376,13 +376,19 @@ def sections(text: str) -> list[tuple[str, str]]:
     return found
 
 
+def read_text(path: Path) -> str:
+    try:
+        return path.read_text()
+    except OSError as exc:
+        raise RoleError(f"cannot read {path}: {exc.strerror}") from exc
+    except UnicodeDecodeError as exc:
+        raise RoleError(f"cannot read {path}: {exc}") from exc
+
+
 def kept_sections(role: Role) -> list[tuple[str, str]]:
     """The sections of the global CLAUDE.md an isolated role keeps, in file order."""
     path = global_claude()
-    try:
-        have = sections(path.read_text())
-    except OSError as exc:
-        raise RoleError(f"cannot read {path}: {exc.strerror}") from exc
+    have = sections(read_text(path))
     titles = [title for title, _ in have]
     for title in role.keep:
         if title not in titles:
@@ -397,11 +403,11 @@ def build_instructions(role: Role, cwd: Path) -> str:
     parts = [body.rstrip() + "\n" for _, body in kept_sections(role)]
     project = cwd / "CLAUDE.md"
     if project.is_file():
-        text = project.read_text().rstrip()
+        text = read_text(project).rstrip()
         parts.append(f"# Project instructions ({project})\n\n{text}\n")
     appended = append_file(role)
     if appended is not None:
-        parts.append(appended.read_text().rstrip() + "\n")
+        parts.append(read_text(appended).rstrip() + "\n")
     return "\n".join(parts)
 
 
@@ -455,6 +461,7 @@ def role_flags(role: Role, args: list[str], run: str) -> list[str]:
     if role.deny:
         flags += ["--disallowedTools", ",".join(role.deny)]
     if role.isolate:
+        append_file(role)
         flags += ["--setting-sources", "local", "--plugin-dir", f"{run}/plugin"]
         # Without the user source the CLI drops the user-scope MCP servers.
         flags += ["--mcp-config", str(mcp_file())]
@@ -626,10 +633,16 @@ def check_errors() -> list[str]:
                 errors.append(f"{name}.skills.only: '{skill}' is not on disk")
         try:
             append_file(role)
-            if role.isolate:
-                kept_sections(role)
         except RoleError as exc:
             errors.append(str(exc))
+        if not role.isolate:
+            continue
+        try:
+            kept_sections(role)
+        except RoleError as exc:
+            errors.append(str(exc))
+        if not mcp_file().is_file():
+            errors.append(f"{name}.isolate: {mcp_file()} is not a file")
     return errors
 
 
