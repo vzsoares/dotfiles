@@ -12,6 +12,7 @@ Run with:  uv run scripts/test_rotate.py
 
 from __future__ import annotations
 
+import fcntl
 import importlib.util
 import json
 import os
@@ -488,6 +489,35 @@ def test_ready_rechecks_rest_before_the_clear(env: Env) -> None:
     assert env.cycle("orchestrator")["phase"] == "requested"
 
 
+def test_ready_rereads_the_status_before_the_clear(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    note = request(env)
+    ready(env, note)
+    listings = iter([[orch()], [orch(status="working")]])
+    monkeypatch.setattr(rotate, "need_sessions", lambda: next(listings))
+    env.forget()
+    tick()
+    assert not [c for c in env.calls("tmux") if "send-keys" in c]
+    assert env.cycle("orchestrator")["block"] == "status is working"
+    assert env.cycle("orchestrator")["phase"] == "requested"
+
+
+def test_failed_rerequest_send_is_not_a_miss(env: Env) -> None:
+    request(env)
+    env.append(orch(), turn("Done.", "u1"))
+    env.flag("send_fail")
+    tick()
+    cycle = env.cycle("orchestrator")
+    assert cycle["misses"] == 0 and cycle["phase"] == "requested"
+    env.unflag("send_fail")
+    env.forget()
+    tick()
+    (again,) = env.sends()
+    assert "did not end with HANDOFF_READY" in again[2]
+    assert env.cycle("orchestrator")["misses"] == 1
+
+
 def test_ready_ignores_quiet_time(env: Env) -> None:
     note = request(env)
     ready(env, note)
@@ -714,19 +744,19 @@ def test_rotation_resets_the_cancel_count(env: Env) -> None:
 def test_second_tick_exits_on_the_lock(env: Env) -> None:
     env.sessions(orch())
     env.write(orch(), [])
-    (env.state / "lock").write_text(str(os.getpid()))
-    assert tick() == 0
+    with (env.state / "lock").open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert tick() == 0
     assert env.calls() == []
-    assert (env.state / "lock").read_text() == str(os.getpid())
 
 
-def test_stale_lock_is_taken_over(env: Env) -> None:
+def test_lock_file_nobody_holds_is_taken(env: Env) -> None:
     env.sessions(orch())
     env.write(orch(), [])
     (env.state / "lock").write_text("999999999")
     assert tick() == 0
     assert len(env.sends()) == 1
-    assert not (env.state / "lock").exists()
+    assert stat.S_IMODE(env.state.stat().st_mode) == 0o700
 
 
 # --------------------------------------------------------------------------- #
@@ -787,10 +817,11 @@ def test_check_note_planted_secret(
     assert "gitleaks found a secret" in capsys.readouterr().out
 
 
-@pytest.mark.skipif(shutil.which("gitleaks") is None, reason="gitleaks not installed")
 def test_check_note_real_gitleaks_and_repo_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The real binary, which the pre-push hook needs on both machines anyway."""
+    assert shutil.which("gitleaks"), "install gitleaks"
     monkeypatch.setenv("HOME", str(tmp_path))
     note = tmp_path / "note.md"
     note.write_text(valid_note())

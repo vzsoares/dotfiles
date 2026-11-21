@@ -41,7 +41,8 @@ live session with that name in group `chief`):
    do nothing else, end with `HANDOFF_READY` or `HANDOFF_DEFER <reason>`.
 4. **Ready**, on a later tick: at rest again, the last turn ends with
    `HANDOFF_READY`, the note passes `check-note`, and `pending_background()` of
-   the transcript is empty. The at-rest checks run again, without the quiet time.
+   the transcript is empty. The at-rest checks run again, without the quiet time,
+   and the status and conversation are read from a new session listing.
 5. **Clear.** Write `~/.cache/zen/rotate/clearing-<session id>`, type `/clear` with
    `tmux -L agentmgr send-keys`, poll `agent-manager sessions --json` up to 20 s
    for a new `agent_session_id`, remove the marker.
@@ -91,8 +92,9 @@ zen-rotate resume <role>                # lift a pause and any backoff
 
 A cycle started with `now` is carried on by later ticks, whatever `enabled` says.
 With both roles off and no cycle in flight, `tick` runs no external command.
-`tick` and `now` take `~/.cache/zen/rotate/lock` (a dead owner's pid is taken
-over); a second `tick` exits 0 at once.
+`tick`, `now` and `resume` hold an `flock` on `~/.cache/zen/rotate/lock`, which
+ends with its owner; a second `tick` exits 0 at once. The directory is 0700:
+`rotate.log` can hold a pane tail.
 
 Sends go out as `--from zen-rotate`, and again without the name when that fails:
 agent-manager refuses a sender name from a caller that has a session.

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fcntl
 import importlib.util
 import json
 import os
@@ -309,50 +310,32 @@ def save_state(state: State) -> None:
     os.replace(tmp, path)
 
 
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+def ensure_state_dir() -> Path:
+    path = state_dir()
+    path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+    return path
 
 
 @contextlib.contextmanager
 def lock() -> Iterator[bool]:
-    """Yield True when this process holds the lock; a dead owner is taken over."""
-    path = state_dir() / "lock"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    held = False
-    for _ in range(2):
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            try:
-                owner = int(path.read_text().strip() or "0")
-            except (OSError, ValueError):
-                owner = 0
-            if owner and _pid_alive(owner):
-                break
-            path.unlink(missing_ok=True)
-            continue
-        with os.fdopen(fd, "w") as f:
-            f.write(str(os.getpid()))
-        held = True
-        break
+    """Yield True when this process holds the flock; it ends with its owner."""
+    fd = os.open(ensure_state_dir() / "lock", os.O_CREAT | os.O_RDWR, 0o600)
+    held = True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        held = False
     try:
         yield held
     finally:
-        if held:
-            path.unlink(missing_ok=True)
+        os.close(fd)
 
 
 def log(message: str) -> None:
     line = f"{datetime.fromtimestamp(now()).strftime('%H:%M')} {message}"
     print(line, flush=True)
-    path = state_dir() / "rotate.log"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = ensure_state_dir() / "rotate.log"
     day = datetime.fromtimestamp(now()).strftime("%Y-%m-%d")
     with path.open("a") as f:
         f.write(f"{day} {line}\n")
@@ -733,6 +716,17 @@ def rest_block(session: Session, quiet_seconds: float) -> str:
     return open_approvals()
 
 
+def fresh_block(key: str, cycle: Cycle) -> str:
+    """Why a new session listing forbids the clear; "" when it does not."""
+    session = cycle_session(key, cycle, need_sessions())
+    if session is None:
+        return "the session is gone"
+    if str(session.get("agent_session_id") or "") != cycle.conversation:
+        return "the conversation changed"
+    status = str(session.get("status", ""))
+    return "" if status in REST_STATUSES else f"status is {status or 'unknown'}"
+
+
 def gate_block(cycle: Cycle) -> str:
     if cycle.paused:
         return "paused after 3 cancelled restarts (zen-rotate resume)"
@@ -803,7 +797,8 @@ def cancel(
 
 def rerequest(
     key: str, state: State, config: Config, session: Session, gap: str, base: str
-) -> None:
+) -> bool:
+    """Whether the request went out."""
     cycle = state.cycle(key)
     if cycle.requests >= MAX_REQUESTS:
         cancel(
@@ -813,27 +808,27 @@ def rerequest(
             f"{MAX_REQUESTS} requests without a clean handoff",
             session,
         )
-        return
+        return False
     text = rerequest_text(cycle.note, gap, cycle.requests + 1)
     if not send(cycle.session, text):
         cycle.block = "agent-manager send failed"
-        return
+        return False
     cycle.requests += 1
     cycle.requested_at = now()
     cycle.base_uuid = base
     cycle.block = f"asked again: {gap}"
     log(f"asked {key} again: {gap}")
+    return True
 
 
 def miss(
     key: str, state: State, config: Config, session: Session, gap: str, base: str
 ) -> None:
     cycle = state.cycle(key)
-    cycle.misses += 1
-    if cycle.misses >= MAX_MISSES:
+    if cycle.misses + 1 >= MAX_MISSES:
         cancel(key, state, config, gap, session)
-        return
-    rerequest(key, state, config, session, gap, base)
+    elif rerequest(key, state, config, session, gap, base):
+        cycle.misses += 1
 
 
 def confirm_clear(session_id: str, old_conversation: str) -> bool:
@@ -959,7 +954,7 @@ def advance(key: str, state: State, config: Config, sessions: list[Session]) -> 
         gap = "background runs are still running: " + ", ".join(pending)
         miss(key, state, config, session, gap, last_uuid)
         return
-    block = rest_block(session, 0)
+    block = rest_block(session, 0) or fresh_block(key, cycle)
     if block:
         if timed_out:
             cancel(key, state, config, f"not at rest for 20 minutes ({block})", session)

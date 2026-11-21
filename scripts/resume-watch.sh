@@ -19,7 +19,7 @@ usage: zen-resume-watch [--once]
                  (re-probed every 10 min); a failed send is retried at the
                  next 3 scans without a new probe
 
-  --once         one pass of both checks, then exit
+  --once         one pass of each check, then exit
   -h, --help     show this help
 
 Env: ZEN_RESUME_PROBE_WAIT  seconds between probes (default 600)
