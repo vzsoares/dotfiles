@@ -259,6 +259,28 @@ def test_deleted_test_file(repo: Path) -> None:
     assert rules == {"test-deleted", "tests-removed"}
 
 
+def test_deleted_test_file_hits_own_path(repo: Path) -> None:
+    _commit(repo, {"src/auth.test.ts": None})
+    hits = gate.run_gate(repo, "dev").hits
+    assert [(h.file, h.rule) for h in hits] == [
+        ("src/auth.test.ts", "test-deleted"),
+        ("src/auth.test.ts", "tests-removed"),
+    ]
+
+
+def test_deleted_test_file_allow_clears_gate(repo: Path) -> None:
+    _commit(
+        repo,
+        {
+            "src/auth.test.ts": None,
+            ".zen-gate-allow": (
+                "src/auth.test.ts test-deleted\nsrc/auth.test.ts tests-removed\n"
+            ),
+        },
+    )
+    assert gate.run_gate(repo, "dev").clean
+
+
 def test_fewer_test_cases(repo: Path) -> None:
     _commit(repo, {"src/auth.test.ts": "it('a', () => {})\n"})
     hits = gate.run_gate(repo, "dev").hits

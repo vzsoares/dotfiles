@@ -267,7 +267,10 @@ def scan(files: list[FileDiff]) -> Report:
 
     for fd in files:
         if fd.status == "D" and is_test_path(fd.path) and not is_doc(fd.path):
-            cases_removed += sum(1 for t in fd.removed if TEST_CASE_RE.search(t))
+            removed = sum(1 for t in fd.removed if TEST_CASE_RE.search(t))
+            cases_removed += removed
+            if removed:
+                removed_by_file.append((fd.path, removed))
     if cases_removed > cases_added:
         detail = f"-{cases_removed}/+{cases_added}"
         for path, _ in removed_by_file or [("(diff)", 0)]:
