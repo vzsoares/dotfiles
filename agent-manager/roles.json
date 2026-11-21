@@ -44,7 +44,20 @@
     "effort": "medium",
     "settings": {
       "outputStyle": "default",
-      "enabledPlugins": { "figma@claude-plugins-official": false }
+      "enabledPlugins": { "figma@claude-plugins-official": false },
+      "hooks": {
+        "PreToolUse": [
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "command -v rtk >/dev/null && rtk hook claude || true"
+              }
+            ]
+          }
+        ]
+      }
     },
     "skills": { "only": ["zen-flow", "anthropic-skills:chrome-browser"] }
   },

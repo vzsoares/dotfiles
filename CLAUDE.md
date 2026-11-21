@@ -24,6 +24,9 @@ agent-manager/ # agent-manager (parallel AI agents over tmux) settings +
               #   sets one env profile `role-<name>` per role, whose PATH
               #   starts at shim/, and shim/claude applies the role at launch.
               #   test: `bash agent-manager/test/shim.sh`
+              #   Only role-worker's overlay carries the rtk Bash PreToolUse
+              #   hook (guarded: a missing rtk is a no-op); hooks merge with the
+              #   global ones.
 agents/       # agent-neutral config for Claude, pi, Codex and agy (not
               #   .claude/agents/, Claude's subagents): mcp.json is the one
               #   MCP server list (./link-claude registers it with

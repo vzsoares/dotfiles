@@ -302,6 +302,13 @@ def test_merge() -> None:
     assert base["o"] == {"x": 1, "y": 2}
 
 
+def test_isolated_merge_keeps_global_hooks_beside_the_role_hook() -> None:
+    glob = {"hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [1]}]}}
+    top = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [2]}]}}
+    merged = role.merge(glob, top)
+    assert [h["matcher"] for h in merged["hooks"]["PreToolUse"]] == ["Edit", "Bash"]
+
+
 def test_window_overrides_each_pinned_model(repo: Path) -> None:
     settings = Path.home() / ".claude" / "settings.json"
     settings.write_text(
@@ -598,6 +605,23 @@ def test_tracked_file_is_the_day_one_table(tracked: None) -> None:
         assert r.settings["enabledPlugins"] == {FIGMA: False}
         assert r.only == only
         assert (r.off, r.deny, r.append) == ([], [], None)
+
+
+RTK_HOOK = {
+    "matcher": "Bash",
+    "hooks": [
+        {
+            "type": "command",
+            "command": "command -v rtk >/dev/null && rtk hook claude || true",
+        }
+    ],
+}
+
+
+def test_only_the_worker_carries_the_rtk_hook(tracked: None) -> None:
+    for r in role.load_roles():
+        pre = r.settings.get("hooks", {}).get("PreToolUse", [])
+        assert (RTK_HOOK in pre) == (r.name == "worker"), r.name
 
 
 def test_tracked_worker_resolves(tracked: None) -> None:
