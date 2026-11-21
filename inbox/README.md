@@ -68,7 +68,9 @@ A message for a session that is down is kept and sent when the session is back:
 - `chats.claimed_at` (schema v13) is the chat claim; a `sending` chat older than
   60 s is taken over. A chat written while others wait or are being sent queues behind them.
 - A chat or reply delivered 10 minutes or more after it was written says so:
-  `(written 3h ago, queued while chief was down) …`, `…: (written 3h ago)`.
+  `(written 3h ago, queued while chief was down) …` when chief being down kept
+  the chat waiting, `(written 3h ago) …` when it only queued behind another chat
+  (a reply: `…: (written 3h ago)`).
 - The list shows a `Waiting` group and the header `◷ <name> is down · n queued`;
   after 15 minutes the header turns red and one banner is posted per outage.
 

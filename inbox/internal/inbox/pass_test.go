@@ -455,6 +455,26 @@ func TestDelayMarkerFromTenMinutes(t *testing.T) {
 	}
 }
 
+// A chat held only behind an earlier chat never waited for chief to be back.
+func TestLateChatQueuedBehindAnotherDoesNotSayChiefWasDown(t *testing.T) {
+	ib, fake, _ := open(t)
+	fake.sessions = am.Sessions{session("c1", "chief", "idle")}
+	at(t, "2026-01-01T00:00:00+00:00")
+	if c, err := ib.AddChat("", "in flight"); err != nil || c.Status != "sending" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if c, err := ib.SendChat("", "next"); err != nil || c.Status != "waiting" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	at(t, "2026-01-01T03:00:00+00:00")
+	pass(t, ib)
+	pass(t, ib)
+	want := []string{"(written 3h ago) in flight", "(written 3h ago) next"}
+	if !slices.Equal(fake.chiefs, want) {
+		t.Fatalf("%q", fake.chiefs)
+	}
+}
+
 func TestRetryTakesWaitingRowsAndKeepsThemWaitingWhileDown(t *testing.T) {
 	ib, fake, _ := open(t)
 	fake.sessions = am.Sessions{session("s1", "spec-s1", "dead"), session("c1", "chief", "dead")}

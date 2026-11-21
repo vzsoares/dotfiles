@@ -176,7 +176,7 @@ func (m *Model) keyChief(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) viewChief() frame {
 	head := "message chief"
 	if m.chiefTask != "" {
-		head = pyfmt.Clip(inbox.ChatMessage(m.chiefTask, m.snap.titles[m.chiefTask], "", "")+"· message chief", m.w)
+		head = pyfmt.Clip(inbox.ChatMessage(m.chiefTask, m.snap.titles[m.chiefTask], "", "", false)+"· message chief", m.w)
 	}
 	top := []section{{lines: []string{head}}}
 	if m.flash != "" {

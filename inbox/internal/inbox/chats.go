@@ -42,15 +42,26 @@ type Chat struct {
 	Task, Text, SentAt       string
 	MessageID, Status, Error string
 	ClaimedAt                string
+	// Waited is set by claimChat when chief being down kept the chat waiting;
+	// a chat that only queued behind another is not Waited.
+	Waited bool
 }
 
 func (c Chat) Label() string { return "c" + strconv.FormatInt(c.ID, 10) }
 
+// queuedBehind starts the Error of a chat held back by an earlier chat.
+const queuedBehind = "queued behind c"
+
 // ChatMessage is what chief receives: a thread's message leads with its task
-// and title, and one delivered lateAfter or more after written says so.
-func ChatMessage(task, title, text, written string) string {
+// and title, and one delivered lateAfter or more after written says so; it
+// adds that chief was down only when the chat waited for it (waited).
+func ChatMessage(task, title, text, written string, waited bool) string {
 	if age, late := writtenAgo(written); late {
-		text = "(written " + age + " ago, queued while chief was down) " + text
+		note := "(written " + age + " ago"
+		if waited {
+			note += ", queued while chief was down"
+		}
+		text = note + ") " + text
 	}
 	if task == "" {
 		return text
@@ -69,7 +80,7 @@ func (ib *Inbox) AddChat(task, text string) (Chat, error) {
 		err := ib.conn.QueryRowContext(ctx, "SELECT id FROM chats WHERE status IN ('waiting', 'sending') ORDER BY id DESC LIMIT 1").Scan(&behind)
 		switch {
 		case err == nil:
-			c.Status, c.Error = "waiting", "queued behind c"+strconv.FormatInt(behind, 10)
+			c.Status, c.Error = "waiting", queuedBehind+strconv.FormatInt(behind, 10)
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		default:
@@ -117,7 +128,7 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 		_ = ib.UpdateChat(c.ID, "", c.Status, c.Error)
 		return c, err
 	}
-	id, errText, down := ib.AM.Chief(ChatMessage(c.Task, title, c.Text, c.SentAt))
+	id, errText, down := ib.AM.Chief(ChatMessage(c.Task, title, c.Text, c.SentAt, c.Waited))
 	c.MessageID, c.Error, c.Status = id, errText, "queued"
 	switch {
 	case errText != "" && down:
@@ -156,6 +167,7 @@ func (ib *Inbox) claimChat() (c Chat, ok bool, err error) {
 			return err
 		}
 		c, ok = cs[0], true
+		c.Waited = c.Status == "waiting" && !strings.HasPrefix(c.Error, queuedBehind)
 		c.Status, c.ClaimedAt = "sending", stamp()
 		return ib.exec("UPDATE chats SET status = 'sending', claimed_at = ? WHERE id = ?", c.ClaimedAt, c.ID)
 	})
