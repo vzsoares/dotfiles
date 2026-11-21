@@ -1,0 +1,24 @@
+cockpit · ◷ spec-s1 +1 is down · 2 queued ·…
+» queued for chief: sent when chief is back
+  Inbox · all clear
+
+Waiting · sent when the session is back
+› waiting spec-s1: 1 answer(s) · session s1…
+  waiting chief: 1 message(s) · no live ses…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter retry · c chief · ? help · q quit

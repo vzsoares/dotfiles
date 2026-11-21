@@ -1,0 +1,7 @@
+step 148 down-ask
+args: ["ask" "40" "-q" "Down?" "-o" "a" "-o" "b" "--session" "s12"]
+exit: 0
+-- stdout --
+40.1
+-- stderr --
+-- sends --

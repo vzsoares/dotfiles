@@ -12,7 +12,7 @@ func TestChatInsertThenStatusUpdates(t *testing.T) {
 	ib, _, _ := open(t)
 	at(t, "2026-01-01T00:00:00+00:00")
 	c, err := ib.AddChat("843", "how is it going?")
-	if err != nil || c.ID != 1 || c.Status != "queued" || c.SentAt != "2026-01-01T00:00:00+00:00" {
+	if err != nil || c.ID != 1 || c.Status != "sending" || c.ClaimedAt != c.SentAt || c.SentAt != "2026-01-01T00:00:00+00:00" {
 		t.Fatalf("%+v %v", c, err)
 	}
 	if err := ib.UpdateChat(c.ID, "m7", "queued", ""); err != nil {

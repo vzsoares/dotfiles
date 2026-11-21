@@ -40,6 +40,9 @@ elif args[0] == "send":
     if os.path.exists(os.path.join(d, "refuse_from")) and "--from" in args:
         sys.stderr.write("a sender name is for a caller with no session\\n")
         sys.exit(1)
+    if os.path.exists(os.path.join(d, "refuse")):
+        sys.stderr.write("too many undelivered\\n")
+        sys.exit(1)
     print('{"message_id": 77}')
 elif args[0] == "message-status":
     print('{"status": "delivered"}')
@@ -125,11 +128,33 @@ def test_send_drops_from_when_agent_manager_refuses_it(am, capsys) -> None:
     assert [("--from" in c) for c in sends] == [True, False]
 
 
-def test_send_without_chief_exits_1_and_sends_nothing(am, capsys) -> None:
-    am(session("x", "other"))
-    assert chief.main(["hi"]) == 1
-    assert "no live session" in capsys.readouterr().err
+def test_send_without_chief_exits_3_and_sends_nothing(am, capsys) -> None:
+    am(session("x", "other"), session("dead", status="dead"))
+    assert chief.main(["hi"]) == 3
+    assert capsys.readouterr().err == "zen-chief: no live session named 'chief'\n"
     assert not [c for c in am.calls() if c[0] == "send"]
+
+
+def test_send_with_several_chiefs_exits_1(am, capsys) -> None:
+    am(session("a"), session("b"))
+    assert chief.main(["hi"]) == 1
+    err = capsys.readouterr().err
+    assert err == "zen-chief: 2 live sessions named 'chief': a, b\n"
+    assert not [c for c in am.calls() if c[0] == "send"]
+
+
+def test_send_refused_exits_1(am, capsys) -> None:
+    am(session("c1"))
+    (am.dir / "refuse").write_text("1")
+    assert chief.main(["hi"]) == 1
+    assert capsys.readouterr().err == "zen-chief: too many undelivered\n"
+
+
+def test_send_with_unlistable_sessions_exits_1(am, capsys) -> None:
+    (am.dir / "sessions.json").write_text("not json")
+    assert chief.main(["hi"]) == 1
+    err = capsys.readouterr().err
+    assert err == "zen-chief: could not list sessions (agent-manager failed)\n"
 
 
 def test_status(am, capsys) -> None:

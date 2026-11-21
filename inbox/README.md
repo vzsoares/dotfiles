@@ -46,17 +46,39 @@ its asking sessions, visible notes (with replies), and in the thread screen
 (`o` on its row; `enter` folds it) the full timeline, closed decisions and your `c` chats to chief included.
 Notes without a task sit in `No task`; `zen-inbox refile <note> <task|->` or `T` on
 a note moves one in or out. `c` on a thread binds the message as `[#task title] …`
-and stores it in the `chats` table (schema v10). Every 15 s a pass sends a chat
-that never got a message id and tracks the status of all undelivered ones, in order.
+and stores it in the `chats` table (schema v10). Every 15 s a pass sends what waits
+for a session that was down (see Waiting) and tracks the status of the undelivered chats.
 The top Inbox row is always shown (`Inbox · all clear` at zero); `enter` lists the unread notes and open decisions flat; finishing
 one opens the next. Expanded threads (`threads_open`) whose task has nothing left are dropped from the state file, except from an empty snapshot.
+
+## Waiting
+
+A message for a session that is down is kept and sent when the session is back:
+
+- **Down** means it can come back: no live session named `chief` for a `c` chat or
+  a note reply; for answers, an asker still listed, not archived and dead. An
+  archived or missing asker, several live namesakes, a refusal or a timeout stay a
+  failed delivery with a manual `r`.
+- Answers go to the asking session while it is live, else to the one live session
+  with its name.
+- The pass (`inbox.Pass`: the panel every 15 s and at start, or `zen-inbox retry
+  --waiting`) lists sessions once, claims each item in its own `BEGIN IMMEDIATE`
+  and sends at most one message per target: answers, then replies oldest first,
+  then the oldest chat. With nothing waiting it runs no command.
+- `chats.claimed_at` (schema v13) is the chat claim; a `sending` chat older than
+  60 s is taken over. A chat written while others wait or are being sent queues behind them.
+- A chat or reply delivered 10 minutes or more after it was written says so:
+  `(written 3h ago, queued while chief was down) …`, `…: (written 3h ago)`.
+- The list shows a `Waiting` group and the header `◷ <name> is down · n queued`;
+  after 15 minutes the header turns red and one banner is posted per outage.
 
 ## Layout
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v12, IDs, guarded transitions, flush, message,
-                    prod-action approvals, chief's notes, threads, chats
+internal/inbox      store: schema v13, IDs, guarded transitions, flush, message,
+                    prod-action approvals, chief's notes, threads, chats, the
+                    waiting pass
 internal/guard      refuses prod answers and a manual Done from inside an agent session (env, ps walk)
 internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell)
 internal/view       text for list rows, context blocks and question screens
@@ -66,8 +88,8 @@ internal/tui        the watch panel (list, threads, session, review all, walk, r
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
 testdata/panel      panel screens at fixed sizes (`go test ./internal/tui -update-panel`)
-testdata/xver       v1 and v2 dbs written by inbox.py, and v4 and v9 dbs written by
-                    those binaries (v4.sql, v9.sql), as SQL dumps
+testdata/xver       v1 and v2 dbs written by inbox.py, and v4, v9 and v12 dbs written
+                    by those binaries (v4.sql, v9.sql, v12.sql), as SQL dumps
 testdata/fakes      fake agent-manager, tmux, zen-bell, terminal-notifier, osascript for tests
 ```
 
@@ -85,4 +107,5 @@ nothing is sent over SSH (see the wiki's "Phone access").
 `ZEN_FLOW_DB` points tests at a temp db and `ZEN_INBOX_NOW` pins the clock (tests
 only). The golden files were captured once from `inbox.py` with
 `testdata/golden/pyshim.py` before it was deleted; `withdraw` by the asking session
-itself is a deliberate deviation (#582) and is not in them.
+itself is a deliberate deviation (#582) and is not in them. Steps 147 on (waiting
+answers, `retry --waiting`) were captured from the Go binary.

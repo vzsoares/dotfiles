@@ -53,22 +53,7 @@ func WrapRest(text string, width int, first, rest string) []string {
 }
 
 // Age is the time since stamp as 5s, 3m, 2h or 4d.
-func Age(stamp string, at time.Time) string {
-	then, ok := inbox.ParseStamp(stamp)
-	if !ok {
-		return "?"
-	}
-	secs := int(at.Sub(then).Seconds())
-	for _, u := range []struct {
-		unit string
-		size int
-	}{{"d", 86400}, {"h", 3600}, {"m", 60}} {
-		if secs >= u.size {
-			return fmt.Sprintf("%d%s", secs/u.size, u.unit)
-		}
-	}
-	return fmt.Sprintf("%ds", max(secs, 0))
-}
+func Age(stamp string, at time.Time) string { return inbox.Age(stamp, at) }
 
 // Brief is one task's context block.
 type Brief struct {
@@ -460,6 +445,21 @@ func StatusLines(held, open []inbox.Decision, undelivered []inbox.Batch) []strin
 	return lines
 }
 
+// WaitingLines is one "waiting · name: ids (reason)" per batch kept for a
+// session that is down.
+func WaitingLines(waiting []inbox.Batch) []string {
+	var lines []string
+	for _, b := range waiting {
+		var bids []string
+		for _, d := range b.Decisions {
+			bids = append(bids, d.ID)
+		}
+		lines = append(lines, fmt.Sprintf("waiting · %s: %s (%s)", b.Decisions[0].SessionName,
+			strings.Join(bids, ", "), FailReason(b)))
+	}
+	return lines
+}
+
 // HeldWaiting maps each (session, task) whose answers are held to the open
 // non-prod asks it waits on; prod asks never hold.
 func HeldWaiting(held, open []inbox.Decision) map[[2]string][]string {
@@ -513,12 +513,12 @@ func FailReason(b inbox.Batch) string {
 }
 
 // Render is `zen-inbox list`'s summary: one row per session, then status.
-func Render(open, held []inbox.Decision, undelivered []inbox.Batch, sessions am.Sessions, width int, at time.Time) string {
+func Render(open, held []inbox.Decision, undelivered, waiting []inbox.Batch, sessions am.Sessions, width int, at time.Time) string {
 	var lines []string
 	for _, r := range Rows(open, sessions) {
 		lines = append(lines, WrapRest(RowLabel(r, at), width, "", "    ")...)
 	}
-	for _, s := range StatusLines(held, open, undelivered) {
+	for _, s := range append(StatusLines(held, open, undelivered), WaitingLines(waiting)...) {
 		lines = append(lines, WrapRest(s, width, "", "    ")...)
 	}
 	if len(lines) == 0 {
@@ -636,7 +636,8 @@ func NoteHead(n inbox.Note, at time.Time) string {
 }
 
 // PanelNoteLines is a note's title, painted body and its replies in order,
-// each led by its age (and number, when there are several).
+// each led by its age (and number, when there are several); a latest reply
+// kept for a sender that is down says so.
 func PanelNoteLines(n inbox.Note, width int, at time.Time, p Painter) []string {
 	out := Wrap(n.Title, width, "")
 	if !pyfmt.Blank(n.Body) {
@@ -646,6 +647,9 @@ func PanelNoteLines(n inbox.Note, width int, at time.Time, p Painter) []string {
 		lead := "↩ "
 		if len(n.Replies) > 1 {
 			lead += strconv.Itoa(i+1) + " · "
+		}
+		if i == len(n.Replies)-1 && n.Delivery == "waiting" {
+			lead += "waiting for " + n.SessionName + " · "
 		}
 		lead += Age(r.RepliedAt, at) + ": "
 		key := md.Key{ID: n.Label(), Field: "reply" + strconv.Itoa(i+1)}
@@ -777,7 +781,10 @@ func PanelThreadEntry(it inbox.ThreadItem, width int, at time.Time, p Painter) [
 	}
 	c := *it.Chat
 	head := "✉ you → chief · " + Age(c.SentAt, at) + " · " + c.Status
-	if c.Error != "" {
+	switch {
+	case c.Status == "waiting":
+		head += " for chief"
+	case c.Error != "":
 		head += " · " + c.Error
 	}
 	out := faint(WrapRest(head, width, "", "  "))

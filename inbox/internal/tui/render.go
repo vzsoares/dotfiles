@@ -2,12 +2,16 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
@@ -300,6 +304,8 @@ func (m *Model) header() (string, lipgloss.Style) {
 			who += " +" + strconv.Itoa(n)
 		}
 		return pyfmt.Clip(name+"✕ delivery failed · "+who+" · r retry", m.w), failStyle
+	case len(m.waitRows()) > 0:
+		return m.waitingHeader(name)
 	case m.chief.id != "":
 		return pyfmt.Clip(name+m.chiefStatusLine(), m.w), headerStyle
 	case !m.loaded:
@@ -322,6 +328,79 @@ func (m *Model) header() (string, lipgloss.Style) {
 		parts = append(parts, "all clear")
 	}
 	return pyfmt.Clip(strings.Join(parts, " · "), m.w), headerStyle
+}
+
+// loudAfter is how long a target may be down before the panel says so in
+// red and with a banner.
+const loudAfter = 15 * time.Minute
+
+// waitedLong is whether stamp is loudAfter old or more.
+func (m *Model) waitedLong(stamp string) bool {
+	t, ok := inbox.ParseStamp(stamp)
+	return ok && m.now().Sub(t) >= loudAfter
+}
+
+// waitingHeader names the first target that is down, how many more there
+// are and how much is queued; red once the oldest item waited loudAfter.
+func (m *Model) waitingHeader(name string) (string, lipgloss.Style) {
+	rows := m.waitRows()
+	var names []string
+	queued, oldest := 0, rows[0].oldest
+	for _, r := range rows {
+		if !slices.Contains(names, r.name) {
+			names = append(names, r.name)
+		}
+		queued += r.n
+		oldest = min(oldest, r.oldest)
+	}
+	who := names[0]
+	if len(names) > 1 {
+		who += " +" + strconv.Itoa(len(names)-1)
+	}
+	n := strconv.Itoa(queued) + " queued"
+	if m.waitedLong(oldest) {
+		return pyfmt.Clip(name+"✕ "+who+" down "+view.Age(oldest, m.now())+" · "+n+" · r retry", m.w), failStyle
+	}
+	return pyfmt.Clip(name+"◷ "+who+" is down · "+n+" · sends when back", m.w), bannerStyle
+}
+
+// nag posts one banner per target per outage once its oldest waiting item
+// is loudAfter old; an SSH panel posts none.
+func (m *Model) nag() []tea.Cmd {
+	type down struct {
+		n      int
+		oldest string
+	}
+	byName := map[string]down{}
+	var order []string
+	for _, r := range m.waitRows() {
+		d, ok := byName[r.name]
+		if !ok {
+			order = append(order, r.name)
+			d.oldest = r.oldest
+		}
+		byName[r.name] = down{d.n + r.n, min(d.oldest, r.oldest)}
+	}
+	for name := range m.nagged {
+		if _, ok := byName[name]; !ok {
+			delete(m.nagged, name)
+		}
+	}
+	var cmds []tea.Cmd
+	for _, name := range order {
+		d := byName[name]
+		if m.nagged[name] || !m.waitedLong(d.oldest) {
+			continue
+		}
+		m.nagged[name] = true
+		if am.Remote() {
+			continue
+		}
+		client, title := m.am, "zen-inbox · "+name+" still down"
+		body := strconv.Itoa(d.n) + " queued · oldest " + view.Age(d.oldest, m.now())
+		cmds = append(cmds, func() tea.Msg { client.Notify(title, body); return nil })
+	}
+	return cmds
 }
 
 // group appends a labelled block to body, a blank row apart from the last.
@@ -352,10 +431,11 @@ func (m *Model) viewList() frame {
 	rows := m.listRows()
 	heads := map[int]string{
 		gFailed:  "Failed delivery · " + strconv.Itoa(len(m.snap.undelivered)+len(m.snap.failedNotes)),
+		gWaiting: "Waiting · sent when the session is back",
 		gThreads: "Threads · " + strconv.Itoa(len(m.threads())),
 		gNoTask:  m.notesHead(),
 	}
-	headStyle := map[int]*lipgloss.Style{gFailed: &failStyle, gThreads: &bannerStyle, gNoTask: &bannerStyle}
+	headStyle := map[int]*lipgloss.Style{gFailed: &failStyle, gWaiting: &bannerStyle, gThreads: &bannerStyle, gNoTask: &bannerStyle}
 	cur, last := -1, -1
 	for i, r := range rows {
 		prefix, st := "  ", r.style

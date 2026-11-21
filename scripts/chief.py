@@ -10,9 +10,10 @@
 #
 # chief is the one live, unarchived session named "chief"; none or several is
 # an error. agent-manager queues the message until chief is at rest. The panel
-# (`zen-inbox watch`, key `m`) runs this same script.
+# (`zen-inbox watch`, key `c`) runs this same script.
 #
-# Exit: 0 ok, 1 no chief / several / agent-manager refused, 2 usage.
+# Exit: 0 ok, 1 several chiefs / agent-manager failed or refused, 2 usage,
+# 3 no live chief (zen-inbox queues the message on this one).
 
 from __future__ import annotations
 
@@ -45,13 +46,20 @@ class ChiefError(Exception):
     pass
 
 
+class NoChief(ChiefError):
+    pass
+
+
+NO_CHIEF_EXIT = 3
+
+
 def resolve(sessions: list[dict[str, object]] | None) -> str:
     """The id of the one live chief session."""
     if sessions is None:
         raise ChiefError("could not list sessions (agent-manager failed)")
     live = [s for s in sessions if s.get("name") == NAME and _sessions.is_live(s)]
     if not live:
-        raise ChiefError(f"no live session named {NAME!r}")
+        raise NoChief(f"no live session named {NAME!r}")
     if len(live) > 1:
         ids = ", ".join(str(s.get("id")) for s in live)
         raise ChiefError(f"{len(live)} live sessions named {NAME!r}: {ids}")
@@ -126,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"id": mid, "session": session}) if args.json else mid)
     except ChiefError as e:
         print(f"zen-chief: {e}", file=sys.stderr)
-        return 1
+        return NO_CHIEF_EXIT if isinstance(e, NoChief) else 1
     return 0
 
 

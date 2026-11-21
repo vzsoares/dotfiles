@@ -1,0 +1,7 @@
+step 149 down-answer
+args: ["answer" "40.1" "a"]
+exit: 3
+-- stdout --
+-- stderr --
+waiting: session s12 is down; the panel sends 40.1 when the session is back
+-- sends --

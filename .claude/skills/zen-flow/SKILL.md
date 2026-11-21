@@ -322,7 +322,7 @@ non-zero. Each takes `--json`; see `scripts/README.md`.
 - `zen-inbox` (spec-writer, orchestrator, chief): the decision inbox below.
 - `zen-chief "<message>"` (me, from a shell; the panel's `c` runs the same script):
   queues a message to the live `chief` session with `--from zenha`, prints the message id;
-  exit 1 when there is no live chief or more than one.
+  exit 3 when there is no live chief, 1 when there are several or agent-manager refuses.
 - `zen-telemetry` (hook on every agent tool call; chief weekly): see Telemetry.
 
 ### Telemetry
@@ -362,7 +362,11 @@ one `agent-manager send ... --from zen-inbox` message naming them, then opens th
 the talk closes nothing by itself.
 Answers are held until the asking session has no open non-prod decision in the same task, then go out as one
 `agent-manager send <session> ... --from zen-inbox` message. A failed delivery stays
-listed until `zen-inbox retry <session>`.
+listed until `zen-inbox retry <session>`. When the target is only down (a dead session
+that is still listed, or no live `chief` for a `c` chat or a note reply), the answers,
+reply or chat are kept as `waiting` and the panel sends them by itself once the session
+is back (`zen-inbox retry --waiting` runs the same pass); `answer` then prints
+`waiting: …` and still exits 3, so nothing has to be asked or answered again.
 
 - IDs `<task>.<n>` and gates `<task>.g`, `.g2`, never reused; `amend`/`withdraw` are
   the asker's (`--force` for chief).

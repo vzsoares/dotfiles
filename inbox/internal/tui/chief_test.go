@@ -124,45 +124,18 @@ func TestQueuedChatsAreAllDeliveredInOrder(t *testing.T) {
 	}
 }
 
-func TestChatWithoutMessageIDIsSentOnNextPoll(t *testing.T) {
-	d := newDrv(t, 92, 29)
-	for _, text := range []string{"one", "two"} {
-		if _, err := d.ib.AddChat("", text); err != nil {
-			t.Fatal(err)
-		}
-	}
-	d.am.chiefErr = "chief is gone"
-	d.pollPass()
-	if len(d.am.chiefs) != 0 {
-		t.Fatalf("sent %q", d.am.chiefs)
-	}
-	d.am.chiefErr = ""
-	d.am.chiefStatus = "delivered"
-	d.pollPass()
-	d.pollPass()
-	if len(d.am.chiefs) != 2 || d.am.chiefs[0] != "one" || d.am.chiefs[1] != "two" {
-		t.Fatalf("sent %q", d.am.chiefs)
-	}
-	for id := int64(1); id <= 2; id++ {
-		if c, _ := d.ib.Chat(id); c.Status != "delivered" || c.MessageID != "42" {
-			t.Fatalf("chat %d: %+v", id, c)
-		}
-	}
-}
-
-func TestChatPassRunsOnATimerNotEveryRefresh(t *testing.T) {
+func TestChatPassRunsOnATimerAndSendsOnePerPass(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	at := d.m.now().Add(time.Hour)
 	d.m.now = func() time.Time { return at }
-	if _, err := d.ib.AddChat("", "one"); err != nil {
-		t.Fatal(err)
+	d.chiefIs("dead")
+	for _, text := range []string{"one", "two", "three"} {
+		d.keys("c", text, "ctrl+d")
 	}
-	d.poll()
+	d.chiefIs("idle")
+	d.pollPass()
 	if len(d.am.chiefs) != 1 {
-		t.Fatalf("first refresh sent %q", d.am.chiefs)
-	}
-	if _, err := d.ib.AddChat("", "two"); err != nil {
-		t.Fatal(err)
+		t.Fatalf("one pass sent %q", d.am.chiefs)
 	}
 	at = at.Add(chiefPassEvery - time.Second)
 	d.poll()
@@ -171,7 +144,7 @@ func TestChatPassRunsOnATimerNotEveryRefresh(t *testing.T) {
 	}
 	at = at.Add(time.Second)
 	d.poll()
-	if len(d.am.chiefs) != 2 {
+	if len(d.am.chiefs) != 2 || d.am.chiefs[0] != "one" || d.am.chiefs[1] != "two" {
 		t.Fatalf("refresh after the interval sent %q", d.am.chiefs)
 	}
 }

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SchemaVersion = 12
+	SchemaVersion = 13
 	Letters       = "abcd"
 	// A 'sending' row older than this is a crashed send, not one in flight.
 	StaleSeconds = 2 * 30
@@ -110,7 +110,7 @@ var ManualOptions = []string{"Done", "Later"}
 
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
 // can build a db of any version.
-var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11, 12: schemaV12}
+var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11, 12: schemaV12, 13: schemaV13}
 
 // Error carries the exit code the CLI reports it with.
 type Error struct {
@@ -156,6 +156,24 @@ func ParseStamp(s string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// Age is the time since stamp as 5s, 3m, 2h or 4d.
+func Age(stamp string, at time.Time) string {
+	then, ok := ParseStamp(stamp)
+	if !ok {
+		return "?"
+	}
+	secs := int(at.Sub(then).Seconds())
+	for _, u := range []struct {
+		unit string
+		size int
+	}{{"d", 86400}, {"h", 3600}, {"m", 60}} {
+		if secs >= u.size {
+			return fmt.Sprintf("%d%s", secs/u.size, u.unit)
+		}
+	}
+	return fmt.Sprintf("%ds", max(secs, 0))
 }
 
 // Decision is one row with its options and its session+task brief.
@@ -270,6 +288,10 @@ type Delivery struct {
 	Message string
 	// Followup is am.Submitted or am.StillStuck when the pane needed a nudge.
 	Followup string
+	// Target is the session the answers went to: the asker, or its live namesake.
+	Target string
+	// Waiting marks answers kept for a session that is down; a pass sends them.
+	Waiting bool
 }
 
 // Inbox is one open db. Its mutex serialises the single connection, so a

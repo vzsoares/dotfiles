@@ -420,32 +420,90 @@ func (ib *Inbox) claim(ids []string) error {
 	return nil
 }
 
+// target is where a delivery goes: a session id, or none with the reason.
+// down means the session can come back, so the delivery waits for it.
+type target struct {
+	id, reason string
+	down       bool
+}
+
+// answerTarget is the asking session while it is live, else the one live
+// session with its name. With neither, an asker still listed and not
+// archived is down; sessions is nil when agent-manager could not be asked.
+func answerTarget(sessions am.Sessions, sid, name string) target {
+	asker := am.Find(sessions, sid)
+	if sessions == nil || am.Live(asker) {
+		return target{id: sid}
+	}
+	live := am.LiveNamed(sessions, name)
+	switch {
+	case len(live) == 1:
+		return target{id: live[0]}
+	case len(live) > 1:
+		return target{reason: fmt.Sprintf("%d live sessions named %s: %s", len(live), name, strings.Join(live, ", "))}
+	case am.Down(asker):
+		return target{reason: "session " + sid + " is down", down: true}
+	}
+	return target{reason: am.GoneText(sid)}
+}
+
+func (ib *Inbox) batch(ids []string) ([]Decision, error) {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	out := make([]Decision, 0, len(ids))
+	for _, id := range ids {
+		d, err := ib.get(id)
+		if err != nil {
+			return nil, dbErr(err)
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// deliver sends claimed answers to the asker's target; answers for the
+// calling session are handed back instead.
 func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 	if ib.Self != "" && sid == ib.Self {
 		return ib.handBack(sid, ids)
 	}
-	ib.mu.Lock()
-	batch := make([]Decision, 0, len(ids))
-	for _, id := range ids {
-		d, err := ib.get(id)
-		if err != nil {
-			ib.mu.Unlock()
-			return nil, dbErr(err)
-		}
-		batch = append(batch, d)
+	batch, err := ib.batch(ids)
+	if err != nil {
+		return nil, err
 	}
-	ib.mu.Unlock()
-	ok, mid, errText := ib.AM.Send(sid, BuildMessage(batch, SendLimit))
+	t := answerTarget(ib.AM.Sessions(), sid, batch[0].SessionName)
+	if ib.Self != "" && t.id == ib.Self {
+		return ib.handBack(sid, ids)
+	}
+	return ib.send(t, sid, batch)
+}
+
+// send delivers claimed answers to t and records the outcome: sent, waiting
+// when there is no target and it is down, else failed.
+func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error) {
+	ok, mid, errText := false, "", t.reason
+	if t.id != "" {
+		ok, mid, errText = ib.AM.Send(t.id, BuildMessage(batch, SendLimit))
+		if !ok {
+			// The target may have gone down since it was resolved.
+			if again := answerTarget(ib.AM.Sessions(), sid, batch[0].SessionName); again.id == "" {
+				t, errText = again, again.reason
+			}
+		}
+	}
 	state := "failed"
-	if ok {
+	switch {
+	case ok:
 		state = "sent"
+	case t.id == "" && t.down:
+		state = "waiting"
 	}
 	ib.mu.Lock()
 	err := ib.immediate(func() error {
 		now := stamp()
-		for _, id := range ids {
+		for _, d := range batch {
 			if err := ib.exec("UPDATE decisions SET delivery = ?, message_id = ?, delivery_error = ?,"+
-				" updated_at = ?, rev = rev + 1 WHERE id = ?", state, mid, errText, now, id); err != nil {
+				" updated_at = ?, rev = rev + 1 WHERE id = ?", state, mid, errText, now, d.ID); err != nil {
 				return err
 			}
 		}
@@ -455,9 +513,10 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := &Delivery{SessionID: sid, IDs: ids, OK: ok, MessageID: mid, Error: errText}
+	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: ok, MessageID: mid, Error: errText,
+		Waiting: state == "waiting"}
 	if ok {
-		res.Followup = ib.AM.Followup(sid)
+		res.Followup = ib.AM.Followup(t.id)
 	}
 	return res, nil
 }
@@ -556,12 +615,18 @@ func (ib *Inbox) Undelivered() ([]Batch, error) {
 	return groupBySession(ds), err
 }
 
+// Waiting is the answers kept for sessions that are down, one batch each.
+func (ib *Inbox) Waiting() ([]Batch, error) {
+	ds, err := ib.Select("delivery = 'waiting'")
+	return groupBySession(ds), err
+}
+
 func (ib *Inbox) Retry(session string) (*Delivery, error) {
 	ib.mu.Lock()
 	var sid string
 	var todo []string
 	err := ib.immediate(func() error {
-		rows, err := ib.sel("(session_id = ? OR session_name = ?) AND "+undeliveredSQL,
+		rows, err := ib.sel("(session_id = ? OR session_name = ?) AND ("+undeliveredSQL+" OR delivery = 'waiting')",
 			session, session, staleCutoff())
 		if err != nil {
 			return err
@@ -609,6 +674,10 @@ func (ib *Inbox) Describe(res *Delivery, sid, task, name string) (string, error)
 		}
 		return "nothing to send", nil
 	}
+	if res.Waiting {
+		return fmt.Sprintf("waiting: %s; the panel sends %s when the session is back", res.Error,
+			strings.Join(res.IDs, ", ")), nil
+	}
 	if res.OK {
 		if name == "" {
 			name = sid
@@ -616,7 +685,7 @@ func (ib *Inbox) Describe(res *Delivery, sid, task, name string) (string, error)
 		if res.Message != "" {
 			return fmt.Sprintf("recorded %s; nothing sent to your own session", strings.Join(res.IDs, ", ")), nil
 		}
-		return fmt.Sprintf("sent %s to %s", strings.Join(res.IDs, ", "), name) + FollowupText(res.Followup, sid), nil
+		return fmt.Sprintf("sent %s to %s", strings.Join(res.IDs, ", "), name) + FollowupText(res.Followup, res.Target), nil
 	}
 	return fmt.Sprintf("delivery failed: %s; zen-inbox retry %s", res.Error, sid), nil
 }

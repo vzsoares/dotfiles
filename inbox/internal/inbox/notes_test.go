@@ -592,7 +592,7 @@ func TestReplyFallsBackToTheStoredIDOnlyWhileAlive(t *testing.T) {
 	if err != nil || res.OK || !strings.Contains(res.Error, "no live session named chief") || len(fake.sends) != 1 {
 		t.Fatalf("%+v %v %q", res, err, fake.sends)
 	}
-	if n, _ := ib.Note(2); n.Delivery != "failed" {
+	if n, _ := ib.Note(2); n.Delivery != "waiting" || !res.Waiting {
 		t.Fatalf("%+v", n)
 	}
 }

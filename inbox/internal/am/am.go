@@ -49,8 +49,9 @@ type Client interface {
 	// Push sends the content-free ntfy alert, when ZEN_NTFY_TOPIC is set.
 	Push(body string)
 	// Chief queues message for the live chief session (zen-chief) and returns
-	// the message id, or the error text.
-	Chief(message string) (messageID, errText string)
+	// the message id, or the error text; down means no live session is named
+	// chief, so the message can wait for one.
+	Chief(message string) (messageID, errText string, down bool)
 	// ChiefStatus is agent-manager's status for a message Chief queued.
 	ChiefStatus(messageID string) (status, errText string)
 	// MessageStatus is agent-manager's status for a message id.
@@ -157,9 +158,33 @@ func Status(s Session) string {
 	return pyfmt.Str(s["status"])
 }
 
+// Live is whether the session can receive now.
+func Live(s Session) bool { return Status(s) != "gone" }
+
+// Down is a session that cannot receive now but can come back: listed, not
+// archived, and gone.
+func Down(s Session) bool { return s != nil && !pyfmt.Truthy(s["archived"]) && !Live(s) }
+
+// LiveNamed are the ids of the live sessions with that name.
+func LiveNamed(sessions Sessions, name string) []string {
+	var out []string
+	for _, s := range sessions {
+		id, _ := s["id"].(string)
+		if n, _ := s["name"].(string); name != "" && n == name && id != "" && Live(s) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// GoneText is the delivery error for a session that cannot receive.
+func GoneText(sessionID string) string {
+	return fmt.Sprintf("session %s is gone (dead, archived or missing)", sessionID)
+}
+
 func (e Exec) Send(sessionID, message string) (bool, string, string) {
-	if sessions := e.Sessions(); sessions != nil && Status(Find(sessions, sessionID)) == "gone" {
-		return false, "", fmt.Sprintf("session %s is gone (dead, archived or missing)", sessionID)
+	if sessions := e.Sessions(); sessions != nil && !Live(Find(sessions, sessionID)) {
+		return false, "", GoneText(sessionID)
 	}
 	argv := []string{"agent-manager", "send", sessionID, message, "--from", "zen-inbox"}
 	r, err := run(append(argv[:6:6], "--json"))
@@ -210,43 +235,50 @@ func (e Exec) Send(sessionID, message string) (bool, string, string) {
 	return true, pyfmt.Str(mid), ""
 }
 
-// zenChief runs the zen-chief script, the one place that finds chief.
-func zenChief(args ...string) (map[string]any, string) {
+// chiefDownExit is zen-chief's exit code for "no live session named chief".
+const chiefDownExit = 3
+
+// ChiefName is the session zen-chief sends to.
+const ChiefName = "chief"
+
+// zenChief runs the zen-chief script, the one place that finds chief; down
+// is its chiefDownExit.
+func zenChief(args ...string) (data map[string]any, errText string, down bool) {
 	r, err := run(append([]string{"zen-chief", "--json"}, args...))
 	switch {
 	case errors.Is(err, errTimeout):
-		return nil, "zen-chief timed out"
+		return nil, "zen-chief timed out", false
 	case err != nil:
-		return nil, "zen-chief not found (run ./link-bin)"
+		return nil, "zen-chief not found (run ./link-bin)", false
 	case r.code != 0:
 		text := pyfmt.Strip(strings.TrimPrefix(pyfmt.Strip(r.stderr), "zen-chief: "))
 		if text == "" {
 			text = fmt.Sprintf("zen-chief exited %d", r.code)
 		}
-		return nil, text
+		return nil, text, r.code == chiefDownExit
 	}
 	v, err := decode(r.stdout)
 	data, ok := v.(map[string]any)
 	if err != nil || !ok {
-		return nil, "zen-chief printed no JSON"
+		return nil, "zen-chief printed no JSON", false
 	}
-	return data, ""
+	return data, "", false
 }
 
-func (Exec) Chief(message string) (string, string) {
-	data, errText := zenChief("--", message)
+func (Exec) Chief(message string) (string, string, bool) {
+	data, errText, down := zenChief("--", message)
 	if errText != "" {
-		return "", errText
+		return "", errText, down
 	}
 	id := pyfmt.Str(data["id"])
 	if id == "" {
-		return "", "zen-chief printed no message id"
+		return "", "zen-chief printed no message id", false
 	}
-	return id, ""
+	return id, "", false
 }
 
 func (Exec) ChiefStatus(messageID string) (string, string) {
-	data, errText := zenChief("--status", messageID)
+	data, errText, _ := zenChief("--status", messageID)
 	if errText != "" {
 		return "", errText
 	}

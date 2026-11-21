@@ -1,7 +1,9 @@
 package inbox
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -60,11 +62,22 @@ const (
 	VisibleFor   = 24 * time.Hour
 	KeepFor      = 30 * 24 * time.Hour
 	noteColumns  = "id, task, session_id, session_name, title, body, created_at, read_at, reply, replied_at, claimed_at, delivery, message_id, delivery_error"
-	visibleNotes = "(read_at = '' OR read_at >= ? OR delivery IN ('sending', 'failed'))"
+	visibleNotes = "(read_at = '' OR read_at >= ? OR delivery IN ('sending', 'failed', 'waiting'))"
 	// failedNotes is a failed reply, or a claim older than StaleSeconds. A v6
 	// binary claims through replied_at only, so the later of the two counts.
 	failedNotes = "(delivery = 'failed' OR (delivery = 'sending' AND max(claimed_at, replied_at) < ?))"
+	// lateAfter is how long after it was written a queued message says so.
+	lateAfter = 10 * time.Minute
 )
+
+// writtenAgo is stamp's age when it is lateAfter old or more.
+func writtenAgo(stamp string) (string, bool) {
+	t, ok := ParseStamp(stamp)
+	if !ok || Now().Sub(t) < lateAfter {
+		return "", false
+	}
+	return Age(stamp, Now()), true
+}
 
 // NoteReply is one reply to a note.
 type NoteReply struct{ Text, RepliedAt string }
@@ -81,8 +94,8 @@ type Note struct {
 	Replies                             []NoteReply
 }
 
-// CanReply is false while the latest reply is in flight or failed: it must be
-// retried first, or a new reply would overwrite its delivery state.
+// CanReply is false while the latest reply is in flight, waiting or failed: a
+// new reply would overwrite its delivery state.
 func (n Note) CanReply() bool { return n.Delivery == "none" || n.Delivery == "sent" }
 
 func (n Note) Label() string { return "n" + strconv.FormatInt(n.ID, 10) }
@@ -162,7 +175,7 @@ func (ib *Inbox) AddNote(in NoteInput) (Note, error) {
 	defer ib.mu.Unlock()
 	var id int64
 	err := ib.immediate(func() error {
-		pruned := " FROM notes WHERE read_at != '' AND read_at < ? AND delivery NOT IN ('sending', 'failed')"
+		pruned := " FROM notes WHERE read_at != '' AND read_at < ? AND delivery NOT IN ('sending', 'failed', 'waiting')"
 		cutoff := Stamp(Now().Add(-KeepFor))
 		if err := ib.exec("DELETE FROM note_replies WHERE note_id IN (SELECT id"+pruned+")", cutoff); err != nil {
 			return err
@@ -343,9 +356,14 @@ func ReplyHeader(n Note) string {
 }
 
 // ReplyMessage is the header then the text, cut at a UTF-8 boundary to fit
-// the send limit.
+// the send limit. A reply delivered lateAfter or more after it was written
+// says so on the header line.
 func ReplyMessage(n Note, text string) string {
-	msg := ReplyHeader(n) + "\n" + text
+	head := ReplyHeader(n)
+	if age, late := writtenAgo(n.RepliedAt); late {
+		head += " (written " + age + " ago)"
+	}
+	msg := head + "\n" + text
 	if budget := SendLimit - SendMargin; len(msg) > budget {
 		msg = strings.ToValidUTF8(msg[:budget], "")
 	}
@@ -364,6 +382,9 @@ func (ib *Inbox) claimReply(id int64, text string) (Note, error) {
 		var err error
 		if n, err = ib.note(id); err != nil {
 			return err
+		}
+		if n.Delivery == "waiting" {
+			return errf(1, "%s has a reply waiting for %s; it is sent when %s is back", n.Label(), n.SessionName, n.SessionName)
 		}
 		if !n.CanReply() {
 			return errf(1, "%s has a reply %s; retry it first (zen-inbox retry %s)", n.Label(), n.Delivery, n.SessionID)
@@ -390,6 +411,8 @@ type NoteDelivery struct {
 	OK       bool
 	Error    string
 	Followup string
+	// Waiting marks a reply kept for a sender that is down; a pass sends it.
+	Waiting bool
 }
 
 // Describe is the one-line outcome of a reply send.
@@ -397,32 +420,28 @@ func (d NoteDelivery) Describe() string {
 	if d.OK {
 		return "reply " + d.Note.Label() + " sent to " + d.Note.SessionName
 	}
+	if d.Waiting {
+		return "reply " + d.Note.Label() + " waiting: " + d.Error + "; the panel sends it when " + d.Note.SessionName + " is back"
+	}
 	return "reply " + d.Note.Label() + " failed: " + d.Error + "; zen-inbox retry " + d.Note.SessionID
 }
 
-// replyTarget is the session a reply goes to: the one live session with the
-// note sender's name, else the stored id while that session is alive.
-func (ib *Inbox) replyTarget(n Note) (string, error) {
-	sessions := ib.AM.Sessions()
+// replyTarget is the one live session with the note sender's name, else the
+// stored id while that session is live; with none live the sender is down.
+func replyTarget(sessions am.Sessions, n Note) target {
 	if sessions == nil {
-		return n.SessionID, nil
+		return target{id: n.SessionID}
 	}
-	var live []string
-	for _, s := range sessions {
-		id, _ := s["id"].(string)
-		if name, _ := s["name"].(string); n.SessionName != "" && name == n.SessionName && id != "" && am.Status(s) != "gone" {
-			live = append(live, id)
-		}
-	}
+	live := am.LiveNamed(sessions, n.SessionName)
 	switch {
 	case len(live) == 1:
-		return live[0], nil
-	case am.Status(am.Find(sessions, n.SessionID)) != "gone":
-		return n.SessionID, nil
+		return target{id: live[0]}
+	case am.Live(am.Find(sessions, n.SessionID)):
+		return target{id: n.SessionID}
 	case len(live) == 0:
-		return "", errf(1, "no live session named %s", n.SessionName)
+		return target{reason: "no live session named " + n.SessionName, down: true}
 	}
-	return "", errf(1, "%d live sessions named %s: %s", len(live), n.SessionName, strings.Join(live, ", "))
+	return target{reason: fmt.Sprintf("%d live sessions named %s: %s", len(live), n.SessionName, strings.Join(live, ", "))}
 }
 
 // accepted reports whether agent-manager still holds an earlier send of n, so
@@ -457,13 +476,26 @@ func (ib *Inbox) sendReply(n Note) (NoteDelivery, error) {
 		n, err := ib.markReply(n, "sent", n.MessageID, "")
 		return NoteDelivery{Note: n, OK: err == nil}, err
 	}
-	target, err := ib.replyTarget(n)
-	if err != nil {
-		n, werr := ib.markReply(n, "failed", "", err.Error())
-		return NoteDelivery{Note: n, Error: err.Error()}, werr
+	return ib.sendReplyTo(n, replyTarget(ib.AM.Sessions(), n))
+}
+
+// sendReplyTo sends a claimed reply to t: sent, waiting when there is no
+// target and the sender is down, else failed.
+func (ib *Inbox) sendReplyTo(n Note, t target) (NoteDelivery, error) {
+	if t.id == "" {
+		state := "failed"
+		if t.down {
+			state = "waiting"
+		}
+		n, err := ib.markReply(n, state, "", t.reason)
+		return NoteDelivery{Note: n, Error: t.reason, Waiting: t.down}, err
 	}
-	ok, mid, errText := ib.AM.Send(target, ReplyMessage(n, n.Reply))
+	ok, mid, errText := ib.AM.Send(t.id, ReplyMessage(n, n.Reply))
 	if !ok {
+		// The target may have gone down since it was resolved.
+		if again := replyTarget(ib.AM.Sessions(), n); again.id == "" {
+			return ib.sendReplyTo(n, again)
+		}
 		n, err := ib.markReply(n, "failed", "", errText)
 		return NoteDelivery{Note: n, Error: errText}, err
 	}
@@ -477,11 +509,11 @@ func (ib *Inbox) sendReply(n Note) (NoteDelivery, error) {
 			return NoteDelivery{}, err
 		}
 	}
-	n, err = ib.markReply(n, "sent", mid, "")
+	n, err := ib.markReply(n, "sent", mid, "")
 	if err != nil {
 		return NoteDelivery{}, err
 	}
-	return NoteDelivery{Note: n, OK: true, Followup: ib.AM.Followup(target)}, nil
+	return NoteDelivery{Note: n, OK: true, Followup: ib.AM.Followup(t.id)}, nil
 }
 
 // Reply sends text as id's next reply to the note's sender.
@@ -504,7 +536,18 @@ func (ib *Inbox) FailedNotes() ([]Note, error) {
 	return ns, dbErr(err)
 }
 
-// RetryNote claims one failed reply again and resends it.
+// WaitingNotes is every reply kept for a sender that is down, oldest first.
+func (ib *Inbox) WaitingNotes() ([]Note, error) {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	ns, err := ib.selNotes("delivery = 'waiting'")
+	slices.SortStableFunc(ns, func(a, b Note) int {
+		return cmp.Or(cmp.Compare(a.RepliedAt, b.RepliedAt), cmp.Compare(a.ID, b.ID))
+	})
+	return ns, dbErr(err)
+}
+
+// RetryNote claims one failed or waiting reply again and resends it.
 func (ib *Inbox) RetryNote(id int64) (NoteDelivery, error) {
 	ns, err := ib.claimRetries("id = ?", id)
 	if err != nil {
@@ -516,7 +559,7 @@ func (ib *Inbox) RetryNote(id int64) (NoteDelivery, error) {
 	return ib.sendReply(ns[0])
 }
 
-// RetryNotes resends a session's failed replies, one message each.
+// RetryNotes resends a session's failed and waiting replies, one message each.
 func (ib *Inbox) RetryNotes(session string) ([]NoteDelivery, error) {
 	ns, err := ib.claimRetries("(session_id = ? OR session_name = ?)", session, session)
 	if err != nil {
@@ -533,13 +576,19 @@ func (ib *Inbox) RetryNotes(session string) ([]NoteDelivery, error) {
 	return out, nil
 }
 
+// claimRetries claims the failed and waiting replies matching where.
 func (ib *Inbox) claimRetries(where string, args ...any) ([]Note, error) {
+	return ib.claimNotes(where+" AND ("+failedNotes+" OR delivery = 'waiting')", append(args, staleCutoff())...)
+}
+
+// claimNotes moves the replies matching where to sending in one transaction.
+func (ib *Inbox) claimNotes(where string, args ...any) ([]Note, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	var ns []Note
 	err := ib.immediate(func() error {
 		var err error
-		if ns, err = ib.selNotes(where+" AND "+failedNotes, append(args, staleCutoff())...); err != nil {
+		if ns, err = ib.selNotes(where, args...); err != nil {
 			return err
 		}
 		now := stamp()

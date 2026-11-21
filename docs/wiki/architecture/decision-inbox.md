@@ -1,7 +1,7 @@
 ---
 title: Decision Inbox — zen-inbox
 category: architecture
-updated: 2026-11-20
+updated: 2026-11-21
 related: [overview, release-tooling]
 ---
 
@@ -60,7 +60,9 @@ message.
    ```
 
    Talk-resolved and withdrawn decisions are left out. Questions are clipped, then
-   dropped, when the message nears agent-manager's 8000-byte send limit.
+   dropped, when the message nears agent-manager's 8000-byte send limit. The message
+   goes to the asking session while it is live, else to the one live session with its
+   name; an asker that is only down keeps the answers `waiting` (see Waiting).
 6. **delivery check** — see Stuck paste below.
 
 ## Panel
@@ -101,10 +103,12 @@ message.
   and polls keep running.
 - **Cockpit layout (#785).** Every screen has a header row on top and its key footer
   pinned to the last rows. The header is `cockpit · » <busy text> ⠋` while busy,
-  `cockpit · ✕ delivery failed · name · r retry` on a failed delivery, the chief
+  `cockpit · ✕ delivery failed · name · r retry` on a failed delivery,
+  `cockpit · ◷ name is down · n queued · sends when back` while something waits, the chief
   message status, else counts: `cockpit · n open · k prod · ✉ u unread · h held`
   (`all clear` when none). The list shows labelled groups, most urgent first:
-  `Failed delivery` (retry rows with the reason), `Threads` (one per task, see
+  `Failed delivery` (retry rows with the reason), `Waiting · sent when the session is
+  back` (see Waiting), `Threads` (one per task, see
   Threads below), `No task` (notes without a task), then `Held` (answers waiting for the session's
   open asks in the same task; not selectable; the thread header shows `held: N open`). The `Inbox · all clear` row is always first; its
   empty list shows `All clear · nothing to act on` and `last item closed <age> ago`
@@ -139,13 +143,16 @@ message.
   (`scripts/chief.py`, the same script shells use), which finds the one live session
   named `chief` and queues the message with `agent-manager send --from zenha`. The
   status row then shows `✉ chief · message <id> queued`, polled with `zen-chief
-  --status` until `delivered` (or `dropped`/`answered`), and clears 6 s later. A send
-  error (no chief, several) stays in the box with the draft. `message-status` is
+  --status` until `delivered` (or `dropped`/`answered`), and clears 6 s later. With no
+  live chief (zen-chief exit 3) the chat is stored `waiting`, the box clears and the
+  flash says it is queued; any other send error (several chiefs, a refusal, a timeout)
+  stays in the box with the draft. `message-status` is
   scoped to the sender: if agent-manager cannot report a message sent with `--from
   zenha` (not verifiable from inside an agent session, which refuses `--from`), the
   third empty poll shows `sent` rather than `delivered`.
-- **`r` retry.** On the list, `r` retries the first failed delivery; `enter` on a
-  `retry <session>: n answer(s)` row retries that one. It runs `zen-inbox retry`'s
+- **`r` retry.** On the list, `r` retries the first failed delivery, else the first
+  waiting one; `enter` or `r` on a `retry <session>: n answer(s)` or `waiting …` row
+  retries that one. It runs `zen-inbox retry`'s
   path, including the delivery check.
 - **Markdown (#611).** Question, body, context, option and brief text render through
   glamour (`internal/md`) with a cut-down style on ANSI-16 colour indexes, so the
@@ -298,10 +305,11 @@ security boundary). Titles are one line of at most 120 characters, bodies at mos
   30 s timeout and the stuck-paste follow-up) as `[zen-inbox] Reply to your note n12
   (#707 <title>):` (`Reply 2 to …` from the second on) plus the text, cut at a UTF-8 boundary under the send limit. Schema v9 keeps every reply in `note_replies`; `notes.reply` and the delivery columns
   track the latest. A new reply waits while the latest is `sending` or `failed` (retry
-  it first). The claim runs in one `BEGIN IMMEDIATE`, so two panels never overwrite
+  it first), and is refused while it is `waiting` (`n12 has a reply waiting for chief; it
+  is sent when chief is back`). The claim runs in one `BEGIN IMMEDIATE`, so two panels never overwrite
   each other's delivery state. The target is the one live session named like the sender (as `zen-chief`
-  does), falling back to the stored id only while that session is alive; none or
-  several live fail the reply. The send stores `message_id` first, then marks `sent`; a
+  does), falling back to the stored id only while that session is alive; several live
+  fail the reply, none keeps it `waiting` with the note unread (see Waiting). The send stores `message_id` first, then marks `sent`; a
   retry that finds a `message_id` asks `agent-manager message-status` and marks `sent`
   without resending unless the status is missing or `dropped`. Success marks the note read; a failure keeps the reply and its error, shows
   a `retry reply n12` row and the `✕ delivery failed` status, and `r` / `zen-inbox
@@ -340,8 +348,57 @@ with their replies, and in the thread screen also its closed decisions and chats
   task that is not digits exits 2) or `T` on any note, a one-line input. Last write wins.
 - **Chats.** `c` on a thread row, child or thread screen sends `[#task title] text`
   through `zen-chief`; every `c` send is stored in `chats` (task blank elsewhere) before
-  the send, then gets the message id and `queued`, or `failed` with the error; status
-  polls mirror `delivered`/`dropped`/`answered`/`sent` into the row.
+  the send (`sending`, claimed), then gets the message id and `queued`, `waiting` when
+  chief is down, or `failed` with the error; status polls mirror
+  `delivered`/`dropped`/`answered`/`sent` into the row. The timeline shows a waiting one
+  as `✉ you → chief · 5m · waiting for chief`.
+
+## Waiting (#933)
+
+A message whose target is down is kept as `waiting` and sent by zen-inbox itself once
+the target is back, instead of failing for a manual retry.
+
+- **Down** is "cannot receive now, can come back". By name, for `c` chats and note
+  replies: no live session has the name (`chief`, or the note's sender). By id, for
+  answers: the asking session is listed by `agent-manager sessions --json`, not
+  archived, and `am.Status` is `gone`. An asker that is archived or not listed is
+  gone for good and stays `failed`, as do several live namesakes, refusals, timeouts
+  and an agent-manager that cannot list sessions.
+- **Answer target** (flush, `retry`, the pass): the stored session id while live, else
+  the one live session with the asker's stored name, else waiting or failed as above.
+  `Inbox.Self` applies to the resolved target.
+- **The pass** (`inbox.Pass`). The panel runs it at start and every 15 s
+  (`chiefPassEvery`); `zen-inbox retry --waiting` runs one from the CLI and prints a
+  line per item sent or left waiting (exit 3 when a send failed). With nothing
+  waiting it runs no external command; otherwise it lists sessions once and makes no
+  send attempt to a target that is still down. Order: answers as one message per
+  session, note replies oldest first, then the oldest chat; at most one message per
+  target per pass, so a queue stays under agent-manager's five a minute and in order.
+  It never sends to the caller's own session. A send that finds the target down again
+  goes back to `waiting`; any other failure is `failed` and stops that target for the
+  pass.
+- **Exactly once.** Each item is claimed in one `BEGIN IMMEDIATE` before its send
+  (`sending`): answers and replies with their existing claims, chats with
+  `chats.claimed_at`. A chat claim older than 60 s is taken over. A chat written
+  while others wait or are being sent is stored `waiting` behind them, chief live or not.
+- **Late marker.** A chat or reply delivered 10 minutes or more after it was written
+  carries its age: `[#task title] (written 3h ago, queued while chief was down) text`,
+  and `… (#707 title): (written 3h ago)` on a reply's header line. Answers carry none.
+- **Panel.** The `Waiting` group has one row per target and kind: `waiting <name>: n
+  answer(s) · <reason> · <age>`, `waiting reply n12 to <name> · …`, `waiting chief: n
+  message(s) · …` (age of the oldest); `enter` or `r` retries it now. The header shows
+  `◷ <name> is down · n queued · sends when back` (`<name> +k` for more targets) below
+  a failed delivery; once the oldest item is 15 minutes old it turns red, `✕ <name>
+  down <age> · n queued · r retry`, and one banner per target per outage is posted
+  (`zen-inbox · <name> still down`), none from an SSH panel. Queueing never rings. A
+  pass that delivers flashes `sent to <name>: n answers`.
+- **CLI.** `answer`/`resolve`/`withdraw`/`retry` print `waiting: <reason>; the panel
+  sends <ids> when the session is back` and exit 3; `list` prints `waiting · <name>:
+  <ids> (<reason>)`, `--json` shows `delivery: "waiting"`, `notes` shows `reply
+  waiting`. `retry <session>` also takes that session's waiting answers and replies.
+- **Limits.** The panel is the automatic sender: with none running, items wait until
+  one starts or `retry --waiting` runs. A queued message cannot be cancelled. A chat
+  the pass fails for another reason is `failed` and only flashed; it has no retry row.
 
 ## Phone access (#830)
 
@@ -395,7 +452,7 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 12. Tables `decisions` and `decision_options` use generic names because the db is
+now 13. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps
@@ -422,15 +479,20 @@ and writing a v11 db. `--json` carries `body` only when it is set, and the answe
 message never includes it. v12 adds `decisions.kind` and `decisions.confirmed_at`
 (both default `''`), two `ALTER TABLE … ADD COLUMN`; a v11 reader keeps working, and
 only sees a manual ask as a plain Done/Later one it could answer without the confirm.
+v13 adds `chats.claimed_at` (default `''`), one `ALTER TABLE … ADD COLUMN`; `waiting`
+(decisions, notes, chats) and `sending` (chats) are new values of existing TEXT
+columns. A v12 reader keeps working: it names its columns, and its panel neither
+shows nor sends waiting answers and replies.
 
 Concurrency: WAL, `busy_timeout` 5000, and every ID allocation and open → closed
 transition in one `BEGIN IMMEDIATE` transaction, so two watchers can never both answer
 one decision. The flush claims the held rows (`delivery = sending`) in a transaction
 before sending, so concurrent closers send the batch exactly once.
 
-`delivery`: `none` → `held` → `sending` → `sent` | `failed`. A failure (session dead,
-archived or missing, non-zero send, refusal) keeps the answers with the error, exits 3,
-and stays listed in the watcher until `zen-inbox retry <session>`.
+`delivery`: `none` → `held` → `sending` → `sent` | `failed` | `waiting`. A failure
+(session archived or missing, non-zero send, refusal) keeps the answers with the error,
+exits 3, and stays listed in the watcher until `zen-inbox retry <session>`; a session
+that is only down keeps them `waiting` for the pass (see Waiting).
 `retry` also picks up a `sending` claim older than 60 s (a send that died; sends
 time out at 30 s) and `held` answers whose session has nothing left open in that task (closed but
 never flushed).
@@ -505,7 +567,8 @@ the send's `tea.Cmd`), outside the inbox mutex:
 `cd inbox && go test -race ./...`: temp db through `ZEN_FLOW_DB`, clock pinned with
 `ZEN_INBOX_NOW`; `agent-manager`, `tmux` and `zen-bell` are fake scripts on PATH that
 record their argv. Golden files hold `inbox.py`'s stdout, stderr, exit code and send
-argv for ~150 commands, captured before it was deleted; v1 and v2 dbs it wrote are
+argv for ~150 commands, captured before it was deleted (the waiting steps, 147 on, come
+from the Go binary); v1 and v2 dbs it wrote are
 committed as SQL dumps. Concurrency tests spawn real processes against one db. The
 panel is driven through `Update` with key and window-size messages at 92x29, 60x20
 and 40x15; the launcher tests rebuild a copy of the module.

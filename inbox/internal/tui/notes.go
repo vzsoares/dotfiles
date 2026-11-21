@@ -176,13 +176,16 @@ func (m *Model) onNoteSent(msg noteSentMsg) tea.Cmd {
 	m.ta.Reset()
 	m.replyFor = 0
 	flash := msg.res.Describe()
+	if msg.res.Waiting {
+		flash = "reply queued: sent when " + m.note.SessionName + " is back"
+	}
 	if msg.res.OK {
 		flash = "reply sent to " + m.note.SessionName + inbox.FollowupText(msg.res.Followup, m.note.SessionID)
 	}
 	if m.noteFrom != scThread {
 		m.cursor = min(m.cursor, max(len(m.listItems())-1, 0))
 	}
-	return m.leaveNote(flash, msg.res.OK)
+	return m.leaveNote(flash, msg.res.OK || msg.res.Waiting)
 }
 
 func (m *Model) retryNoteCmd(id int64) tea.Cmd {
@@ -198,13 +201,18 @@ func (m *Model) retryNoteCmd(id int64) tea.Cmd {
 	}
 }
 
-// retryFirst retries the first failure, answers before note replies.
+// retryFirst retries the first failure, answers before note replies, else
+// the first waiting delivery.
 func (m *Model) retryFirst() tea.Cmd {
 	switch {
 	case len(m.snap.undelivered) > 0:
 		return m.retryCmd(m.snap.undelivered[0].SessionID)
 	case len(m.snap.failedNotes) > 0:
 		return m.retryNoteCmd(m.snap.failedNotes[0].ID)
+	}
+	if rows := m.waitRows(); len(rows) > 0 {
+		kind, id, _ := strings.Cut(rows[0].value, ":")
+		return m.retryRowCmd(kind, id)
 	}
 	return nil
 }
@@ -215,6 +223,10 @@ func (m *Model) keyNoteScreen(k string) (tea.Model, tea.Cmd) {
 	case "m":
 		return m, m.markCmd(n.ID, false, n.Unread())
 	case "f":
+		if n.Delivery == "waiting" {
+			m.flash, m.flashOK = n.Label()+" has a reply waiting for "+n.SessionName+"; it is sent when "+n.SessionName+" is back", false
+			return m, nil
+		}
 		if !n.CanReply() {
 			m.flash, m.flashOK = "reply "+n.Delivery+": retry it first", false
 			return m, nil

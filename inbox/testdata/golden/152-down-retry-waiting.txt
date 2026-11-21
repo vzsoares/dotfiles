@@ -1,0 +1,7 @@
+step 152 down-retry-waiting
+args: ["retry" "--waiting"]
+exit: 0
+-- stdout --
+waiting 40.1 for spec-s12: session s12 is down
+-- stderr --
+-- sends --

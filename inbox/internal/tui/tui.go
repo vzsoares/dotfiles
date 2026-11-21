@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -72,6 +71,11 @@ type snapshot struct {
 	drafts      map[string]inbox.Draft
 	notes       []inbox.Note
 	failedNotes []inbox.Note
+	// waiting, waitingNotes and waitingChats are kept for a session that is
+	// down; the delivery pass sends them.
+	waiting      []inbox.Batch
+	waitingNotes []inbox.Note
+	waitingChats []inbox.Chat
 	// titles is each task's newest brief title, for thread rows.
 	titles map[string]string
 	// thread is the open thread's timeline, read only while one is open.
@@ -253,9 +257,9 @@ type Model struct {
 	// the list row an item was opened from.
 	inboxOpen bool
 	listAt    int
-	// chiefMu serialises chat sends and the delivery pass; passing marks a
-	// pass in flight and chatMisses counts its empty status polls per chat.
-	chiefMu    *sync.Mutex
+	// passing marks a delivery pass in flight and chatMisses counts its empty
+	// status polls per chat; nagged are the down targets already bannered.
+	nagged     map[string]bool
 	passing    bool
 	passAt     time.Time
 	chatMisses map[int64]int
@@ -276,7 +280,7 @@ func New(ib *inbox.Inbox, client am.Client) *Model {
 	ti := newInput("note (optional)")
 	return &Model{
 		ib: ib, am: client, now: inbox.Now, ta: ta, ti: ti, chiefTA: newChiefBox(), md: md.New(lipgloss.DefaultRenderer()), clip: copyText,
-		prodBlock: "guard not run", drafts: map[string]view.Staged{}, threadsOpen: map[string]bool{}, chiefMu: &sync.Mutex{}, chatMisses: map[int64]int{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
+		prodBlock: "guard not run", drafts: map[string]view.Staged{}, threadsOpen: map[string]bool{}, nagged: map[string]bool{}, chatMisses: map[int64]int{}, visited: map[string][]string{}, quotaFile: quotaPath(), stateFile: statePath(), loc: time.Local,
 		sp: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		after: func(d time.Duration, msg tea.Msg) tea.Cmd {
 			return tea.Tick(d, func(time.Time) tea.Msg { return msg })
@@ -330,6 +334,15 @@ func load(ib *inbox.Inbox, client am.Client, w watch, sessions am.Sessions, refr
 	if s.failedNotes, s.err = ib.FailedNotes(); s.err != nil {
 		return s
 	}
+	if s.waiting, s.err = ib.Waiting(); s.err != nil {
+		return s
+	}
+	if s.waitingNotes, s.err = ib.WaitingNotes(); s.err != nil {
+		return s
+	}
+	if s.waitingChats, s.err = ib.WaitingChats(); s.err != nil {
+		return s
+	}
 	if s.titles, s.err = ib.TaskTitles(); s.err != nil {
 		return s
 	}
@@ -341,7 +354,7 @@ func load(ib *inbox.Inbox, client am.Client, w watch, sessions am.Sessions, refr
 		s.thread = &th
 	}
 	// Only the empty list shows it.
-	if len(s.open)+len(s.undelivered)+len(s.notes)+len(s.failedNotes) == 0 {
+	if len(s.open)+len(s.undelivered)+len(s.notes)+len(s.failedNotes)+len(s.waiting)+len(s.waitingChats) == 0 {
 		if s.lastClosed, s.err = ib.LastClosed(); s.err != nil {
 			return s
 		}
@@ -438,7 +451,7 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 	if m.flashOK && m.now().Sub(m.flashAt) >= FlashFor {
 		m.flash, m.flashOK = "", false
 	}
-	cmds := m.ring()
+	cmds := append(m.ring(), m.nag()...)
 	m.expireChief()
 	if c := m.chiefPoll(); c != nil {
 		cmds = append(cmds, c)
@@ -1002,7 +1015,7 @@ func (m *Model) onSent(msg sentMsg) tea.Cmd {
 	p := m.p
 	m.busy = ""
 	m.snap = msg.snap
-	ok := msg.res != nil && msg.res.OK
+	ok := msg.res != nil && (msg.res.OK || msg.res.Waiting)
 	if p == nil {
 		m.toList(msg.flash)
 		m.flashOK = ok
@@ -1282,7 +1295,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finishTalk(msg.resolved, msg.flash)
 		return m, nil
 	case chiefPassMsg:
-		m.passing = false
+		m.onChiefPass(msg)
 		return m, nil
 	case chiefSentMsg:
 		return m, m.onChiefSent(msg)
@@ -1515,7 +1528,7 @@ func (m *Model) listKeys() []ranked {
 		keys = append(keys, ranked{key{"enter", "open"}, 0})
 	case "s":
 		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
-	case "r", "nr":
+	case "r", "nr", "w", "nw", "cw":
 		keys = append(keys, ranked{key{"enter", "retry"}, 0})
 	case "nh":
 		keys = append(keys, ranked{key{"enter", "expand"}, 0})
@@ -1539,7 +1552,7 @@ func (m *Model) listKeys() []ranked {
 	if inThread && kind != "t" {
 		keys = append(keys, ranked{key{"←", "fold"}, 6})
 	}
-	if kind != "r" && kind != "nr" && len(m.snap.undelivered)+len(m.snap.failedNotes) > 0 {
+	if !retryRow(kind) && len(m.snap.undelivered)+len(m.snap.failedNotes)+len(m.waitRows()) > 0 {
 		keys = append(keys, ranked{key{"r", "retry"}, 1})
 	}
 	keys = append(keys, ranked{key{"c", "chief"}, 2})
@@ -1549,8 +1562,23 @@ func (m *Model) listKeys() []ranked {
 	return append(keys, ranked{key{"?", "help"}, 5}, ranked{key{"q", "quit"}, 3})
 }
 
+// retryRow is whether a list row of that kind is a failed or waiting delivery.
+func retryRow(kind string) bool { return slices.Contains([]string{"r", "nr", "w", "nw", "cw"}, kind) }
+
+// retryRowCmd retries the delivery a failed or waiting row stands for.
+func (m *Model) retryRowCmd(kind, id string) tea.Cmd {
+	switch kind {
+	case "r", "w":
+		return m.retryCmd(id)
+	case "nr", "nw":
+		n, _ := strconv.ParseInt(id, 10, 64)
+		return m.retryNoteCmd(n)
+	}
+	return m.passNowCmd()
+}
+
 func (m *Model) undeliveredName(sid string) string {
-	for _, b := range m.snap.undelivered {
+	for _, b := range slices.Concat(m.snap.undelivered, m.snap.waiting) {
 		if b.SessionID == sid {
 			return b.Decisions[0].SessionName
 		}
@@ -1576,6 +1604,9 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 		}
 		return m, m.quit()
 	case "r":
+		if kind, id, _ := strings.Cut(m.focusedRow(), ":"); retryRow(kind) {
+			return m, m.retryRowCmd(kind, id)
+		}
 		return m, m.retryFirst()
 	case "c":
 		return m, m.openChief(m.rowTask(m.focusedRow()), scList)
@@ -1620,11 +1651,8 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 		case "i":
 			m.inboxOpen, m.cursor = true, 0
 			return m, nil
-		case "r":
-			return m, m.retryCmd(sid)
-		case "nr":
-			id, _ := strconv.ParseInt(sid, 10, 64)
-			return m, m.retryNoteCmd(id)
+		case "r", "nr", "w", "nw", "cw":
+			return m, m.retryRowCmd(kind, sid)
 		case "n":
 			m.openNote(sid)
 			return m, nil

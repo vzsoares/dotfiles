@@ -37,6 +37,7 @@ type fakeAM struct {
 	// chiefStatus is what ChiefStatus reports.
 	chiefs      []string
 	chiefErr    string
+	chiefDown   bool
 	chiefStatus string
 	noPopup     bool
 	noCanPopup  bool
@@ -94,14 +95,14 @@ func (f *fakeAM) Push(body string) {
 	f.pushes = append(f.pushes, body)
 }
 
-func (f *fakeAM) Chief(msg string) (string, string) {
+func (f *fakeAM) Chief(msg string) (string, string, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.chiefErr != "" {
-		return "", f.chiefErr
+		return "", f.chiefErr, f.chiefDown
 	}
 	f.chiefs = append(f.chiefs, msg)
-	return "42", ""
+	return "42", "", false
 }
 
 func (f *fakeAM) ChiefStatus(string) (string, string) {

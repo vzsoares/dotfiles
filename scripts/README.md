@@ -31,7 +31,7 @@ drift (missing, dangling, or unmanaged links) without changing anything.
 | `ytdl.py` | `zen-ytdl` | Interactive `yt-dlp` downloader with WhatsApp-safe re-encode. |
 | `doc.sh` | `zen-doc` | Adds PDFs/docs to the second-brain vault as Markdown (markitdown/docling) and refreshes the qmd index. |
 | `wrapup.sh` | `zen-wrapup` | SessionEnd hook: digests the transcript and runs the `wrapup` skill headless (memories, vault session log, consolidation). |
-| `chief.py` | `zen-chief` | `zen-chief "<message>"` queues a message to the one live, unarchived session named `chief` (`agent-manager send --from zenha`) and prints the message id; `--status <id>` prints queued/held/delivered/dropped/answered; `--json`. Exit 1: no live chief, several, or agent-manager refused. The `zen-inbox watch` panel (`c`) runs it. Tests: `uv run scripts/test_chief.py`. |
+| `chief.py` | `zen-chief` | `zen-chief "<message>"` queues a message to the one live, unarchived session named `chief` (`agent-manager send --from zenha`) and prints the message id; `--status <id>` prints queued/held/delivered/dropped/answered; `--json`. Exit 3: no live chief (the panel queues the message on this one); exit 1: several chiefs, or agent-manager failed or refused. The `zen-inbox watch` panel (`c`) runs it. Tests: `uv run scripts/test_chief.py`. |
 | `report.py` | `zen-report` | Chief's scheduled routines (06h/12h/18h work reports, Monday survey and board sweep), run by the `launchd/` agent `local.zen.report` every 15 min. `tick` delivers each due job through `zen-chief "[zen-report] <job> <slot>: <prompt>"`; `status [--json]`; `run <job> [--force]`. Schedule: `zen.json` `report.jobs` (machine override in `~/.config/zen/config.json`). A daily slot is due until `window_until`, only the latest runs after a wake (the rest `stale`), an undelivered one is `missed` with a banner. State, `report.log`, `launchd.log` in `~/.cache/zen/report/`; `ZEN_REPORT_NOW` pins the clock. Install: `launchd/link` (macOS; `--uninstall`). Tests: `uv run scripts/test_report.py`. |
 | `bell.sh` | `zen-bell` | Plays a feedback sound / desktop notification, unless the terminal is focused. `--chief` (Stop hook): acts only when `$AGENT_MANAGER_SESSION_ID` is the unarchived `chief` session, and then banners even with `bell.enabled=false` (no sound). Tests: `bash scripts/test_bell.sh`. |
 | `config.sh` | `zen-config` | Reads personal settings from `zen.json` (+ untracked `~/.config/zen/config.json`). |
@@ -160,7 +160,8 @@ zen-inbox amend|withdraw <id> [--force]                 # asker only, --force fo
 zen-inbox list [--all] | show <id>                      # --json on both
 zen-inbox answer <id> (<letter> | --text "...") [--note "..."]  # not a --prod ask, nor Done on --manual
 zen-inbox resolve <id> [--note "..."]                   # settled in talk; not --prod
-zen-inbox retry <session>                    # resend a failed delivery or note reply
+zen-inbox retry <session>                    # resend a failed or waiting delivery or note reply
+zen-inbox retry --waiting                    # one pass: send what waits for a session that is back
 zen-inbox note [<task>] --title "<one line>" [--body "<md>" | --body -]  # chief only; prints n12
 zen-inbox notes [--all] [--json]                        # visible notes, newest first
 zen-inbox read <id>... | --all [--unread]               # mark notes read (n12 or 12)
@@ -172,8 +173,11 @@ until the asking session has no open decision, then sent as one
 `agent-manager send … --from zen-inbox` message (without `--from` when run inside an
 agent pane, where agent-manager refuses it). An agent that withdraws its own last
 open decision gets the held answers printed on stdout instead of a send to itself.
+Answers, note replies and `c` chats for a session that is down (listed, not archived,
+dead) are kept as `waiting` and sent by the panel's 15 s pass, or `retry --waiting`,
+once it is live again; an archived or missing asker is a failed delivery.
 Exit codes: 0 ok · 1 not found or wrong state · 2 usage · 3 recorded, delivery
-failed · 4 vault, db or Go unavailable. `approval use` consumes a prod-action ask
+failed or waiting · 4 vault, db or Go unavailable. `approval use` consumes a prod-action ask
 once (exit 1 with the reason when it does not match); `check` never consumes; amend
 of a prod-action ask is refused. `--match` takes no id and picks the oldest approved
 unused ask bound to all four fields. `git/hooks/pre-push` (global `core.hooksPath`

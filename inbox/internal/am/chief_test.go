@@ -35,9 +35,9 @@ const chiefs = `[
 
 func TestChiefSendsToTheLiveChiefWithoutTouchingOthers(t *testing.T) {
 	data := withZenChief(t, chiefs)
-	id, errText := (Exec{}).Chief("-dash\nsecond line")
-	if id != "42" || errText != "" {
-		t.Fatalf("id %q err %q", id, errText)
+	id, errText, down := (Exec{}).Chief("-dash\nsecond line")
+	if id != "42" || errText != "" || down {
+		t.Fatalf("id %q err %q down %v", id, errText, down)
 	}
 	got := sends(t, data)
 	want := []string{"send", "c1", "-dash\nsecond line", "--json", "--from", "zenha"}
@@ -47,22 +47,38 @@ func TestChiefSendsToTheLiveChiefWithoutTouchingOthers(t *testing.T) {
 }
 
 func TestChiefErrorsAreSpecificAndSendNothing(t *testing.T) {
-	cases := map[string]struct{ sessions, want string }{
+	cases := map[string]struct {
+		sessions, want string
+		down           bool
+	}{
 		"none": {`[{"id": "s1", "name": "worker", "status": "idle", "running": true}]`,
-			"no live session named 'chief'"},
+			"no live session named 'chief'", true},
+		"dead": {`[{"id": "c1", "name": "chief", "status": "dead", "running": false}]`,
+			"no live session named 'chief'", true},
 		"two": {`[{"id": "a", "name": "chief", "status": "idle", "running": true},
 			{"id": "b", "name": "chief", "status": "idle", "running": true}]`,
-			"2 live sessions named 'chief': a, b"},
+			"2 live sessions named 'chief': a, b", false},
 	}
 	for name, c := range cases {
 		data := withZenChief(t, c.sessions)
-		id, errText := (Exec{}).Chief("hi")
-		if id != "" || errText != c.want {
-			t.Errorf("%s: id %q err %q", name, id, errText)
+		id, errText, down := (Exec{}).Chief("hi")
+		if id != "" || errText != c.want || down != c.down {
+			t.Errorf("%s: id %q err %q down %v", name, id, errText, down)
 		}
 		if got := sends(t, data); len(got) != 0 {
 			t.Errorf("%s: sent %q", name, got)
 		}
+	}
+}
+
+// Only zen-chief's exit 3 means chief is down: a refusal exits 1.
+func TestChiefRefusalIsAPlainError(t *testing.T) {
+	data := withZenChief(t, chiefs)
+	if err := os.WriteFile(filepath.Join(data, "send_rc"), []byte("1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if id, errText, down := (Exec{}).Chief("hi"); id != "" || errText != "send refused" || down {
+		t.Fatalf("id %q err %q down %v", id, errText, down)
 	}
 }
 

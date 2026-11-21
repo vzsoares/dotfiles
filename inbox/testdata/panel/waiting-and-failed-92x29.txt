@@ -1,0 +1,29 @@
+cockpit · ✕ delivery failed · spec-s2 · r retry                                    quota n/a
+» queued for chief: sent when chief is back
+  Inbox · all clear
+
+Failed delivery · 1
+› retry spec-s2: 1 answer(s) · send refused
+
+Waiting · sent when the session is back
+  waiting spec-s1: 1 answer(s) · session s1 is down · 0s
+  waiting chief: 1 message(s) · no live session named 'chief' · 0s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter retry · c chief · ? help · q quit

@@ -22,7 +22,8 @@ import (
 const usage = `Decision inbox: agents ask, the user answers from a live watcher.
 
 Exit codes: 0 ok · 1 not found or wrong state · 2 usage ·
-3 answer recorded, delivery failed · 4 vault or db unavailable.`
+3 answer recorded, delivery failed or waiting for a session that is down ·
+4 vault or db unavailable.`
 
 // exitCode ends the process with a code after the command printed its output.
 type exitCode int
@@ -110,6 +111,30 @@ func (a *App) report(ib *inbox.Inbox, res *inbox.Delivery, sid, task string) err
 		return exitCode(3)
 	}
 	a.out(msg)
+	return nil
+}
+
+// passWaiting runs one delivery pass and prints a line per item sent or left
+// waiting; a failed send exits 3.
+func (a *App) passWaiting(ib *inbox.Inbox) error {
+	outcomes, err := ib.Pass()
+	failed := false
+	for _, o := range outcomes {
+		if o.Failed {
+			fmt.Fprintln(a.Stderr, o.Text)
+			failed = true
+		} else {
+			a.out(o.Text)
+		}
+	}
+	switch {
+	case err != nil:
+		return err
+	case failed:
+		return exitCode(3)
+	case len(outcomes) == 0:
+		a.out("nothing waiting")
+	}
 	return nil
 }
 
@@ -344,7 +369,7 @@ func (a *App) list() *cobra.Command {
 				return err
 			}
 			defer ib.Close()
-			where := "status = 'open' OR delivery IN ('held', 'sending', 'failed')"
+			where := "status = 'open' OR delivery IN ('held', 'sending', 'failed', 'waiting')"
 			if all {
 				where = "1"
 			}
@@ -394,7 +419,11 @@ func (a *App) summary(ib *inbox.Inbox) error {
 	if err != nil {
 		return err
 	}
-	a.out(view.Render(open, held, undelivered, sessions, width, at))
+	waiting, err := ib.Waiting()
+	if err != nil {
+		return err
+	}
+	a.out(view.Render(open, held, undelivered, waiting, sessions, width, at))
 	for _, row := range view.Rows(open, sessions) {
 		opened, err := ib.SessionOpen(row.SessionID)
 		if err != nil {
@@ -532,16 +561,23 @@ func (a *App) resolve() *cobra.Command {
 }
 
 func (a *App) retry() *cobra.Command {
-	return &cobra.Command{
-		Use:   "retry SESSION",
-		Short: "Resend a session's failed delivery as one message, and its failed note replies.",
-		Args:  cobra.ExactArgs(1),
+	var waiting bool
+	cmd := &cobra.Command{
+		Use:   "retry (SESSION | --waiting)",
+		Short: "Resend a session's failed or waiting answers as one message, and its note replies; --waiting sends what waits for any session that is back.",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if waiting == (len(args) == 1) {
+				return usageErr("give a session or --waiting")
+			}
 			ib, err := a.open()
 			if err != nil {
 				return err
 			}
 			defer ib.Close()
+			if waiting {
+				return a.passWaiting(ib)
+			}
 			res, err := ib.Retry(args[0])
 			var ie *inbox.Error
 			noAnswers := errors.As(err, &ie) && ie.Empty
@@ -575,6 +611,8 @@ func (a *App) retry() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&waiting, "waiting", false, "one delivery pass over everything that waits for a session that was down")
+	return cmd
 }
 
 func (a *App) watch() *cobra.Command {

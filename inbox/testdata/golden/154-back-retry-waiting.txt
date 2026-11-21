@@ -1,0 +1,8 @@
+step 154 back-retry-waiting
+args: ["retry" "--waiting"]
+exit: 0
+-- stdout --
+sent 40.1 to spec-s12
+-- stderr --
+-- sends --
+["send" "s12" "[zen-inbox] Answers to your decisions:\n40.1 Down? → a: a" "--from" "zen-inbox" "--json"]

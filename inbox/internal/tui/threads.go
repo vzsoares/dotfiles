@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/md"
 	"github.com/vzsoares/dotfiles/inbox/internal/pyfmt"
@@ -136,6 +137,7 @@ func (m *Model) threadOf(value string) (thread, bool) {
 const (
 	gInbox = iota
 	gFailed
+	gWaiting
 	gThreads
 	gNoTask
 )
@@ -217,8 +219,41 @@ func (m *Model) threadRows(room int) []listRow {
 	return out
 }
 
-// listRows are the cockpit's rows in order: failed deliveries, threads, then
-// the notes without a task.
+// waitRow is one Waiting row: a target that is down and what is kept for it.
+type waitRow struct {
+	// value is the list value: w:<session>, nw:<note> or cw: for the chats.
+	value, name, label, reason string
+	// oldest is when the oldest item was written; n counts the items.
+	oldest string
+	n      int
+}
+
+// waitRows are the deliveries kept for a session that is down: answers per
+// session, then note replies, then the chats to chief as one row.
+func (m *Model) waitRows() []waitRow {
+	var out []waitRow
+	for _, b := range m.snap.waiting {
+		r := waitRow{value: "w:" + b.SessionID, name: b.Decisions[0].SessionName, reason: view.FailReason(b),
+			oldest: b.Decisions[0].AnsweredAt, n: len(b.Decisions)}
+		for _, d := range b.Decisions {
+			r.oldest = min(r.oldest, d.AnsweredAt)
+		}
+		r.label = "waiting " + r.name + ": " + strconv.Itoa(r.n) + " answer(s)"
+		out = append(out, r)
+	}
+	for _, n := range m.snap.waitingNotes {
+		out = append(out, waitRow{value: "nw:" + noteValue(n), name: n.SessionName, reason: n.DeliveryError,
+			oldest: n.RepliedAt, n: 1, label: "waiting reply " + n.Label() + " to " + n.SessionName})
+	}
+	if cs := m.snap.waitingChats; len(cs) > 0 {
+		out = append(out, waitRow{value: "cw:", name: am.ChiefName, reason: cs[0].Error, oldest: cs[0].SentAt, n: len(cs),
+			label: "waiting " + am.ChiefName + ": " + strconv.Itoa(len(cs)) + " message(s)"})
+	}
+	return out
+}
+
+// listRows are the cockpit's rows in order: failed deliveries, waiting ones,
+// threads, then the notes without a task.
 func (m *Model) listRows() []listRow {
 	room := max(m.w, view.MinWidth) - 2
 	if m.inboxOpen {
@@ -239,6 +274,14 @@ func (m *Model) listRows() []listRow {
 			label += " · " + n.DeliveryError
 		}
 		out = append(out, listRow{item{pyfmt.Clip(label, room), "nr:" + noteValue(n)}, gFailed, &failStyle})
+	}
+	for _, w := range m.waitRows() {
+		label := w.label
+		if w.reason != "" {
+			label += " · " + w.reason
+		}
+		label += " · " + view.Age(w.oldest, m.now())
+		out = append(out, listRow{item{pyfmt.Clip(label, room), w.value}, gWaiting, &bannerStyle})
 	}
 	out = append(out, m.threadRows(room)...)
 	loose := m.looseNotes()

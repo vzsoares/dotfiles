@@ -41,7 +41,7 @@ func goldenScenario() []gstep {
 	sessions := `[{"id": "s1", "name": "spec-s1", "status": "idle", "running": true, "archived": false,` +
 		` "group": "me", "directory": "/x/dotfiles"}, {"id": "s2", "name": "spec-s2", "status": "busy",` +
 		` "running": true, "archived": false}, {"id": "s3", "name": "spec-s3", "status": "dead",` +
-		` "running": false, "archived": false}`
+		` "running": false, "archived": true}`
 	for n := 4; n <= 11; n++ {
 		sessions += fmt.Sprintf(`, {"id": "s%d", "name": "spec-s%d", "status": "idle", "running": true}`, n, n)
 	}
@@ -212,6 +212,23 @@ func goldenScenario() []gstep {
 				"v4/config/.keep": ""}},
 		gstep{name: "vault-ask", args: []string{"ask", "1", "-q", "Vault?", "--session", "s1"},
 			env: []string{"ZEN_FLOW_DB=", "HOME=$ROOT/h4"}},
+	)
+	// Not from inbox.py: answers kept for a session that is down (#933).
+	down := `[{"id": "s12", "name": "spec-s12", "status": "dead", "running": false, "archived": false}]`
+	steps = append(steps,
+		named("waiting-none", plain("retry", "--waiting")),
+		gstep{name: "down-ask", args: []string{"ask", "40", "-q", "Down?", "-o", "a", "-o", "b", "--session", "s12"},
+			files: map[string]string{"sessions.json": down}},
+		named("down-answer", plain("answer", "40.1", "a")),
+		named("down-list", plain("list")),
+		named("down-list-json", plain("list", "--json")),
+		named("down-retry-waiting", plain("retry", "--waiting")),
+		named("down-retry-session", plain("retry", "s12")),
+		gstep{name: "back-retry-waiting", args: []string{"retry", "--waiting"},
+			files: map[string]string{"sessions.json": strings.Replace(down, `"dead", "running": false`, `"idle", "running": true`, 1)}},
+		named("back-retry-again", plain("retry", "--waiting")),
+		named("retry-neither", plain("retry")),
+		named("retry-both", plain("retry", "s12", "--waiting")),
 	)
 	return steps
 }

@@ -153,3 +153,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-21] ingest | Agent roles (zen-role), overlay mode
 Added `agent-manager/roles.json`, `scripts/role.py` (`zen-role list|show|check|build`) and the `agent-manager/shim/claude` launcher: each agent-manager role gets its own model, effort, compaction window, skills, output style and plugins through an env profile `role-<name>`. Overlay mode only; isolate mode is rejected by `check` until it lands. Found that the CLI keeps only the last `--settings`, so the shim merges agent-manager's file with the role overlay, and that a spawn naming no profile inherits its spawner's, so the presets name one on every `create_session` line.
 Pages created: architecture/agent-roles.md
+
+## [2026-11-21] feature | zen-inbox queues messages for a session that is down (#933)
+Answers, note replies and `c` chats whose target is down (no live `chief`; an asker still listed, not archived, dead) are stored `waiting` and sent by `inbox.Pass`: the panel at start and every 15 s, or `zen-inbox retry --waiting`. One message per target per pass, each item claimed in its own transaction (schema v13: `chats.claimed_at`, additive). Answers fall back to the one live session with the asker's name. `zen-chief` exits 3 for "no live chief". The panel gains a `Waiting` group and header, red plus one banner after 15 minutes; late chats and replies say when they were written.
+Pages updated: architecture/decision-inbox.md

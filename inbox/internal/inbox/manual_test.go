@@ -57,7 +57,7 @@ func TestV11DBMigratesToV12KeepingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := ib.userVersion(); v != 12 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	const body = "body TEXT NOT NULL DEFAULT '',"

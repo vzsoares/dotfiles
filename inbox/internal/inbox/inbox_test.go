@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -24,15 +25,38 @@ type fakeAM struct {
 	sessions am.Sessions
 	// statuses maps a message id to what MessageStatus reports.
 	statuses map[string]string
+	// listed counts Sessions calls; onSend runs before each Send.
+	listed int
+	onSend func()
+	// chiefs are the messages Chief took; chiefErr fails it, as down or not.
+	chiefs    []string
+	chiefErr  string
+	chiefDown bool
 }
 
-func (f *fakeAM) Sessions() am.Sessions               { return f.sessions }
-func (f *fakeAM) CanPopup(string) error               { return nil }
-func (f *fakeAM) Popup(string) error                  { return nil }
-func (f *fakeAM) Bell(string)                         {}
-func (f *fakeAM) Notify(_, _ string)                  {}
-func (f *fakeAM) Push(string)                         {}
-func (f *fakeAM) Chief(string) (string, string)       { return "", "" }
+func (f *fakeAM) Sessions() am.Sessions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.listed++
+	return f.sessions
+}
+
+func (f *fakeAM) CanPopup(string) error { return nil }
+func (f *fakeAM) Popup(string) error    { return nil }
+func (f *fakeAM) Bell(string)           {}
+func (f *fakeAM) Notify(_, _ string)    {}
+func (f *fakeAM) Push(string)           {}
+
+func (f *fakeAM) Chief(msg string) (string, string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.chiefErr != "" {
+		return "", f.chiefErr, f.chiefDown
+	}
+	f.chiefs = append(f.chiefs, msg)
+	return "m" + strconv.Itoa(len(f.chiefs)), "", false
+}
+
 func (f *fakeAM) ChiefStatus(string) (string, string) { return "", "" }
 
 func (f *fakeAM) MessageStatus(id string) (string, string) {
@@ -50,6 +74,9 @@ func (f *fakeAM) Followup(string) string {
 }
 
 func (f *fakeAM) Send(sid, msg string) (bool, string, string) {
+	if f.onSend != nil {
+		f.onSend()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sends = append(f.sends, [2]string{sid, msg})

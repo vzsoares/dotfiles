@@ -1,0 +1,7 @@
+step 153 down-retry-session
+args: ["retry" "s12"]
+exit: 3
+-- stdout --
+-- stderr --
+waiting: session s12 is down; the panel sends 40.1 when the session is back
+-- sends --

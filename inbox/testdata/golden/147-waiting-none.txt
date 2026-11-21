@@ -1,0 +1,7 @@
+step 147 waiting-none
+args: ["retry" "--waiting"]
+exit: 0
+-- stdout --
+nothing waiting
+-- stderr --
+-- sends --

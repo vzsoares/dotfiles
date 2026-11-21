@@ -2,8 +2,8 @@ package tui
 
 import (
 	"slices"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -43,6 +43,9 @@ const maxPollFailures = 3
 type chiefSentMsg struct {
 	id, err string
 	chat    int64
+	// waiting means chief is down and the chat is kept for the pass.
+	waiting bool
+	snap    snapshot
 }
 type chiefStatusMsg struct{ id, status, err string }
 
@@ -57,35 +60,19 @@ func (m *Model) openChief(task string, from screen) tea.Cmd {
 	return m.chiefTA.Focus()
 }
 
-// chiefText is what chief receives: a thread's message leads with its task and title.
-func chiefText(task, title, text string) string {
-	if task == "" {
-		return text
-	}
-	return "[" + pyfmt.RStrip("#"+task+" "+title) + "] " + text
-}
-
-// chiefSendCmd stores the chat, sends it, then records the message id or the error.
+// chiefSendCmd stores the chat and sends it, or leaves it waiting for chief.
 func (m *Model) chiefSendCmd(text string) tea.Cmd {
 	m.busy = "Sending to chief…"
-	ib, client, task, mu := m.ib, m.am, m.chiefTask, m.chiefMu
-	msg := chiefText(task, m.snap.titles[task], text)
+	ib, client, task := m.ib, m.am, m.chiefTask
+	w, sessions := m.watched(), m.snap.sessions
 	return func() tea.Msg {
-		mu.Lock()
-		defer mu.Unlock()
-		c, err := ib.AddChat(task, text)
-		if err != nil {
-			return chiefSentMsg{err: err.Error()}
+		c, err := ib.SendChat(task, text)
+		msg := chiefSentMsg{id: c.MessageID, err: c.Error, chat: c.ID, waiting: err == nil && c.Status == "waiting"}
+		if err != nil && msg.err == "" {
+			msg.err = err.Error()
 		}
-		id, errText := client.Chief(msg)
-		status := "queued"
-		if errText != "" {
-			status = "failed"
-		}
-		if err := ib.UpdateChat(c.ID, id, status, errText); err != nil && errText == "" {
-			errText = "sent as " + id + ", not recorded: " + err.Error()
-		}
-		return chiefSentMsg{id, errText, c.ID}
+		msg.snap = load(ib, client, w, sessions, false)
+		return msg
 	}
 }
 
@@ -102,6 +89,13 @@ func (m *Model) leaveChief(flash string, ok bool) tea.Cmd {
 
 func (m *Model) onChiefSent(msg chiefSentMsg) tea.Cmd {
 	m.busy = ""
+	if msg.snap.err == nil {
+		m.snap = msg.snap
+	}
+	if msg.waiting {
+		m.chiefTA.Reset()
+		return m.leaveChief("queued for chief: sent when chief is back", true)
+	}
 	if msg.err != "" && msg.id == "" {
 		m.scr, m.flash, m.flashOK = scChief, msg.err, false
 		return m.chiefTA.Focus()
@@ -182,7 +176,7 @@ func (m *Model) keyChief(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) viewChief() frame {
 	head := "message chief"
 	if m.chiefTask != "" {
-		head = pyfmt.Clip(chiefText(m.chiefTask, m.snap.titles[m.chiefTask], "")+"· message chief", m.w)
+		head = pyfmt.Clip(inbox.ChatMessage(m.chiefTask, m.snap.titles[m.chiefTask], "", "")+"· message chief", m.w)
 	}
 	top := []section{{lines: []string{head}}}
 	if m.flash != "" {
@@ -197,13 +191,22 @@ func (m *Model) chiefStatusLine() string {
 	return "✉ chief · message " + m.chief.id + " " + m.chief.status
 }
 
-// chatDone are the statuses a stored chat is not worked on any more.
-func chatDone() []string { return append([]string{"failed", statusUnknown}, finalStatuses...) }
+// chatDone are the statuses a stored chat's message is not polled in: final
+// ones, and those of a chat the delivery pass still has to send.
+func chatDone() []string {
+	return append([]string{"failed", "waiting", "sending", statusUnknown}, finalStatuses...)
+}
 
 // maxChatMisses is how many empty status polls in a row end a chat's tracking.
 const maxChatMisses = maxPollFailures
 
-type chiefPassMsg struct{}
+// chiefPassMsg ends a delivery pass; snap is read only when it sent or
+// failed something.
+type chiefPassMsg struct {
+	outcomes []inbox.Outcome
+	err      error
+	snap     *snapshot
+}
 
 // chiefPassEvery is how often the delivery pass runs.
 const chiefPassEvery = 15 * time.Second
@@ -217,69 +220,124 @@ func (m *Model) chiefPassDue() tea.Cmd {
 	return m.chiefPass()
 }
 
-// chiefPass works every stored chat but the header's tracked one, oldest
-// first: a chat that never got a message id is sent, the rest get a status
-// poll. A send that fails stops the pass so later chats stay in order. Only
-// the sends hold chiefMu, so a slow status poll never blocks a new chat.
+// chiefPass sends what waits for a session that is back (inbox.Pass), then
+// polls the status of every stored chat with a message id but the header's
+// tracked one.
 func (m *Model) chiefPass() tea.Cmd {
 	if m.passing {
 		return nil
 	}
 	m.passing, m.passAt = true, m.now()
-	ib, client, mu, skip, misses := m.ib, m.am, m.chiefMu, m.chief.chat, m.chatMisses
+	ib, client, skip, misses := m.ib, m.am, m.chief.chat, m.chatMisses
+	w, sessions := m.watched(), m.snap.sessions
 	return func() tea.Msg {
-		polls, ok := sendUnsent(ib, client, mu, skip)
-		if !ok {
-			return chiefPassMsg{}
+		outcomes, err := ib.Pass()
+		msg := chiefPassMsg{outcomes: outcomes, err: err}
+		pollChats(ib, client, skip, misses)
+		// Read after the polls, which can take seconds: an earlier read would
+		// roll the panel back over what changed meanwhile.
+		if moved(outcomes) {
+			s := load(ib, client, w, sessions, false)
+			msg.snap = &s
 		}
-		for _, c := range polls {
-			status, errText := client.ChiefStatus(c.MessageID)
-			if errText != "" || status == "" {
-				if misses[c.ID]++; misses[c.ID] >= maxChatMisses {
-					status = statusUnknown
-					delete(misses, c.ID)
-					_ = ib.UpdateChat(c.ID, "", status, "")
-				}
-				continue
-			}
-			delete(misses, c.ID)
-			if status != c.Status {
-				_ = ib.UpdateChat(c.ID, "", status, "")
-			}
-		}
-		return chiefPassMsg{}
+		return msg
 	}
 }
 
-// sendUnsent sends the stored chats that never got a message id, under mu so
-// a chat being added is not sent twice, and returns the chats to poll. ok is
-// false when a read or send failed.
-func sendUnsent(ib *inbox.Inbox, client am.Client, mu *sync.Mutex, skip int64) (polls []inbox.Chat, ok bool) {
-	mu.Lock()
-	defer mu.Unlock()
-	chats, err := ib.PendingChats(chatDone())
+// pollChats mirrors agent-manager's status into every stored chat with a
+// message id but skip; maxChatMisses empty polls in a row end a chat's tracking.
+func pollChats(ib *inbox.Inbox, client am.Client, skip int64, misses map[int64]int) {
+	polls, err := ib.PendingChats(chatDone())
 	if err != nil {
-		return nil, false
+		return
 	}
-	titles, err := ib.TaskTitles()
-	if err != nil {
-		return nil, false
-	}
-	for _, c := range chats {
-		if c.ID == skip {
+	for _, c := range polls {
+		if c.ID == skip || c.MessageID == "" {
 			continue
 		}
-		if c.MessageID != "" {
-			polls = append(polls, c)
+		status, errText := client.ChiefStatus(c.MessageID)
+		if errText != "" || status == "" {
+			if misses[c.ID]++; misses[c.ID] >= maxChatMisses {
+				_ = ib.UpdateChat(c.ID, "", statusUnknown, "")
+				delete(misses, c.ID)
+			}
 			continue
 		}
-		id, errText := client.Chief(chiefText(c.Task, titles[c.Task], c.Text))
-		if errText != "" {
-			return nil, false
-		}
-		if ib.UpdateChat(c.ID, id, "queued", "") != nil {
-			return nil, false
+		delete(misses, c.ID)
+		if status != c.Status {
+			_ = ib.UpdateChat(c.ID, "", status, "")
 		}
 	}
-	return polls, true
+}
+
+// moved is whether a pass sent or failed anything.
+func moved(outcomes []inbox.Outcome) bool {
+	return slices.ContainsFunc(outcomes, func(o inbox.Outcome) bool { return o.Sent || o.Failed })
+}
+
+// passFlash is what a pass did: each failure's text, then the targets it
+// delivered to with the counts; ok is false when a send failed.
+func passFlash(outcomes []inbox.Outcome) (flash string, ok bool) {
+	nouns := map[string][2]string{"answers": {"answer", "answers"}, "reply": {"reply", "replies"}, "chat": {"message", "messages"}}
+	var sent, parts []string
+	for _, o := range outcomes {
+		switch {
+		case o.Failed:
+			parts = append(parts, o.Text)
+		case o.Sent:
+			noun := nouns[o.Kind][1]
+			if o.Count == 1 {
+				noun = nouns[o.Kind][0]
+			}
+			sent = append(sent, o.Name+": "+strconv.Itoa(o.Count)+" "+noun)
+		}
+	}
+	ok = len(parts) == 0 && len(sent) > 0
+	if len(sent) > 0 {
+		parts = append(parts, "sent to "+strings.Join(sent, " · "))
+	}
+	return strings.Join(parts, "; "), ok
+}
+
+// onChiefPass shows what the pass delivered on the list.
+func (m *Model) onChiefPass(msg chiefPassMsg) {
+	m.passing = false
+	if msg.snap != nil && msg.snap.err == nil && m.busy == "" {
+		focused := m.focusedRow()
+		m.snap = *msg.snap
+		m.refreshNote()
+		m.refreshThread()
+		m.refocus(focused)
+	}
+	if m.scr != scList {
+		return
+	}
+	switch flash, ok := passFlash(msg.outcomes); {
+	case msg.err != nil:
+		m.flash, m.flashOK, m.flashAt = msg.err.Error(), false, m.now()
+	case flash != "":
+		m.flash, m.flashOK, m.flashAt = flash, ok, m.now()
+	}
+}
+
+// passNowCmd runs a pass on a keypress and reports every line of it.
+func (m *Model) passNowCmd() tea.Cmd {
+	m.busy = "Sending what waits…"
+	ib, client, sessions := m.ib, m.am, m.snap.sessions
+	return func() tea.Msg {
+		outcomes, err := ib.Pass()
+		lines := make([]string, len(outcomes))
+		for i, o := range outcomes {
+			lines[i] = o.Text
+		}
+		flash := strings.Join(lines, "; ")
+		switch {
+		case err != nil:
+			flash = err.Error()
+		case flash == "":
+			flash = "nothing waiting"
+		}
+		_, ok := passFlash(outcomes)
+		return retriedMsg{flash, err == nil && ok, load(ib, client, watch{}, sessions, false)}
+	}
 }

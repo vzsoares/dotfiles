@@ -1,0 +1,29 @@
+cockpit · ◷ chief is down · 2 queued · sends when back                             quota n/a
+» queued for chief: sent when chief is back
+  Inbox · all clear
+
+Waiting · sent when the session is back
+› waiting chief: 2 message(s) · no live session named 'chief' · 0s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter retry · c chief · ? help · q quit

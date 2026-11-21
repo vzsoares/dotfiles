@@ -1,0 +1,7 @@
+step 157 retry-both
+args: ["retry" "s12" "--waiting"]
+exit: 2
+-- stdout --
+-- stderr --
+zen-inbox: give a session or --waiting
+-- sends --

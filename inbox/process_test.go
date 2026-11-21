@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -67,6 +68,86 @@ func TestConcurrentAnswersOnLastTwoFlushOnce(t *testing.T) {
 	}
 }
 
+// passes runs n concurrent `retry --waiting` and fails on any error exit.
+func (f *fake) passes(n int) {
+	f.t.Helper()
+	var cmds []*exec.Cmd
+	for range n {
+		cmds = append(cmds, f.cmd(nil, zenBin, "retry", "--waiting"))
+	}
+	for _, r := range parallel(cmds) {
+		if r.code != 0 || strings.Contains(r.stderr, "locked") {
+			f.t.Fatalf("%+v", r)
+		}
+	}
+}
+
+const chiefUp = `[{"id": "c1", "name": "chief", "status": "idle", "running": true, "archived": false}]`
+
+func TestConcurrentPassesSendAWaitingAnswerBatchOnce(t *testing.T) {
+	f := newFake(t)
+	f.sessions(session("s1", "dead", false))
+	f.zen(nil, "ask", "7", "-q", "Q?", "-o", "a", "-o", "b", "--session", "s1")
+	if r := f.zen(nil, "answer", "7.1", "a"); r.code != 3 || !strings.HasPrefix(r.stderr, "waiting: session s1 is down") {
+		t.Fatalf("%+v", r)
+	}
+	f.sessions(session("s1", "idle", true))
+	f.passes(6)
+	if s := f.sends(); len(s) != 1 || s[0][1] != "s1" {
+		t.Fatalf("sends %q", s)
+	}
+	if got := f.sqlite("SELECT delivery, message_id FROM decisions WHERE id = '7.1'"); got != "sent|42\n" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestConcurrentPassesSendAWaitingReplyOnce(t *testing.T) {
+	f := newFake(t)
+	f.write("sessions.json", chiefUp)
+	if r := f.zen(nil, "note", "--title", "Done", "--session", "c1"); r.code != 0 {
+		t.Fatalf("%+v", r)
+	}
+	now := "strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')"
+	f.sqlite("UPDATE notes SET reply = 'thanks', replied_at = " + now + ", claimed_at = " + now + "," +
+		" delivery = 'waiting', delivery_error = 'no live session named chief' WHERE id = 1;" +
+		" INSERT INTO note_replies (note_id, text, replied_at) VALUES (1, 'thanks', " + now + ")")
+	f.passes(6)
+	s := f.sends()
+	if len(s) != 1 || s[0][1] != "c1" || s[0][2] != "[zen-inbox] Reply to your note n1 (Done):\nthanks" {
+		t.Fatalf("sends %q", s)
+	}
+	if got := f.sqlite("SELECT delivery, read_at != '' FROM notes WHERE id = 1"); got != "sent|1\n" {
+		t.Fatalf("%q", got)
+	}
+}
+
+// The chat goes through the real zen-chief; only agent-manager is fake.
+func TestConcurrentPassesSendAWaitingChatOnce(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Fatal("python3 is required: zen-chief is a python script")
+	}
+	f := newFake(t)
+	script, err := filepath.Abs("../scripts/chief.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(script, filepath.Join(f.root, "bin", "zen-chief")); err != nil {
+		t.Fatal(err)
+	}
+	f.write("sessions.json", chiefUp)
+	f.zen(nil, "list")
+	f.sqlite("INSERT INTO chats (task, text, sent_at, status, error) VALUES ('', 'ping'," +
+		" strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now'), 'waiting', 'no live session named ''chief''')")
+	f.passes(6)
+	s := f.sends()
+	if len(s) != 1 || !slices.Equal(s[0], []string{"send", "c1", "ping", "--json", "--from", "zenha"}) {
+		t.Fatalf("sends %q", s)
+	}
+	if got := f.sqlite("SELECT status, message_id FROM chats WHERE id = 1"); got != "queued|42\n" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func (f *fake) load(dump string) {
 	f.t.Helper()
 	sql, err := os.ReadFile(dump)
@@ -92,7 +173,7 @@ func TestConcurrentFirstOpensOfV1DB(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "12" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "13" {
 		t.Fatal(v)
 	}
 }
@@ -114,7 +195,7 @@ func TestPythonDBsOpenListAndAnswer(t *testing.T) {
 			}
 		}
 		expect("open")
-		if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "12" {
+		if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "13" {
 			t.Fatalf("user_version %s", v)
 		}
 		f.zen(now, "answer", "7.1", "b")
