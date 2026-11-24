@@ -132,10 +132,11 @@ Triage, block, reopen and title/body edits stay on MCP.
   Blocked (with who) → Inbox.
 - **next** — recommend one task by the claim order, the one rule for which work goes
   first:
-  1. In Progress before To Do (finish before starting);
+  1. In Progress before To Do (finish before starting), the latest edited first;
   2. then Priority: High, Medium, Low, none;
   3. then, at equal priority, the projects in the vault's `next_order`
-     (`config/zen-flow.json`) in list order, unlisted projects tied after them
+     (`config/zen-flow.json`, project names or agent group keys) in list order,
+     unlisted projects tied after them
      (no key: this step is skipped);
   4. then the nearest due date, then the oldest task.
 
@@ -283,7 +284,8 @@ profile inherits its group's, else its spawner's, so every spawn names one.
 
 When the orchestrator's queue is empty and a worker slot is free, it sends chief one
 line, `QUEUE_EMPTY <free slots>`, at most once an hour. Chief then runs `zen-board next
---agent --json` and takes the first task that is To Do (never Inbox or Blocked), has
+--agent --json` (when that pick is gated, it walks `zen-board check --json`, the same
+order) and takes the first task that is To Do (never Inbox or Blocked), has
 no Human Only tag, no open `zen-inbox` ask and no written wait on its page (a Gate,
 "starts only after …", "parked"). It specs it (spec-writer, or a trivial spec itself)
 and hands the `SPEC_READY` task to the orchestrator as usual, with a cockpit note

@@ -321,14 +321,6 @@ MID = "2026-05-01T00:00:00.000Z"
 NEW = "2026-09-01T00:00:00.000Z"
 
 
-@pytest.fixture
-def ordered(tmp_path: Path, fake: Fake) -> Fake:
-    """`fake` with the vault's next_order set to ["approva"] (any case)."""
-    (tmp_path / "vault" / "config" / "zen-flow.json").unlink()
-    (tmp_path / "vault").rmdir() if False else None
-    return fake
-
-
 def set_order(home: Path, order: list[str] | None) -> None:
     config = home / "vault" / "config" / "zen-flow.json"
     data = board.obj(json.loads(config.read_text()))
@@ -394,6 +386,13 @@ def test_unlisted_projects_tie_after_listed(fake: Fake, tmp_path: Path) -> None:
     assert order_of(fake, work, me, approva) == [3, 2, 1]
 
 
+def test_next_order_accepts_agent_group_keys(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, ["office"])
+    me = page(1, board.TODO, created=OLD)
+    work = page(2, board.TODO, project=WORK, created=NEW)
+    assert order_of(fake, me, work) == [2, 1]
+
+
 def test_without_next_order_project_is_ignored(fake: Fake, tmp_path: Path) -> None:
     set_order(tmp_path, None)
     approva = page(1, board.TODO, priority="Medium", project=APPROVA, created=NEW)
@@ -408,6 +407,9 @@ def test_next_json_names_the_deciding_rule(fake: Fake) -> None:
 
     assert rule(page(1, board.TODO)) == "only"
     assert rule(page(1, board.TODO), page(2, board.IN_PROGRESS)) == "in_progress"
+    assert rule(
+        page(1, board.IN_PROGRESS, edited=OLD), page(2, board.IN_PROGRESS, edited=NEW)
+    ) == ("latest_edit")
     assert rule(page(1, board.TODO, priority="Low"), page(2, board.TODO)) == (
         "priority"
     )

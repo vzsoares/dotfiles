@@ -57,8 +57,8 @@
 #              To Do by Priority (High, Medium, Low, none), the vault's
 #              next_order projects (unlisted tie after), nearest due, oldest;
 #              never Blocked/Inbox. --json adds "rule": the key that put it
-#              ahead of the runner-up (in_progress, priority, next_order, due,
-#              oldest), or "only"
+#              ahead of the runner-up (in_progress, latest_edit, priority,
+#              next_order, due, oldest), or "only"
 #      start   Status = In Progress
 #      done    Status = Done and Conclusion Date = today in one PATCH
 #      add     new task (To Do unless --inbox); prints its numeric ID
@@ -200,7 +200,7 @@ class Config:
     data_source: str
     projects: dict[str, str]  # name -> page id without dashes
     groups: dict[str, str]  # agent group key -> project name
-    next_order: list[str] = field(default_factory=list)  # project names, any case
+    next_order: list[str] = field(default_factory=list)  # project or group names
 
     def project_name(self, page_id: str) -> str:
         bare = page_id.replace("-", "")
@@ -234,7 +234,9 @@ def load_config() -> Config:
         if text(p.get("name")) and text(p.get("page_id"))
     }
     groups = {k: text(v) for k, v in obj(raw.get("agent_groups")).items() if text(v)}
+    by_group = {k.lower(): v for k, v in groups.items()}
     order = [text(n) for n in arr(raw.get("next_order")) if text(n)]
+    order = [n if n in projects else by_group.get(n.lower(), n) for n in order]
     return Config(
         data_source=source, projects=projects, groups=groups, next_order=order
     )
@@ -449,7 +451,7 @@ def deciding_rule(pick: Task, runner_up: Task | None, order: list[str]) -> str:
     if runner_up is None:
         return "only"
     if pick.status == IN_PROGRESS:
-        return "in_progress"
+        return "latest_edit" if runner_up.status == IN_PROGRESS else "in_progress"
     pairs = zip(rank(pick, order), rank(runner_up, order), RANK_RULES)
     return next((rule for a, b, rule in pairs if a != b), "oldest")
 
