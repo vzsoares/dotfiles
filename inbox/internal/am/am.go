@@ -529,8 +529,8 @@ func TmuxEnv() string { return os.Getenv("TMUX") }
 // is gone or a bad request is not.
 func Transient(errText string) bool {
 	l := strings.ToLower(errText)
-	for _, s := range []string{"too many messages", "timed out", "agent-manager not found", "not running",
-		"connection refused", "no such file", "try again"} {
+	for _, s := range []string{"too many messages", "timed out", "agent-manager not found",
+		"connection refused", "agent-manager is not running"} {
 		if strings.Contains(l, s) {
 			return true
 		}

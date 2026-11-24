@@ -104,16 +104,17 @@ func (ib *Inbox) sendHold(target string) (string, error) {
 // why); otherwise ok or a final failure.
 func (ib *Inbox) attempt(target string, send func() (ok bool, mid, errText string)) (ok bool, mid, errText string, deferred bool, err error) {
 	ib.mu.Lock()
-	hold, err := ib.sendHold(target)
-	if err == nil && hold == "" {
-		err = ib.immediate(func() error {
-			now := stamp()
-			if e := ib.exec("DELETE FROM send_log WHERE at < ?", Stamp(Now().Add(-PaceWindow))); e != nil {
-				return e
-			}
-			return ib.exec("INSERT INTO send_log (target, at) VALUES (?, ?)", target, now)
-		})
-	}
+	var hold string
+	err = ib.immediate(func() error {
+		var e error
+		if hold, e = ib.sendHold(target); e != nil || hold != "" {
+			return e
+		}
+		if e = ib.exec("DELETE FROM send_log WHERE at < ?", Stamp(Now().Add(-PaceWindow))); e != nil {
+			return e
+		}
+		return ib.exec("INSERT INTO send_log (target, at) VALUES (?, ?)", target, stamp())
+	})
 	ib.mu.Unlock()
 	if err != nil || hold != "" {
 		return false, "", hold, hold != "", err
@@ -131,10 +132,15 @@ func (ib *Inbox) attempt(target string, send func() (ok bool, mid, errText strin
 	err = ib.immediate(func() error {
 		now := Now()
 		attempts, first := 1, Stamp(now)
-		var f string
-		e := ib.conn.QueryRowContext(ctx, "SELECT attempts + 1, first_at FROM send_retry WHERE target = ?", target).Scan(&attempts, &f)
+		var f, nx string
+		e := ib.conn.QueryRowContext(ctx, "SELECT attempts + 1, first_at, next_at FROM send_retry WHERE target = ?", target).Scan(&attempts, &f, &nx)
 		if e == nil {
-			first = f
+			// A chain idle past the longest backoff is over; a new refusal starts afresh.
+			if t, ok := ParseStamp(nx); ok && now.Sub(t) > 2*backoff(3) {
+				attempts = 1
+			} else {
+				first = f
+			}
 		} else if !errors.Is(e, sql.ErrNoRows) {
 			return e
 		}
