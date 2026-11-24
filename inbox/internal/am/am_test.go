@@ -220,3 +220,17 @@ func TestErroredRunningSessionIsLive(t *testing.T) {
 		}
 	}
 }
+
+func TestTransient(t *testing.T) {
+	for text, want := range map[string]bool{
+		"too many messages to this session in the last minute": true,
+		"agent-manager send timed out after 30s":               true,
+		"agent-manager not found":                              true,
+		"session s1 is gone (dead, archived or missing)":       false,
+		"boom": false,
+	} {
+		if got := Transient(text); got != want {
+			t.Errorf("%q: %v", text, got)
+		}
+	}
+}

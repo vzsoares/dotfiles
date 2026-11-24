@@ -94,6 +94,9 @@ func (m *Model) onChiefSent(msg chiefSentMsg) tea.Cmd {
 	}
 	if msg.waiting {
 		m.chiefTA.Reset()
+		if inbox.IsDeferred(msg.err) {
+			return m.leaveChief("queued for chief: "+msg.err, true)
+		}
 		return m.leaveChief("queued for chief: sent when chief is back", true)
 	}
 	if msg.err != "" && msg.id == "" {

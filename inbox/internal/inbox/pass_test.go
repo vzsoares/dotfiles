@@ -514,7 +514,7 @@ var v12Tables = map[string]string{
 	"chats":            "id, task, text, sent_at, message_id, status, error",
 }
 
-func TestV12DumpMigratesToV13(t *testing.T) {
+func TestV12DumpMigratesToLatest(t *testing.T) {
 	dump, err := os.ReadFile("../../testdata/xver/v12.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -540,7 +540,7 @@ func TestV12DumpMigratesToV13(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := ib.userVersion(); v != 13 || SchemaVersion != 13 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	for table := range v12Tables {
@@ -580,9 +580,9 @@ func TestV12DumpMigratesToV13(t *testing.T) {
 	}
 }
 
-func TestFreshDBIsV13WithTheChatClaim(t *testing.T) {
+func TestFreshDBHasTheChatClaim(t *testing.T) {
 	ib, _, _ := open(t)
-	if v, _ := ib.userVersion(); v != 13 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	if !strings.Contains(createSQL(t, ib.conn, "chats"), "claimed_at TEXT NOT NULL DEFAULT ''") {

@@ -420,6 +420,9 @@ func (d NoteDelivery) Describe() string {
 	if d.OK {
 		return "reply " + d.Note.Label() + " sent to " + d.Note.SessionName
 	}
+	if d.Waiting && IsDeferred(d.Error) {
+		return "reply " + d.Note.Label() + " " + d.Error + "; the panel sends it by itself"
+	}
 	if d.Waiting {
 		return "reply " + d.Note.Label() + " waiting: " + d.Error + "; the panel sends it when " + d.Note.SessionName + " is back"
 	}
@@ -490,7 +493,16 @@ func (ib *Inbox) sendReplyTo(n Note, t target) (NoteDelivery, error) {
 		n, err := ib.markReply(n, state, "", t.reason)
 		return NoteDelivery{Note: n, Error: t.reason, Waiting: t.down}, err
 	}
-	ok, mid, errText := ib.AM.Send(t.id, ReplyMessage(n, n.Reply))
+	ok, mid, errText, deferred, err := ib.attempt(t.id, func() (bool, string, string) {
+		return ib.AM.Send(t.id, ReplyMessage(n, n.Reply))
+	})
+	if err != nil {
+		return NoteDelivery{}, err
+	}
+	if deferred {
+		n, err := ib.markReply(n, "waiting", "", errText)
+		return NoteDelivery{Note: n, Error: errText, Waiting: true}, err
+	}
 	if !ok {
 		// The target may have gone down since it was resolved.
 		if again := replyTarget(ib.AM.Sessions(), n); again.id == "" {
@@ -509,7 +521,7 @@ func (ib *Inbox) sendReplyTo(n Note, t target) (NoteDelivery, error) {
 			return NoteDelivery{}, err
 		}
 	}
-	n, err := ib.markReply(n, "sent", mid, "")
+	n, err = ib.markReply(n, "sent", mid, "")
 	if err != nil {
 		return NoteDelivery{}, err
 	}

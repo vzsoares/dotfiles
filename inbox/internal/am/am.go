@@ -523,3 +523,17 @@ func DirName(dir string) string {
 
 // TmuxEnv is the watcher's $TMUX.
 func TmuxEnv() string { return os.Getenv("TMUX") }
+
+// Transient is whether a send error may pass on its own: agent-manager's
+// per-minute limit, a timeout, or the manager not answering. A session that
+// is gone or a bad request is not.
+func Transient(errText string) bool {
+	l := strings.ToLower(errText)
+	for _, s := range []string{"too many messages", "timed out", "agent-manager not found", "not running",
+		"connection refused", "no such file", "try again"} {
+		if strings.Contains(l, s) {
+			return true
+		}
+	}
+	return false
+}

@@ -128,10 +128,24 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 		_ = ib.UpdateChat(c.ID, "", c.Status, c.Error)
 		return c, err
 	}
-	id, errText, down := ib.AM.Chief(ChatMessage(c.Task, title, c.Text, c.SentAt, c.Waited))
+	var down bool
+	key := am.ChiefName
+	if live := chiefLive(ib.AM.Sessions()); len(live) > 0 {
+		key = live[0]
+	}
+	_, id, errText, deferred, err := ib.attempt(key, func() (bool, string, string) {
+		var mid, e string
+		mid, e, down = ib.AM.Chief(ChatMessage(c.Task, title, c.Text, c.SentAt, c.Waited))
+		return e == "", mid, e
+	})
+	if err != nil {
+		c.Status, c.Error = "failed", err.Error()
+		_ = ib.UpdateChat(c.ID, "", c.Status, c.Error)
+		return c, err
+	}
 	c.MessageID, c.Error, c.Status = id, errText, "queued"
 	switch {
-	case errText != "" && down:
+	case errText != "" && (down || deferred):
 		c.Status = "waiting"
 	case errText != "":
 		c.Status = "failed"
@@ -167,7 +181,7 @@ func (ib *Inbox) claimChat() (c Chat, ok bool, err error) {
 			return err
 		}
 		c, ok = cs[0], true
-		c.Waited = c.Status == "waiting" && !strings.HasPrefix(c.Error, QueuedBehind)
+		c.Waited = c.Status == "waiting" && !strings.HasPrefix(c.Error, QueuedBehind) && !IsDeferred(c.Error)
 		c.Status, c.ClaimedAt = "sending", stamp()
 		return ib.exec("UPDATE chats SET status = 'sending', claimed_at = ? WHERE id = ?", c.ClaimedAt, c.ID)
 	})

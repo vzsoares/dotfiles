@@ -481,10 +481,16 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 // send delivers claimed answers to t and records the outcome: sent, waiting
 // when there is no target and it is down, else failed.
 func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error) {
-	ok, mid, errText := false, "", t.reason
+	ok, mid, errText, deferred := false, "", t.reason, false
 	if t.id != "" {
-		ok, mid, errText = ib.AM.Send(t.id, BuildMessage(batch, SendLimit))
-		if !ok {
+		var err error
+		ok, mid, errText, deferred, err = ib.attempt(t.id, func() (bool, string, string) {
+			return ib.AM.Send(t.id, BuildMessage(batch, SendLimit))
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !ok && !deferred {
 			// The target may have gone down since it was resolved.
 			if again := answerTarget(ib.AM.Sessions(), sid, batch[0].SessionName); again.id == "" {
 				t, errText = again, again.reason
@@ -495,7 +501,7 @@ func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error)
 	switch {
 	case ok:
 		state = "sent"
-	case t.id == "" && t.down:
+	case deferred, t.id == "" && t.down:
 		state = "waiting"
 	}
 	ib.mu.Lock()
@@ -673,6 +679,9 @@ func (ib *Inbox) Describe(res *Delivery, sid, task, name string) (string, error)
 			return "held until " + strings.Join(waiting, ", "), nil
 		}
 		return "nothing to send", nil
+	}
+	if res.Waiting && IsDeferred(res.Error) {
+		return fmt.Sprintf("%s; the panel sends %s by itself", res.Error, strings.Join(res.IDs, ", ")), nil
 	}
 	if res.Waiting {
 		return fmt.Sprintf("waiting: %s; the panel sends %s when the session is back", res.Error,

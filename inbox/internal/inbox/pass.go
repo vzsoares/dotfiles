@@ -37,6 +37,12 @@ func (ib *Inbox) holdBack(p *passRun, t target) string {
 		return "the target is your own session"
 	case t.id != "" && p.sent[t.id]:
 		return "one message per session per pass"
+	case t.id != "":
+		why, err := ib.SendHold(t.id)
+		if err != nil {
+			return err.Error()
+		}
+		return why
 	}
 	return ""
 }

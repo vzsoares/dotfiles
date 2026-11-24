@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/am"
@@ -32,6 +33,38 @@ type fakeAM struct {
 	chiefs    []string
 	chiefErr  string
 	chiefDown bool
+	// failFirst refuses that many sends or chiefs with the rate-limit text;
+	// enforce refuses a sixth in a minute as agent-manager does, counted in refused.
+	failFirst int
+	enforce   bool
+	stamps    []time.Time
+	refused   int
+}
+
+const rateLimited = "too many messages to this session in the last minute"
+
+// limited is the rate-limit refusal for this call, "" when it goes through.
+func (f *fakeAM) limited() string {
+	if f.failFirst > 0 {
+		f.failFirst--
+		return rateLimited
+	}
+	if !f.enforce {
+		return ""
+	}
+	now := Now()
+	recent := f.stamps[:0]
+	for _, t := range f.stamps {
+		if now.Sub(t) < time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	if f.stamps = recent; len(f.stamps) >= 5 {
+		f.refused++
+		return rateLimited
+	}
+	f.stamps = append(f.stamps, now)
+	return ""
 }
 
 func (f *fakeAM) Sessions() am.Sessions {
@@ -52,6 +85,9 @@ func (f *fakeAM) Chief(msg string) (string, string, bool) {
 	defer f.mu.Unlock()
 	if f.chiefErr != "" {
 		return "", f.chiefErr, f.chiefDown
+	}
+	if e := f.limited(); e != "" {
+		return "", e, false
 	}
 	f.chiefs = append(f.chiefs, msg)
 	return "m" + strconv.Itoa(len(f.chiefs)), "", false
@@ -82,6 +118,10 @@ func (f *fakeAM) Send(sid, msg string) (bool, string, string) {
 	f.sends = append(f.sends, [2]string{sid, msg})
 	if f.fail != "" {
 		return false, "", f.fail
+	}
+	if e := f.limited(); e != "" {
+		f.sends = f.sends[:len(f.sends)-1]
+		return false, "", e
 	}
 	return true, "42", ""
 }

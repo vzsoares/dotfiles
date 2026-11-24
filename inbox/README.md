@@ -67,6 +67,14 @@ A message for a session that is down is kept and sent when the session is back:
   then the oldest chat. With nothing waiting it runs no command.
 - `chats.claimed_at` (schema v13) is the chat claim; a `sending` chat older than
   60 s is taken over. A chat written while others wait or are being sent queues behind them.
+- Retry and pacing (schema v14, `send_log` / `send_retry`): a send agent-manager
+  refuses as transient (`am.Transient`: the per-minute limit, a timeout, the
+  manager not answering) stays `waiting` with `retrying (attempt n, next HH:MM:SS):
+  <error>` and is retried by the pass after 15 s, 30 s, then every 60 s, for 30
+  min, then shows as failed with its `r` key. A session that is gone fails at
+  once. Sends to one session are held to 4 a minute (agent-manager refuses a
+  sixth); a chat or answer past that waits for the window. `ZEN_INBOX_PACE=off`
+  skips pacing (the golden run's frozen clock).
 - A chat or reply delivered 10 minutes or more after it was written says so:
   `(written 3h ago, queued while chief was down) …` when chief being down kept
   the chat waiting, `(written 3h ago) …` when it only queued behind another chat

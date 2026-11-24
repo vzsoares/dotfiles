@@ -259,7 +259,7 @@ func TestGolden(t *testing.T) {
 	if *goldenPython != "" {
 		prefix = strings.Fields(*goldenPython)
 	}
-	base := []string{"ZEN_INBOX_NOW=" + goldenNow, "COLUMNS=80"}
+	base := []string{"ZEN_INBOX_NOW=" + goldenNow, "ZEN_INBOX_PACE=off", "COLUMNS=80"}
 	seen := 0
 	for i, st := range goldenScenario() {
 		for name, body := range st.files {

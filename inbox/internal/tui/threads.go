@@ -226,7 +226,7 @@ type waitRow struct {
 	// oldest is when the oldest item was written; n counts the items.
 	oldest string
 	n      int
-	// behind is a chat row held only by an earlier chat, not by chief being down.
+	// behind is a row held by an earlier chat or a retry, not by its target being down.
 	behind bool
 }
 
@@ -236,7 +236,7 @@ func (m *Model) waitRows() []waitRow {
 	var out []waitRow
 	for _, b := range m.snap.waiting {
 		r := waitRow{value: "w:" + b.SessionID, name: b.Decisions[0].SessionName, reason: view.FailReason(b),
-			oldest: b.Decisions[0].AnsweredAt, n: len(b.Decisions)}
+			oldest: b.Decisions[0].AnsweredAt, n: len(b.Decisions), behind: inbox.IsDeferred(view.FailReason(b))}
 		for _, d := range b.Decisions {
 			r.oldest = min(r.oldest, d.AnsweredAt)
 		}
@@ -245,12 +245,13 @@ func (m *Model) waitRows() []waitRow {
 	}
 	for _, n := range m.snap.waitingNotes {
 		out = append(out, waitRow{value: "nw:" + noteValue(n), name: n.SessionName, reason: n.DeliveryError,
-			oldest: n.RepliedAt, n: 1, label: "waiting reply " + n.Label() + " to " + n.SessionName})
+			oldest: n.RepliedAt, n: 1, label: "waiting reply " + n.Label() + " to " + n.SessionName,
+			behind: inbox.IsDeferred(n.DeliveryError)})
 	}
 	if cs := m.snap.waitingChats; len(cs) > 0 {
 		out = append(out, waitRow{value: "cw:", name: am.ChiefName, reason: cs[0].Error, oldest: cs[0].SentAt, n: len(cs),
 			label:  "waiting " + am.ChiefName + ": " + strconv.Itoa(len(cs)) + " message(s)",
-			behind: strings.HasPrefix(cs[0].Error, inbox.QueuedBehind)})
+			behind: strings.HasPrefix(cs[0].Error, inbox.QueuedBehind) || inbox.IsDeferred(cs[0].Error)})
 	}
 	return out
 }
