@@ -500,6 +500,7 @@ func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error)
 			continue
 		}
 		res.OK, res.Error, res.Waiting, res.MessageID = false, r.Error, r.Waiting, ""
+		res.IDs = ids(slices.Concat(groups[i:]...))
 		state := "failed"
 		if r.Waiting {
 			state = "waiting"
