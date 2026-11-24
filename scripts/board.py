@@ -21,7 +21,7 @@
 #
 #  SYNOPSIS
 #      zen-board check [--json]
-#      zen-board next [--json]
+#      zen-board next [--agent] [--json]
 #      zen-board start <task> [--json]
 #      zen-board done <task> [--note TEXT] [--json]
 #      zen-board add <title> --project P [--inbox] [--human-only]
@@ -48,13 +48,17 @@
 #      --check        checklist: tick the open item starting with <item>
 #                     instead of appending one.
 #      --days N       stale: notes older than N days (default 14) count as stale.
+#      --agent        next: To Do tasks only, skipping Human Only ones.
 #      --json         Print the outcome as JSON.
 #
 #  DESCRIPTION
 #      check   open tasks: In Progress, To Do, Blocked, Inbox; with Priority
 #      next    one recommendation and why: In Progress (latest edit), then
-#              To Do by Priority (High, Medium, Low, none), nearest due, oldest;
-#              never Blocked/Inbox
+#              To Do by Priority (High, Medium, Low, none), the vault's
+#              next_order projects (unlisted tie after), nearest due, oldest;
+#              never Blocked/Inbox. --json adds "rule": the key that put it
+#              ahead of the runner-up (in_progress, priority, next_order, due,
+#              oldest), or "only"
 #      start   Status = In Progress
 #      done    Status = Done and Conclusion Date = today in one PATCH
 #      add     new task (To Do unless --inbox); prints its numeric ID
@@ -69,7 +73,8 @@
 #              checklist item (or creation, with none) is N or more days old
 #
 #      NOTION_TOKEN comes from the env, else from ~/.zshrc.local. Board and
-#      project IDs come from the vault config/zen-flow.json, never this repo.
+#      project IDs and next_order come from the vault config/zen-flow.json,
+#      never this repo.
 #
 #  EXIT CODES
 #      0 ok   1 API or network error   2 bad usage, task or project not found
@@ -92,7 +97,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -195,6 +200,7 @@ class Config:
     data_source: str
     projects: dict[str, str]  # name -> page id without dashes
     groups: dict[str, str]  # agent group key -> project name
+    next_order: list[str] = field(default_factory=list)  # project names, any case
 
     def project_name(self, page_id: str) -> str:
         bare = page_id.replace("-", "")
@@ -228,7 +234,10 @@ def load_config() -> Config:
         if text(p.get("name")) and text(p.get("page_id"))
     }
     groups = {k: text(v) for k, v in obj(raw.get("agent_groups")).items() if text(v)}
-    return Config(data_source=source, projects=projects, groups=groups)
+    order = [text(n) for n in arr(raw.get("next_order")) if text(n)]
+    return Config(
+        data_source=source, projects=projects, groups=groups, next_order=order
+    )
 
 
 # =========================================================================== #
@@ -404,7 +413,16 @@ def priority_rank(priority: str) -> int:
     )
 
 
-def rank(task: Task) -> tuple[int, int, str, float]:
+def project_rank(project: str, order: list[str]) -> int:
+    names = [n.lower() for n in order]
+    return names.index(project.lower()) if project.lower() in names else len(names)
+
+
+# Names each rank() key, in order, for `next --json`'s "rule".
+RANK_RULES = ["in_progress", "priority", "next_order", "due", "oldest"]
+
+
+def rank(task: Task, order: list[str]) -> tuple[int, int, int, str, float]:
     group = (
         STATUS_ORDER.index(task.status)
         if task.status in STATUS_ORDER
@@ -412,27 +430,53 @@ def rank(task: Task) -> tuple[int, int, str, float]:
     )
     if task.status == TODO:
         due = task.due or "9999-99-99"
-        return group, priority_rank(task.priority), due, timestamp(task.created)
-    return group, 0, "", -timestamp(task.last_edited)
+        return (
+            group,
+            priority_rank(task.priority),
+            project_rank(task.project, order),
+            due,
+            timestamp(task.created),
+        )
+    return group, 0, 0, "", -timestamp(task.last_edited)
 
 
 def open_tasks(client: Notion, cfg: Config) -> list[Task]:
     tasks = [parse_task(p, cfg) for p in query(client, cfg, open_filter(STATUS_ORDER))]
-    return sorted(tasks, key=rank)
+    return sorted(tasks, key=lambda t: rank(t, cfg.next_order))
 
 
-def recommend(tasks: list[Task]) -> tuple[Task | None, str]:
-    """`tasks` must already be in rank order."""
-    pick = next((t for t in tasks if t.status not in (BLOCKED, INBOX)), None)
-    if pick is None:
-        return None, "nothing open"
+def deciding_rule(pick: Task, runner_up: Task | None, order: list[str]) -> str:
+    if runner_up is None:
+        return "only"
     if pick.status == IN_PROGRESS:
-        return pick, "already in progress: finish it before starting new work"
+        return "in_progress"
+    pairs = zip(rank(pick, order), rank(runner_up, order), RANK_RULES)
+    return next((rule for a, b, rule in pairs if a != b), "oldest")
+
+
+def recommend(
+    tasks: list[Task], order: list[str], agent: bool = False
+) -> tuple[Task | None, str, str]:
+    """`tasks` must already be in rank order. Returns (pick, reason, rule)."""
+    if agent:
+        ready = [t for t in tasks if t.status == TODO and HUMAN_ONLY not in t.tags]
+    else:
+        ready = [t for t in tasks if t.status not in (BLOCKED, INBOX)]
+    if not ready:
+        return None, "nothing open", ""
+    pick, runner_up = ready[0], (ready[1] if len(ready) > 1 else None)
+    rule = deciding_rule(pick, runner_up, order)
+    if pick.status == IN_PROGRESS:
+        return pick, "already in progress: finish it before starting new work", rule
     if pick.due:
         reason = f"nearest due date ({pick.due})"
     else:
         reason = "oldest To Do; none has a due date"
-    return pick, f"{pick.priority} priority; {reason}" if pick.priority else reason
+    if rule == "next_order":
+        reason = f"{pick.project} first at equal priority (next_order); {reason}"
+    if pick.priority:
+        reason = f"{pick.priority} priority; {reason}"
+    return pick, reason, rule
 
 
 UUID = re.compile(r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}")
@@ -749,15 +793,22 @@ def check(as_json: bool = JSON_OPT) -> None:
 
 
 @app.command("next")
-def next_(as_json: bool = JSON_OPT) -> None:
+def next_(
+    agent: bool = typer.Option(
+        False, "--agent", help="To Do only, skipping Human Only tasks."
+    ),
+    as_json: bool = JSON_OPT,
+) -> None:
     """Recommend one task and say why."""
     try:
-        tasks = open_tasks(*connect())
+        client, cfg = connect()
+        tasks = open_tasks(client, cfg)
     except BoardError as exc:
         raise fail(exc) from exc
-    pick, reason = recommend(tasks)
+    pick, reason, rule = recommend(tasks, cfg.next_order, agent)
     if as_json:
-        emit({"task": pick.to_json() if pick else None, "reason": reason})
+        task = pick.to_json() if pick else None
+        emit({"task": task, "reason": reason, "rule": rule or None})
     elif pick is None:
         print(reason)
     else:

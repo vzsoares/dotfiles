@@ -130,10 +130,21 @@ Triage, block, reopen and title/body edits stay on MCP.
   ```
   Map project URLs to names via `projects[].page_id`. Present In Progress → To Do (High first) →
   Blocked (with who) → Inbox.
-- **next** — recommend one task: an existing In Progress first (finish before starting),
-  then To Do by Priority (High, Medium, Low, none), then nearest due date, then oldest.
-  Give one reason. Blocked tasks are listed
-  separately ("waiting on …") and never recommended; nudge if blocked for more than a week.
+- **next** — recommend one task by the claim order, the one rule for which work goes
+  first:
+  1. In Progress before To Do (finish before starting);
+  2. then Priority: High, Medium, Low, none;
+  3. then, at equal priority, the projects in the vault's `next_order`
+     (`config/zen-flow.json`) in list order, unlisted projects tied after them
+     (no key: this step is skipped);
+  4. then the nearest due date, then the oldest task.
+
+  Approva keeps 2 worker slots: when the caps leave fewer free slots than queued
+  entries, Approva entries claim first, up to 2 running Approva workers, before any
+  personal entry. Give one reason; `zen-board next --json` names the deciding `rule`.
+  `zen-board next --agent` considers only To Do tasks without Human Only. Blocked tasks
+  are listed separately ("waiting on …") and never recommended; nudge if blocked for
+  more than a week.
 - **block** — set `Status` = `Blocked` and append "Aguardando <quem> desde <data>" to the
   page. When the user says the blocker cleared, move it back to `In Progress`.
 - **start** — set `Status` = `In Progress`, only while a live session works it; when
@@ -257,7 +268,8 @@ profile inherits its group's, else its spawner's, so every spawn names one.
   relaunch on Opus on the same branch; anything else becomes a gate in the inbox
   (`zen-inbox ask <task> --gate`, `failing · tried · cause · needs` in `--context`).
   It passes a worker's Human Only and prod-gated steps to chief for the checklist
-  tasks and never files a task per step.
+  tasks and never files a task per step. It claims queue entries in claim order
+  (Priority, then `next_order`, then queue order; Approva keeps 2 slots, see **next**).
 - **worker** commits on its branch with `zen-commit --task <id>` (adds a `Task: #<id>`
   trailer), never pushes or releases (a prod push it needs goes in its final
   message), reports escalations to the orchestrator, and ends with `WORKER_DONE <id>`,
@@ -266,6 +278,18 @@ profile inherits its group's, else its spawner's, so every spawn names one.
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
   code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
   ponytail" coding rules, adopted from ponytail.
+
+### Proactive starts
+
+When the orchestrator's queue is empty and a worker slot is free, it sends chief one
+line, `QUEUE_EMPTY <free slots>`, at most once an hour. Chief then runs `zen-board next
+--agent --json` and takes the first task that is To Do (never Inbox or Blocked), has
+no Human Only tag, no open `zen-inbox` ask and no written wait on its page (a Gate,
+"starts only after …", "parked"). It specs it (spec-writer, or a trivial spec itself)
+and hands the `SPEC_READY` task to the orchestrator as usual, with a cockpit note
+"Started #N on my own: <title> (<why it was next>)". One proactive task is in flight
+at a time; proactive work never takes a prod action, a paid model or a Priority
+change, and never starts a Won't Do task.
 
 ### One task, one session
 

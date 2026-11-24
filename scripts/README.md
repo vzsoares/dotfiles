@@ -205,7 +205,9 @@ source changed (see `inbox/README.md`). See `docs/wiki/architecture/decision-inb
 ### zen-board
 ```
 zen-board check [--json]                          # open tasks with Priority, In Progress → Inbox
-zen-board next [--json]                           # In Progress, then To Do by Priority, due, age
+zen-board next [--agent] [--json]                 # In Progress, then To Do by Priority,
+                                                  # vault next_order, due, age; --agent:
+                                                  # To Do without Human Only; --json "rule"
 zen-board start <task>                            # In Progress
 zen-board done <task> [--note TEXT]               # Done + Conclusion Date, one PATCH
 zen-board add <title> --project P [--inbox] [--human-only]   # prints the new ID

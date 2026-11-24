@@ -38,6 +38,7 @@ PAGE = "ab" * 16
 DASHED = "-".join((PAGE[:8], PAGE[8:12], PAGE[12:16], PAGE[16:20], PAGE[20:]))
 ME = "11" * 16
 WORK = "22" * 16
+APPROVA = "44" * 16
 OTHER = "cd" * 16
 TOKEN = "secret-" + "token-value"
 TODAY = date.today().isoformat()
@@ -67,7 +68,9 @@ class Fake:
         return status, hdrs, json.dumps(payload).encode()
 
 
-def write_vault(home: Path, groups: bool = True) -> None:
+def write_vault(
+    home: Path, groups: bool = True, next_order: list[str] | None = None
+) -> None:
     vault = home / "vault"
     (vault / "config").mkdir(parents=True)
     (home / ".claude").mkdir()
@@ -79,10 +82,13 @@ def write_vault(home: Path, groups: bool = True) -> None:
         "projects": [
             {"name": "Me", "page_id": ME},
             {"name": "Work", "page_id": WORK},
+            {"name": "Approva", "page_id": APPROVA},
         ],
     }
     if groups:
         config["agent_groups"] = {"office": "Work"}
+    if next_order is not None:
+        config["next_order"] = next_order
     (vault / "config" / "zen-flow.json").write_text(json.dumps(config))
 
 
@@ -308,6 +314,128 @@ def test_next_empty_board_prints_nothing_open(fake: Fake) -> None:
     assert run("next") == (0, "nothing open\n", "")
 
 
+# == next_order and --agent ================================================= #
+
+OLD = "2026-01-01T00:00:00.000Z"
+MID = "2026-05-01T00:00:00.000Z"
+NEW = "2026-09-01T00:00:00.000Z"
+
+
+@pytest.fixture
+def ordered(tmp_path: Path, fake: Fake) -> Fake:
+    """`fake` with the vault's next_order set to ["approva"] (any case)."""
+    (tmp_path / "vault" / "config" / "zen-flow.json").unlink()
+    (tmp_path / "vault").rmdir() if False else None
+    return fake
+
+
+def set_order(home: Path, order: list[str] | None) -> None:
+    config = home / "vault" / "config" / "zen-flow.json"
+    data = board.obj(json.loads(config.read_text()))
+    if order is None:
+        data.pop("next_order", None)
+    else:
+        data["next_order"] = order
+    config.write_text(json.dumps(data))
+
+
+def order_of(fake: Fake, *pages: Json) -> list[object]:
+    fake.push(results(*pages))
+    code, out, _ = run("check", "--json")
+    assert code == 0
+    return [board.obj(t).get("id") for t in board.arr(json.loads(out))]
+
+
+def test_priority_beats_next_order(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, ["approva"])
+    me_high = page(1, board.TODO, priority="High", created=NEW)
+    approva_med = page(2, board.TODO, priority="Medium", project=APPROVA, created=NEW)
+    me_med = page(3, board.TODO, priority="Medium", created=OLD)
+    assert order_of(fake, me_med, approva_med, me_high) == [1, 2, 3]
+
+
+def test_next_order_beats_due_and_age(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, ["Approva"])
+    approva = page(1, board.TODO, priority="Medium", project=APPROVA, created=NEW)
+    me = page(2, board.TODO, priority="Medium", due="2026-11-01", created=OLD)
+    assert pick(fake, me, approva) == (
+        1,
+        (
+            "Medium priority; Approva first at equal priority (next_order); "
+            "oldest To Do; none has a due date"
+        ),
+    )
+    fake.push(results(me, approva))
+    data = board.obj(json.loads(run("next", "--json")[1]))
+    assert data["rule"] == "next_order"
+
+
+def test_next_order_ties_then_due(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, ["Approva"])
+    late = page(1, board.TODO, project=APPROVA, due="2026-12-20", created=OLD)
+    soon = page(2, board.TODO, project=APPROVA, due="2026-11-20", created=NEW)
+    me_sooner = page(3, board.TODO, due="2026-11-02", created=OLD)
+    assert order_of(fake, me_sooner, late, soon) == [2, 1, 3]
+
+
+def test_next_order_ties_then_oldest(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, ["Approva"])
+    new = page(1, board.TODO, project=APPROVA, created=NEW)
+    mid = page(2, board.TODO, project=APPROVA, created=MID)
+    me_oldest = page(3, board.TODO, created=OLD)
+    assert order_of(fake, me_oldest, new, mid) == [2, 1, 3]
+
+
+def test_unlisted_projects_tie_after_listed(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, ["Approva"])
+    work = page(1, board.TODO, project=WORK, created=MID)
+    me = page(2, board.TODO, created=OLD)
+    approva = page(3, board.TODO, project=APPROVA, created=NEW)
+    assert order_of(fake, work, me, approva) == [3, 2, 1]
+
+
+def test_without_next_order_project_is_ignored(fake: Fake, tmp_path: Path) -> None:
+    set_order(tmp_path, None)
+    approva = page(1, board.TODO, priority="Medium", project=APPROVA, created=NEW)
+    me = page(2, board.TODO, priority="Medium", created=OLD)
+    assert order_of(fake, approva, me) == [2, 1]
+
+
+def test_next_json_names_the_deciding_rule(fake: Fake) -> None:
+    def rule(*pages: Json) -> object:
+        fake.push(results(*pages))
+        return board.obj(json.loads(run("next", "--json")[1])).get("rule")
+
+    assert rule(page(1, board.TODO)) == "only"
+    assert rule(page(1, board.TODO), page(2, board.IN_PROGRESS)) == "in_progress"
+    assert rule(page(1, board.TODO, priority="Low"), page(2, board.TODO)) == (
+        "priority"
+    )
+    assert rule(
+        page(1, board.TODO, due="2026-11-02"), page(2, board.TODO, created=OLD)
+    ) == ("due")
+    assert rule(page(1, board.TODO, created=NEW), page(2, board.TODO, created=OLD)) == (
+        "oldest"
+    )
+    fake.push(results())
+    assert board.obj(json.loads(run("next", "--json")[1])).get("rule") is None
+
+
+def test_next_agent_takes_only_todo_without_human_only(fake: Fake) -> None:
+    doing = page(1, board.IN_PROGRESS)
+    blocked = page(2, board.BLOCKED)
+    inbox = page(3)
+    human = page(4, board.TODO, priority="High", tags=(board.HUMAN_ONLY,))
+    todo = page(5, board.TODO, created=NEW)
+    fake.push(results(doing, blocked, inbox, human, todo))
+    code, out, _ = run("next", "--agent", "--json")
+    assert code == 0
+    assert board.obj(board.obj(json.loads(out)).get("task")).get("id") == 5
+    fake.push(results(doing, blocked, inbox, human))
+    code, out, _ = run("next", "--agent", "--json")
+    assert (code, board.obj(json.loads(out)).get("task")) == (0, None)
+
+
 # == Writes ================================================================== #
 
 
@@ -441,7 +569,7 @@ def test_add_refuses_high_and_junk_before_any_call(fake: Fake, value: str) -> No
 def test_add_unknown_project_lists_valid_names(fake: Fake) -> None:
     code, _, err = run("add", "x", "--project", "nope")
     assert code == board.EXIT_USAGE
-    assert "valid: Me, office, Work" in err
+    assert "valid: Approva, Me, office, Work" in err
     assert fake.calls == []
 
 

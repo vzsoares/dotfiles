@@ -166,3 +166,7 @@ Pages updated: architecture/agent-roles.md
 New `scripts/rotate.py` (`zen-rotate tick|status|now|check-note|resume`), ticked by `zen-resume-watch`: when a role session is 6 h old and at rest it is asked for a handoff note, cleared with a typed `/clear` (same session id) and resumed from the note plus its preset. `zen-inbox approval open` (read-only) blocks a restart while an approved prod action is open; `zen-wrapup hook` skips a rotation's clear. Both roles ship off. A live probe on a throwaway session confirmed the id change, the same process and model, and that a background run left alive notifies the cleared conversation.
 Pages created: architecture/agent-rotation.md
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-24] feature | one claim order for chief, the orchestrator and zen-board next (#998)
+`zen-board next` ranks To Do by Priority, then the vault's `next_order` projects (unlisted tie after), then due date, then age; `--agent` keeps To Do without Human Only, and `--json` names the deciding `rule`. The chief and orchestrator presets and the zen-flow skill state the same order, Approva's 2 reserved worker slots and the hourly `QUEUE_EMPTY <free slots>` signal that lets chief start one proactive task.
+Pages updated: none (rule lives in the zen-flow skill and presets)
