@@ -383,22 +383,28 @@ func (ib *Inbox) Withdraw(id, caller string, force bool) (*Delivery, error) {
 // Answer records a pick (letter) or free text; rev, when given, refuses the
 // answer as Amended if the decision changed since it was read.
 func (ib *Inbox) Answer(id string, letter, text *string, note string, rev *int64) (*Delivery, error) {
+	d, err := ib.Record(id, letter, text, note, rev)
+	if err != nil {
+		return nil, err
+	}
+	return ib.Flush(d.SessionID, d.Task)
+}
+
+// Record stores an answer as held without sending it; FlushSession sends the
+// session's held answers together.
+func (ib *Inbox) Record(id string, letter, text *string, note string, rev *int64) (Decision, error) {
 	if (letter == nil) == (text == nil) {
-		return nil, errf(2, "give an option letter or --text, not both")
+		return Decision{}, errf(2, "give an option letter or --text, not both")
 	}
 	if text != nil && pyfmt.Blank(*text) {
-		return nil, errf(2, "--text must not be empty")
+		return Decision{}, errf(2, "--text must not be empty")
 	}
 	kind := "pick"
 	if letter == nil {
 		kind = "text"
 	}
-	d, err := ib.closeOne(id, closeArgs{status: "answered", kind: kind, option: deref(letter),
+	return ib.closeOne(id, closeArgs{status: "answered", kind: kind, option: deref(letter),
 		text: deref(text), note: note, delivery: "held", rev: rev})
-	if err != nil {
-		return nil, err
-	}
-	return ib.Flush(d.SessionID, d.Task)
 }
 
 func (ib *Inbox) Resolve(id, note string) (*Delivery, error) {
@@ -478,9 +484,72 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 	return ib.send(t, sid, batch)
 }
 
-// send delivers claimed answers to t and records the outcome: sent, waiting
-// when there is no target and it is down, else failed.
+// send delivers claimed answers to t in the fewest messages that fit
+// SendLimit. A group that is held back or refused leaves itself and every
+// later group waiting (or failed) with the same error, so none is sent twice.
 func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error) {
+	groups := packAnswers(batch, SendLimit)
+	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: true}
+	for i, g := range groups {
+		r, err := ib.sendGroup(t, sid, g)
+		if err != nil {
+			return nil, err
+		}
+		res.MessageID, res.Followup = r.MessageID, r.Followup
+		if r.OK {
+			continue
+		}
+		res.OK, res.Error, res.Waiting, res.MessageID = false, r.Error, r.Waiting, ""
+		state := "failed"
+		if r.Waiting {
+			state = "waiting"
+		}
+		for _, rest := range groups[i+1:] {
+			if err := ib.settle(rest, state, "", r.Error); err != nil {
+				return nil, err
+			}
+		}
+		break
+	}
+	return res, nil
+}
+
+// packAnswers splits answers, in id order, into the fewest groups whose
+// messages need no clipping; one answer too big alone still goes by itself.
+func packAnswers(answers []Decision, limit int) [][]Decision {
+	ordered := append([]Decision(nil), answers...)
+	SortByID(ordered)
+	var groups [][]Decision
+	for _, d := range ordered {
+		if n := len(groups); n > 0 {
+			if g := append(groups[n-1][:len(groups[n-1]):len(groups[n-1])], d); len(renderAnswers(g, -1, -1)) <= limit-SendMargin {
+				groups[n-1] = g
+				continue
+			}
+		}
+		groups = append(groups, []Decision{d})
+	}
+	return groups
+}
+
+func (ib *Inbox) settle(batch []Decision, state, mid, errText string) error {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	return ib.immediate(func() error {
+		now := stamp()
+		for _, d := range batch {
+			if err := ib.exec("UPDATE decisions SET delivery = ?, message_id = ?, delivery_error = ?,"+
+				" updated_at = ?, rev = rev + 1 WHERE id = ?", state, mid, errText, now, d.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// sendGroup sends one message and records the outcome: sent, waiting when
+// there is no target and it is down or the send was deferred, else failed.
+func (ib *Inbox) sendGroup(t target, sid string, batch []Decision) (*Delivery, error) {
 	ok, mid, errText, deferred := false, "", t.reason, false
 	if t.id != "" {
 		var err error
@@ -504,19 +573,7 @@ func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error)
 	case deferred, t.id == "" && t.down:
 		state = "waiting"
 	}
-	ib.mu.Lock()
-	err := ib.immediate(func() error {
-		now := stamp()
-		for _, d := range batch {
-			if err := ib.exec("UPDATE decisions SET delivery = ?, message_id = ?, delivery_error = ?,"+
-				" updated_at = ?, rev = rev + 1 WHERE id = ?", state, mid, errText, now, d.ID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	ib.mu.Unlock()
-	if err != nil {
+	if err := ib.settle(batch, state, mid, errText); err != nil {
 		return nil, err
 	}
 	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: ok, MessageID: mid, Error: errText,
@@ -525,6 +582,39 @@ func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error)
 		res.Followup = ib.AM.Followup(t.id)
 	}
 	return res, nil
+}
+
+// FlushSession sends a session's held answers, across tasks, as one message
+// (more only when they exceed SendLimit); a task with an open non-prod ask
+// keeps its answers held.
+func (ib *Inbox) FlushSession(sid string) (*Delivery, error) {
+	ib.mu.Lock()
+	var held []string
+	err := ib.immediate(func() error {
+		ds, err := ib.sel("session_id = ? AND delivery = 'held'", sid)
+		if err != nil {
+			return err
+		}
+		blocked := map[string]bool{}
+		for _, d := range ds {
+			if _, seen := blocked[d.Task]; !seen {
+				open, err := ib.openIDs(sid, d.Task)
+				if err != nil {
+					return err
+				}
+				blocked[d.Task] = len(open) > 0
+			}
+			if !blocked[d.Task] {
+				held = append(held, d.ID)
+			}
+		}
+		return ib.claim(held)
+	})
+	ib.mu.Unlock()
+	if err != nil || held == nil {
+		return nil, err
+	}
+	return ib.deliver(sid, held)
 }
 
 // Flush sends a session's held answers for one task once none of its
@@ -749,6 +839,37 @@ func sharedNotes(ds []Decision) ([]string, map[string][]string) {
 // noteWidths are the note clips tried once every question is clipped to 0.
 var noteWidths = []int{2000, 1000, 500, 200, 100, 40}
 
+// renderAnswers lays out the message, clipping each question to width and
+// each note to noteWidth (negative: no clip).
+func renderAnswers(answers []Decision, width, noteWidth int) string {
+	ordered := append([]Decision(nil), answers...)
+	SortByID(ordered)
+	shared, carriers := sharedNotes(ordered)
+	clip := func(n string) string {
+		if noteWidth < 0 {
+			return n
+		}
+		return pyfmt.Clip(n, noteWidth)
+	}
+	lines := []string{Header}
+	for _, d := range ordered {
+		if !slices.Contains(shared, d.Note) {
+			d.Note = clip(d.Note)
+		} else {
+			d.Note = ""
+		}
+		lines = append(lines, answerLine(d, width))
+	}
+	for _, n := range shared {
+		label := "Note: "
+		if len(carriers[n]) < len(ordered) {
+			label = "Note on " + strings.Join(carriers[n], ", ") + ": "
+		}
+		lines = append(lines, label+clip(n))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // BuildMessage clips questions, then notes, to stay under the send limit,
 // and hard-truncates at a UTF-8 boundary as a last resort. A shared note
 // names its answers when others (older held ones) are in the message too.
@@ -756,32 +877,7 @@ func BuildMessage(answers []Decision, limit int) string {
 	budget := limit - SendMargin
 	ordered := append([]Decision(nil), answers...)
 	SortByID(ordered)
-	shared, carriers := sharedNotes(ordered)
-	build := func(width, noteWidth int) string {
-		clip := func(n string) string {
-			if noteWidth < 0 {
-				return n
-			}
-			return pyfmt.Clip(n, noteWidth)
-		}
-		lines := []string{Header}
-		for _, d := range ordered {
-			if !slices.Contains(shared, d.Note) {
-				d.Note = clip(d.Note)
-			} else {
-				d.Note = ""
-			}
-			lines = append(lines, answerLine(d, width))
-		}
-		for _, n := range shared {
-			label := "Note: "
-			if len(carriers[n]) < len(ordered) {
-				label = "Note on " + strings.Join(carriers[n], ", ") + ": "
-			}
-			lines = append(lines, label+clip(n))
-		}
-		return strings.Join(lines, "\n")
-	}
+	build := func(width, noteWidth int) string { return renderAnswers(ordered, width, noteWidth) }
 	var msg string
 	for _, width := range []int{-1, 200, 120, 80, 40, 20, 0} {
 		if msg = build(width, -1); len(msg) <= budget {

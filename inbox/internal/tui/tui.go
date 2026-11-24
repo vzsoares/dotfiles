@@ -980,17 +980,12 @@ func (m *Model) sendCmd(note string) tea.Cmd {
 				text = &s.Text
 			}
 			rev := s.Rev
-			res, err := ib.Answer(id, letter, text, note, &rev)
+			d, err := ib.Record(id, letter, text, note, &rev)
 			var ie *inbox.Error
 			switch {
 			case err == nil:
 				msg.recorded = append(msg.recorded, id)
-				if d, gerr := ib.Get(id); gerr == nil {
-					task = d.Task
-				}
-				if res != nil {
-					msg.res = res
-				}
+				task = d.Task
 			case errors.As(err, &ie) && ie.Amended:
 				msg.amended = append(msg.amended, id)
 			default:
@@ -999,6 +994,17 @@ func (m *Model) sendCmd(note string) tea.Cmd {
 					status = d.Status
 				}
 				msg.notes = append(msg.notes, id+" already "+status)
+			}
+		}
+		if len(msg.recorded) > 0 {
+			res, err := ib.FlushSession(sid)
+			if err != nil {
+				msg.flash = err.Error()
+				msg.snap = load(ib, client, w, sessions, false)
+				return msg
+			}
+			if res != nil {
+				msg.res = res
 			}
 		}
 		if flash, err := ib.Describe(msg.res, sid, task, name); err == nil {

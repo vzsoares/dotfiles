@@ -75,6 +75,10 @@ A message for a session that is down is kept and sent when the session is back:
   once. Sends to one session are held to 4 a minute (agent-manager refuses a
   sixth); a chat or answer past that waits for the window. `ZEN_INBOX_PACE=off`
   skips pacing (the golden run's frozen clock).
+- Answers submitted together in the panel are recorded (`Record`) then flushed
+  once per session (`FlushSession`, across tasks): one message, or the fewest
+  that fit `SendLimit` unclipped (`packAnswers`). A refused group and the groups
+  after it stay `waiting` and the pass sends them again together.
 - A chat or reply delivered 10 minutes or more after it was written says so:
   `(written 3h ago, queued while chief was down) …` when chief being down kept
   the chat waiting, `(written 3h ago) …` when it only queued behind another chat
