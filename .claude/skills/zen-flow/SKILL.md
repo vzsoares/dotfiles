@@ -415,6 +415,9 @@ is back (`zen-inbox retry --waiting` runs the same pass); `answer` then prints
   which reaches chief as `[zen-inbox] Reply to your note n12 (…)` and is treated like
   a chat message. When the user says in chat they read one, chief runs `zen-inbox read
   <id>`. Anything the user must choose stays a `zen-inbox ask`.
+- Delivery: agent-manager's `dropped` is not trusted alone. Run `zen-inbox delivery
+  check <message id>` and resend only on `lost`; `false drop`/`delivered` needs nothing,
+  `held: <why>` means wait or fix the reason. The cockpit's `Delivery` row lists the rest.
 - Chief keeps two un-nested terminals running in group `chief`: `cockpit`
   (`zen-inbox watch`) and `resume-watch` (`zen-resume-watch`: revives a dead chief,
   resumes sessions a usage limit stopped, runs `zen-rotate tick`). It checks `agent-manager terminal list --json`
