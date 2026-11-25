@@ -75,13 +75,14 @@ func newFake(t *testing.T) *fake {
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
 		switch k {
-		case "PATH", "AGENT_MANAGER_SESSION_ID", "TMUX", "ZEN_FLOW_DB", "FAKE_AM", "COLUMNS", "ZEN_INBOX_NOW":
+		case "PATH", "AGENT_MANAGER_SESSION_ID", "TMUX", "ZEN_FLOW_DB", "FAKE_AM", "COLUMNS", "ZEN_INBOX_NOW", "ZEN_AM_STATE_DB", "ZEN_CLAUDE_PROJECTS":
 			continue
 		}
 		f.env = append(f.env, kv)
 	}
 	f.env = append(f.env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"FAKE_AM="+f.data, "ZEN_FLOW_DB="+f.db)
+		"FAKE_AM="+f.data, "ZEN_FLOW_DB="+f.db,
+		"ZEN_AM_STATE_DB="+filepath.Join(root, "state.db"), "ZEN_CLAUDE_PROJECTS="+filepath.Join(root, "projects"))
 	return f
 }
 

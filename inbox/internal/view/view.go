@@ -799,3 +799,56 @@ func PanelThreadLines(th inbox.Thread, width int, at time.Time, p Painter) [][]s
 	}
 	return out
 }
+
+// DeliveryKind is an entry's kind as shown.
+func DeliveryKind(e inbox.Entry) string {
+	if e.Kind == inbox.KindFalseDrop {
+		return "false drop"
+	}
+	return e.Kind
+}
+
+// DeliveryPreview is the start of an entry's body on one line.
+func DeliveryPreview(e inbox.Entry) string {
+	return strings.Join(strings.Fields(e.Body), " ")
+}
+
+// DeliveryLine is one entry: kind, sender → recipient, age, reason, then a
+// body preview; a closed one ends with how it closed.
+func DeliveryLine(e inbox.Entry, at time.Time) string {
+	parts := []string{DeliveryKind(e), e.Sender + " → " + e.Recipient(), Age(e.When(), at)}
+	if e.Reason != "" {
+		parts = append(parts, e.Reason)
+	}
+	if p := DeliveryPreview(e); p != "" {
+		parts = append(parts, "“"+p+"”")
+	}
+	if !e.Open() {
+		parts = append(parts, e.Resolution)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// DeliveryRow is the cockpit's Delivery row for the open entries; lost is
+// whether any of them is a loss.
+func DeliveryRow(open []inbox.Entry) (label string, lost bool) {
+	n := 0
+	for _, e := range open {
+		if e.Kind == inbox.KindLost {
+			n++
+		}
+	}
+	label = "Delivery · " + strconv.Itoa(len(open)) + " open"
+	if n > 0 {
+		label += " · " + strconv.Itoa(n) + " lost"
+	}
+	return label, n > 0
+}
+
+// ChatStatus is a chat's stored status as shown; a loss says how to resend.
+func ChatStatus(status string) string {
+	if status == inbox.StatusLost {
+		return "lost · R in Delivery to resend"
+	}
+	return status
+}

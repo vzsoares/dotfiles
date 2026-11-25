@@ -715,3 +715,6 @@ func (ib *Inbox) Resend(id int64) (Entry, string, error) {
 	}
 	return e, text, nil
 }
+
+// StatusLost is a chat's status once its message is proven lost.
+const StatusLost = "lost"
