@@ -586,7 +586,9 @@ DAY_ONE = {
         None,
         ["zen-flow", "diagram", "anthropic-skills:chrome-browser"],
     ),
+    "explorer": ("explorer", "haiku", None, None, "default", ["zen-flow"]),
 }
+EDIT_TOOLS = ["Edit", "Write", "NotebookEdit"]
 
 
 def test_tracked_file_is_the_day_one_table(tracked: None) -> None:
@@ -604,7 +606,8 @@ def test_tracked_file_is_the_day_one_table(tracked: None) -> None:
         assert r.settings.get("outputStyle") == style
         assert r.settings["enabledPlugins"] == {FIGMA: False}
         assert r.only == only
-        assert (r.off, r.deny, r.append) == ([], [], None)
+        assert (r.off, r.append) == ([], None)
+        assert r.deny == (EDIT_TOOLS if name == "explorer" else [])
 
 
 RTK_HOOK = {
@@ -664,6 +667,34 @@ def test_spawn_lines_name_a_role_profile(tracked: None, preset: str) -> None:
         assert named, line
         assert named <= profiles, line
         assert "effort" not in line, line
+
+
+def test_explorer_is_haiku_and_read_only(tracked: None) -> None:
+    flags = role.role_flags(role.load_role("explorer"), [], "R")
+    assert flags[:2] == ["--model", "haiku"]
+    assert "--effort" not in flags
+    assert flags[flags.index("--disallowedTools") + 1] == "Edit,Write,NotebookEdit"
+
+
+def test_chief_sends_questions_to_the_explorer(tracked: None) -> None:
+    step = next(
+        line
+        for line in _preset("chief").splitlines()
+        if line.startswith("12.")
+    )
+    assert "role-explorer" in step and "role-worker" in step
+    text = _preset("explorer")
+    assert "send_session" in text and "archive_self" in text
+
+
+def test_explore_override_runs_on_haiku_read_only() -> None:
+    text = (TRACKED / ".claude" / "agents" / "Explore.md").read_text()
+    head = text.split("---")[1]
+    fields = dict(line.split(": ", 1) for line in head.strip().splitlines())
+    assert fields["name"] == "Explore"
+    assert fields["model"] == "haiku"
+    assert fields["disallowedTools"] == "Edit, Write, NotebookEdit"
+    assert "file:line" in fields["description"]
 
 
 def test_chief_header_and_start_command(tracked: None) -> None:

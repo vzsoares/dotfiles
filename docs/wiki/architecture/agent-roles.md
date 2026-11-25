@@ -1,13 +1,13 @@
 ---
 title: Agent Roles — zen-role
 category: architecture
-updated: 2026-11-21
+updated: 2026-11-24
 related: [overview, decision-inbox, agent-telemetry]
 ---
 
 # Agent Roles — zen-role
 
-Each agent-manager role (chief, orchestrator, spec-writer, worker, designer) gets its
+Each agent-manager role (chief, orchestrator, spec-writer, worker, designer, explorer) gets its
 own Claude Code config from one tracked file, `agent-manager/roles.json`. A preset in
 `agent-manager/config.json` still holds the role's instructions; the role file holds
 everything else. A session with no role (the user's own chats, anything outside
@@ -62,7 +62,7 @@ isolated role.
 
 ## Overlay mode
 
-The default, and what all five roles use. The global layer (`~/.claude/settings.json`, the user and
+The default, and what all six roles use. The global layer (`~/.claude/settings.json`, the user and
 project `CLAUDE.md`, MCP servers, connectors) loads as always and the role's values
 are laid over it.
 
@@ -158,6 +158,36 @@ bundled skills, and whatever `enabledPlugins` holds after the merge.
 A kept section that no longer exists in the global `CLAUDE.md`, or an unreadable
 global `settings.json`, stops the launch with one line: a renamed section must not
 silently drop its rules.
+
+## Explorer role and the Explore shadow
+
+Read-only exploration runs on Haiku (task #1009). Two pieces, neither moves a role that
+writes, reviews or decides:
+
+- **`explorer` role** (`role-explorer`, preset `explorer`): `model: haiku`, no effort,
+  `tools.deny` of `Edit`, `Write`, `NotebookEdit`, spec-writer's overlay, skills
+  `zen-flow` only. Chief's step 12 spawns it for question-only investigation, research
+  and support digging; digging that may change code or data stays `role-worker`. Bash
+  stays (search needs it); the preset forbids writes through it.
+- **`Explore` subagent**: `.claude/agents/Explore.md` (linked to `~/.claude/agents/`)
+  is a user-level agent named `Explore`, which replaces the built-in. It sets
+  `model: haiku` and `disallowedTools: Edit, Write, NotebookEdit`. The built-in runs on
+  the parent's model (Opus on a subscription).
+- `CLAUDE_CODE_SUBAGENT_MODEL` and `_FORCE` stay unset: they would also move
+  `/code-review` and every `general-purpose` subagent. `Plan`, `fork` and the designer
+  critics keep the parent's model.
+
+Compare tokens before and after with `zen-telemetry report --by-model`
+([[agent-telemetry]]).
+
+| To undo | Do |
+|---|---|
+| Explore on Haiku | delete `.claude/agents/Explore.md` |
+| explorer role | chief's step 12 back to `role-worker`; remove the `explorer` entry from `roles.json` and the preset from `config.json`. `zen-role build` reports the stale `role-explorer` profile and never removes it: delete it in agent-manager |
+| both | `git revert` the commit, then rerun `agent-manager/link` |
+
+A wrong or redone explorer answer gets a dated note on its task; two in a week means roll
+back.
 
 ## Reverting a cut
 

@@ -225,6 +225,7 @@ profile inherits its group's, else its spawner's, so every spawn names one.
 | orchestrator | `orchestrator` | `role-orchestrator` | one, long-running; group `chief`; no worktree         |
 | worker       | `worker-rules` | `role-worker`       | one per task and repo; project group; worktree        |
 | designer     | `designer`     | `role-designer`     | design or Fable entries; project group; worktree      |
+| explorer     | `explorer`     | `role-explorer`     | question-only digging; Haiku; project group; no worktree |
 
 - **chief** reads the board, gets the user's approval, spawns a spec-writer per task
   (or writes a trivial spec itself), hands `SPEC_READY` tasks to the orchestrator
@@ -282,6 +283,11 @@ profile inherits its group's, else its spawner's, so every spawn names one.
   Its rules list the banned ways to get green (skipped tests, widened timeouts, mocked
   code under test, catch-all fallbacks, RLS/auth bypass) and the "Lessons from
   ponytail" coding rules, adopted from ponytail.
+- **explorer** (`saved: explorer`, `environment role-explorer`, Haiku, Edit/Write
+  denied) answers one question-only investigation, research or support question chief
+  hands off, replies with send_session, then `archive_self`. Digging that may change
+  code or data stays a `role-worker` session. The `Explore` subagent also runs on
+  Haiku through `.claude/agents/Explore.md`.
 
 ### Proactive starts
 

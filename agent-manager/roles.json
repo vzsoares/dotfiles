@@ -71,5 +71,15 @@
     "skills": {
       "only": ["zen-flow", "diagram", "anthropic-skills:chrome-browser"]
     }
+  },
+  "explorer": {
+    "saved": "explorer",
+    "model": "haiku",
+    "settings": {
+      "outputStyle": "default",
+      "enabledPlugins": { "figma@claude-plugins-official": false }
+    },
+    "skills": { "only": ["zen-flow"] },
+    "tools": { "deny": ["Edit", "Write", "NotebookEdit"] }
   }
 }
