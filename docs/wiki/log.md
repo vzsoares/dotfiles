@@ -170,3 +170,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-24] feature | one claim order for chief, the orchestrator and zen-board next (#998)
 `zen-board next` ranks To Do by Priority, then the vault's `next_order` projects (unlisted tie after), then due date, then age; `--agent` keeps To Do without Human Only, and `--json` names the deciding `rule`. The chief and orchestrator presets and the zen-flow skill state the same order, Approva's 2 reserved worker slots and the hourly `QUEUE_EMPTY <free slots>` signal that lets chief start one proactive task.
 Pages updated: none (rule lives in the zen-flow skill and presets)
+
+## [2026-11-24] feature | Delivery log for agent-manager drops (#1007)
+zen-inbox schema v15 adds `delivery_log`: a read-only scan of agent-manager's `state.db` (panel every 60 s, `zen-resume-watch` every 5 min) classifies dropped, held and refused messages, and the recipient's Claude transcript decides lost vs false drop. `zen-inbox delivery scan|list|check|dismiss|resend`; the cockpit gets a Delivery row and screen; chief's status line stops calling a delivered message dropped. Presets: run `delivery check` before resending a dropped message.
+Pages updated: architecture/decision-inbox.md

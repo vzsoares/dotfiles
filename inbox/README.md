@@ -86,15 +86,46 @@ A message for a session that is down is kept and sent when the session is back:
 - The list shows a `Waiting` group and the header `◷ <name> is down · n queued`;
   after 15 minutes the header turns red and one banner is posted per outage.
 
+## Delivery
+
+agent-manager's `dropped` is not proof of loss: a dropped message is often in the
+recipient's transcript. Schema v15 adds `delivery_log`, one row per problem,
+`UNIQUE (source, source_id)` so every write is an idempotent upsert.
+
+- **Scan** (`zen-inbox delivery scan`; the panel every 60 s, `zen-resume-watch` every
+  5 min) reads agent-manager's `state.db` read-only (`mode=ro`, `query_only`,
+  `ZEN_AM_STATE_DB` overrides the path) before its ~12 h of `session_inbox` rows age
+  out. A missing file, table or column records nothing and reports
+  `unavailable: <why>`.
+- **Kinds**: `false_drop` (dropped, body in a user turn of the recipient's Claude
+  transcript: logged closed, no body), `lost` (dropped and not there; or undelivered to
+  an archived or deleted session), `held` (undelivered 5+ min: a dialog, not running;
+  closes as `delivered_late`), `unverified` (a pi/codex recipient or no transcript),
+  `refused` (zen-inbox's own transient refusals per retry chain, closed `retried` by
+  the next success; failed chats and answers; agents' failed `send_session` calls
+  from `tool_calls`, closed when the same sender sends within 10 min).
+- **Transcripts** (`ZEN_CLAUDE_PROJECTS`, else `~/.claude/projects`): the files of the
+  current, retired and released agent session ids, plus any jsonl in those dirs or
+  the cwd's dir written after `sent_at` (a rotation clears in place). The first 200
+  runes of the body, whitespace folded, must sit in a user turn with
+  `[agent-manager] Message from`; tool results never count.
+- `zen-inbox delivery list [--all]`, `check <message id>` (any sender: `delivered`,
+  `false drop`, `lost`, `held: <why>`, `unverified: <why>`, `unknown`, exit 1),
+  `dismiss <entry>`, `resend <entry>` (recipient if live, else its one live
+  namesake, through pacing; prefixed `(resent from the cockpit: <sender>'s message
+  <id> of HH:MM)`; exit 3 when down); all take `--json`.
+- Closed entries are pruned 30 days after `closed_at`. Bodies live only in the db.
+
 ## Layout
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v13, IDs, guarded transitions, flush, message,
+internal/inbox      store: schema v15, IDs, guarded transitions, flush, message,
                     prod-action approvals, chief's notes, threads, chats, the
-                    waiting pass
+                    waiting pass, the delivery log
 internal/guard      refuses prod answers and a manual Done from inside an agent session (env, ps walk)
-internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell)
+internal/am         agent-manager, tmux popup, stuck-paste follow-up, banners (terminal-notifier, osascript, zen-bell),
+                    read-only state.db reader and transcript match (amtest builds their fixtures)
 internal/view       text for list rows, context blocks and question screens
 internal/md         glamour markdown for the panel: ANSI-16 style, boxed code, hardwrap, cache
 internal/cli        cobra commands, output and exit codes
@@ -102,8 +133,8 @@ internal/tui        the watch panel (list, threads, session, review all, walk, r
 internal/pyfmt      Python textwrap / repr / json.dumps behaviour, for parity
 testdata/golden     inbox.py's output per command, which the binary must match
 testdata/panel      panel screens at fixed sizes (`go test ./internal/tui -update-panel`)
-testdata/xver       v1 and v2 dbs written by inbox.py, and v4, v9 and v12 dbs written
-                    by those binaries (v4.sql, v9.sql, v12.sql), as SQL dumps
+testdata/xver       v1 and v2 dbs written by inbox.py, and v4, v9, v12 and v14 dbs
+                    written by those binaries (v4.sql ... v14.sql), as SQL dumps
 testdata/fakes      fake agent-manager, tmux, zen-bell, terminal-notifier, osascript for tests
 ```
 

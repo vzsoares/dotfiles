@@ -1,7 +1,7 @@
 ---
 title: Decision Inbox — zen-inbox
 category: architecture
-updated: 2026-11-21
+updated: 2026-11-24
 related: [overview, release-tooling, agent-rotation]
 ---
 
@@ -405,6 +405,49 @@ the target is back, instead of failing for a manual retry.
 - **Limits.** The panel is the automatic sender: with none running, items wait until
   one starts or `retry --waiting` runs. A queued message cannot be cancelled. A chat
   the pass fails for another reason is `failed` and only flashed; it has no retry row.
+
+## Delivery (#1007)
+
+agent-manager marks some delivered messages `dropped` (upstream #1150): on 2026-11-24
+all five drops had `delivered_at == dropped_at` and the body in the recipient's
+transcript. zen-inbox keeps its own log so real losses are told from false drops and
+can be resent, before agent-manager prunes its ~12 h of `session_inbox` rows.
+
+- **Table** `delivery_log` (schema v15): kind (`lost`, `false_drop`, `refused`,
+  `held`, `unverified`), source (`am_inbox`, `zen_inbox_send`, `telemetry`,
+  `status_poll`), source id, sender, recipient id and name, body (only when it may be
+  resent), reason, sent/first/last seen, state (`open`, `resolved`, `dismissed`),
+  resolution (`delivered_late`, `retried`, `resent`, `dismissed`, `auto`), closed at.
+  `UNIQUE (source, source_id)`; the upsert never touches a closed row, so concurrent
+  scans (panel tick, CLI, resume-watch) leave one row per message.
+- **Reader** (`am.OpenState`): `file:…?mode=ro` plus `query_only`, a column check via
+  `pragma_table_info`; any gap is `unavailable: <why>` and nothing from state.db is
+  recorded. It never writes agent-manager's schema.
+- **Proof of loss**: a dropped message to a Claude recipient is `lost` only when its
+  body (first 200 runes, whitespace folded) is in no user turn carrying
+  `[agent-manager] Message from` across the current, retired and released agent
+  session ids' jsonl and any jsonl in those dirs or the cwd's dir written after
+  `sent_at`. Found means `false_drop`, logged closed (`auto`) without a body; the
+  Delivery screen counts them per week, the figure to cite upstream. pi/codex
+  recipients and missing transcripts are `unverified`.
+- **Held** is undelivered for 5+ minutes (a dialog, not running); it closes itself as
+  `delivered_late`, or is `lost` when the recipient is archived or deleted.
+- **Refusals**: zen-inbox's own transient refusals open one entry per retry chain
+  (`retry:<target>:<first_at>`), closed `retried` by the next success, left open on
+  the 30-min give-up; a chat or answers send that ends `failed` opens one too.
+  Agents' failed `send_session` calls in `tool_calls` (last 24 h) close when the same
+  sender's next successful one lands within 10 min (upstream #1151 would retire most).
+- **Cockpit**: a `Delivery · n open` row under Inbox while anything is open (red with a
+  `lost`); its screen lists kind, sender → recipient, age, reason and a preview;
+  `enter` shows one, `R` resends (recipient if live, else its one live namesake, under
+  pacing, prefixed `(resent from the cockpit: …)`), `x` dismisses, `a` shows closed
+  ones. No bell. The chief status line and chat rows check `dropped` (or a failed
+  status poll) against state.db first: `delivered` for a false drop, `lost · R in
+  Delivery to resend` for a loss; an uncheckable drop is logged `unverified` with the
+  chat text.
+- **Agents**: on `dropped`, run `zen-inbox delivery check <message id>` and resend only
+  on `lost` (orchestrator and chief presets, zen-flow skill).
+- **Retention**: closed entries are pruned 30 days after `closed_at`; open ones stay.
 
 ## Phone access (#830)
 
