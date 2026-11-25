@@ -286,8 +286,8 @@ func (m *Model) viewDeliveryEntry() frame {
 
 // settleStatus is what the panel shows for a chief message: a dropped one,
 // or a status poll that failed, is first checked against agent-manager's
-// state.db and chief's transcript. A drop it cannot check is logged
-// unverified with the chat's text.
+// state.db and chief's transcript. A drop it cannot check, and no scan logged,
+// is logged unverified with the chat's text.
 func settleStatus(ib *inbox.Inbox, id string, chat int64, status, errText string) (string, string) {
 	if status != "dropped" && errText == "" && status != "" {
 		return status, errText
@@ -301,7 +301,7 @@ func settleStatus(ib *inbox.Inbox, id string, chat int64, status, errText string
 		return inbox.StatusLost, ""
 	case strings.HasPrefix(c.Status, "held: "):
 		return c.Status, ""
-	case status == "dropped" && chat != 0:
+	case status == "dropped" && chat != 0 && c.Entry == nil:
 		why := c.Status
 		if c.Why != "" {
 			why = "unavailable: " + c.Why

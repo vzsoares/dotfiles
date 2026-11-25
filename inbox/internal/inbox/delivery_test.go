@@ -232,6 +232,14 @@ func TestGivenUpRefusalStaysOpen(t *testing.T) {
 			t.Fatalf("%+v", e)
 		}
 	}
+	// A later message that lands is not the given-up one.
+	fake.failFirst = 0
+	answerTo(t, ib, "8", "s1")
+	for _, e := range entries(t, ib, true) {
+		if strings.HasPrefix(e.Reason, GaveUp) && !e.Open() {
+			t.Fatalf("given-up refusal closed by another send: %+v", e)
+		}
+	}
 }
 
 func TestFailedChatOpensARefusal(t *testing.T) {

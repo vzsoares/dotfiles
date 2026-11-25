@@ -106,7 +106,7 @@ func (ib *Inbox) sendHold(target string) (string, error) {
 // send was held or refused as transient and will be retried (errText says
 // why); otherwise ok or a final failure.
 // A transient refusal opens a refused delivery entry for the retry chain; the
-// next success to target closes it as retried, and a give-up leaves it open.
+// next success to target closes it as retried, and a give-up stays open.
 func (ib *Inbox) attempt(target string, msg outgoing, send func() (ok bool, mid, errText string)) (ok bool, mid, errText string, deferred bool, err error) {
 	ib.mu.Lock()
 	var hold string
@@ -132,7 +132,9 @@ func (ib *Inbox) attempt(target string, msg outgoing, send func() (ok bool, mid,
 		return ok, mid, errText, false, ib.immediate(func() error {
 			if ok {
 				prefix := retryKey(target, "")
-				if e := ib.resolve("retried", "source = ? AND substr(source_id, 1, ?) = ?", SourceSend, len(prefix), prefix); e != nil {
+				// A given-up message was never resent, so another success does not close it.
+				if e := ib.resolve("retried", "source = ? AND substr(source_id, 1, ?) = ? AND substr(reason, 1, ?) != ?",
+					SourceSend, len(prefix), prefix, len(GaveUp), GaveUp); e != nil {
 					return e
 				}
 			}

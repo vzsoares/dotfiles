@@ -102,13 +102,14 @@ recipient's transcript. Schema v15 adds `delivery_log`, one row per problem,
   an archived or deleted session), `held` (undelivered 5+ min: a dialog, not running;
   closes as `delivered_late`), `unverified` (a pi/codex recipient or no transcript),
   `refused` (zen-inbox's own transient refusals per retry chain, closed `retried` by
-  the next success; failed chats and answers; agents' failed `send_session` calls
+  the next success unless it gave up; failed chats and answers; agents' failed `send_session` calls
   from `tool_calls`, closed when the same sender sends within 10 min).
 - **Transcripts** (`ZEN_CLAUDE_PROJECTS`, else `~/.claude/projects`): the files of the
   current, retired and released agent session ids, plus any jsonl in those dirs or
   the cwd's dir written after `sent_at` (a rotation clears in place). The first 200
   runes of the body, whitespace folded, must sit in a user turn with
-  `[agent-manager] Message from`; tool results never count.
+  `[agent-manager] Message from`, stamped no earlier than a minute before `sent_at`;
+  tool results never count.
 - `zen-inbox delivery list [--all]`, `check <message id>` (any sender: `delivered`,
   `false drop`, `lost`, `held: <why>`, `unverified: <why>`, `unknown`, exit 1),
   `dismiss <entry>`, `resend <entry>` (recipient if live, else its one live

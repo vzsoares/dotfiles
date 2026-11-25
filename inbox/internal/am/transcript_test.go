@@ -32,12 +32,12 @@ func TestTranscriptMatch(t *testing.T) {
 		{"never sent", false},
 		{"", false},
 	} {
-		if got := am.InTranscripts(files, c.body); got != c.want {
+		if got := am.InTranscripts(files, c.body, t0); got != c.want {
 			t.Errorf("%.30q: %v, want %v (files %v)", c.body, got, c.want, files)
 		}
 	}
 	// The retired id's file counts whatever its age.
-	if !am.InTranscripts(am.Transcripts(projects, s, t0), "old retired body") {
+	if !am.InTranscripts(am.Transcripts(projects, s, t0), "old retired body", t0) {
 		t.Error("retired transcript not read")
 	}
 }
@@ -49,13 +49,28 @@ func TestTranscriptIgnoresToolResults(t *testing.T) {
 	appendLine(t, path, `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"echoed body"}]}}`)
 	appendLine(t, path, `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[agent-manager] Message from w:\n\nblock body"}]}}`)
 	files := am.Transcripts(projects, am.StateSession{AgentIDs: []string{"a1"}}, t0)
-	if am.InTranscripts(files, "echoed body") {
+	if am.InTranscripts(files, "echoed body", t0) {
 		t.Error("a tool result counted as delivery")
 	}
-	if !am.InTranscripts(files, "block body") {
+	if !am.InTranscripts(files, "block body", t0) {
 		t.Error("a text block did not count")
 	}
-	if am.InTranscripts(files, "unrelated") {
+	if am.InTranscripts(files, "unrelated", t0) {
 		t.Error("a user turn without the delivery marker counted")
+	}
+}
+
+func TestTranscriptSkipsEarlierTurns(t *testing.T) {
+	projects := t.TempDir()
+	path := filepath.Join(projects, "-w", "a1.jsonl")
+	amtest.Transcript(t, projects, "-w", "a1", t0, "unrelated")
+	appendLine(t, path, `{"type":"user","timestamp":"`+t0.Add(-time.Hour).UTC().Format(time.RFC3339Nano)+
+		`","message":{"role":"user","content":"[agent-manager] Message from w:\n\nsame body"}}`)
+	files := am.Transcripts(projects, am.StateSession{AgentIDs: []string{"a1"}}, t0)
+	if am.InTranscripts(files, "same body", t0) {
+		t.Error("an earlier turn with the same body counted as this delivery")
+	}
+	if !am.InTranscripts(files, "same body", t0.Add(-time.Hour)) {
+		t.Error("a turn after sentAt did not count")
 	}
 }

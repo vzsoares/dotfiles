@@ -97,16 +97,24 @@ func matchKey(body string) string {
 // Marker starts the user turn agent-manager pastes for a delivered message.
 const Marker = "[agent-manager] Message from"
 
+// turnSlack is how far a turn's timestamp may precede sentAt, for clock skew.
+const turnSlack = time.Minute
+
 // InTranscripts reports whether body is in a user turn of one of files that
 // carries Marker; tool results do not count, since a tool can echo a message
 // it never delivered, and the marker keeps a short body from matching any turn.
-func InTranscripts(files []string, body string) bool {
+// A turn stamped before sentAt is an earlier message with the same body.
+func InTranscripts(files []string, body string, sentAt time.Time) bool {
 	key := matchKey(body)
 	if key == "" {
 		return false
 	}
+	since := time.Time{}
+	if !sentAt.IsZero() {
+		since = sentAt.Add(-turnSlack)
+	}
 	for _, f := range files {
-		if found, _ := inFile(f, key); found {
+		if found, _ := inFile(f, key, since); found {
 			return true
 		}
 	}
@@ -114,13 +122,14 @@ func InTranscripts(files []string, body string) bool {
 }
 
 type turn struct {
-	Type    string `json:"type"`
-	Message struct {
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp"`
+	Message   struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 }
 
-func inFile(path, key string) (bool, error) {
+func inFile(path, key string, since time.Time) (bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return false, err
@@ -129,7 +138,7 @@ func inFile(path, key string) (bool, error) {
 	r := bufio.NewReaderSize(f, 1<<16)
 	for {
 		line, err := r.ReadBytes('\n')
-		if len(line) > 0 && bytes.Contains(line, []byte(`"user"`)) && userText(line, key) {
+		if len(line) > 0 && bytes.Contains(line, []byte(`"user"`)) && userText(line, key, since) {
 			return true, nil
 		}
 		if errors.Is(err, io.EOF) {
@@ -141,9 +150,12 @@ func inFile(path, key string) (bool, error) {
 	}
 }
 
-func userText(line []byte, key string) bool {
+func userText(line []byte, key string, since time.Time) bool {
 	var t turn
 	if json.Unmarshal(line, &t) != nil || t.Type != "user" {
+		return false
+	}
+	if at, err := time.Parse(time.RFC3339Nano, t.Timestamp); err == nil && at.Before(since) {
 		return false
 	}
 	var text string

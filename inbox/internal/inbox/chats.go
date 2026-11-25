@@ -150,21 +150,19 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 		c.Status = "waiting"
 	case errText != "":
 		c.Status = "failed"
-		target := ""
-		if key != am.ChiefName {
-			target = key
-		}
-		if !strings.HasPrefix(errText, GaveUp) {
-			if err := ib.NoteRefusal("chat:"+c.Label(), target, am.ChiefName, text, errText); err != nil {
-				return c, err
-			}
-		}
 	}
 	if err := ib.UpdateChat(c.ID, id, c.Status, errText); err != nil {
 		if errText == "" {
 			c.Error = "sent as " + id + ", not recorded: " + err.Error()
 		}
 		return c, err
+	}
+	if c.Status == "failed" && !strings.HasPrefix(errText, GaveUp) {
+		target := ""
+		if key != am.ChiefName {
+			target = key
+		}
+		return c, ib.NoteRefusal("chat:"+c.Label(), target, am.ChiefName, text, errText)
 	}
 	return c, nil
 }

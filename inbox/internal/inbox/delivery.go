@@ -230,7 +230,7 @@ func classify(r am.InboxRow, sessions map[string]am.StateSession, projects strin
 		switch {
 		case len(files) == 0:
 			return verdict{kind: KindUnverified, reason: "dropped; no transcript found"}
-		case am.InTranscripts(files, r.Body):
+		case am.InTranscripts(files, r.Body, r.SentAt):
 			return verdict{kind: KindFalseDrop, reason: "marked dropped"}
 		}
 		return verdict{kind: KindLost, reason: "dropped; not in its transcripts"}
@@ -589,7 +589,7 @@ func (ib *Inbox) CheckMessage(messageID string) (Check, error) {
 			if v.delivered {
 				c.Status = "delivered"
 			}
-			if e, ok, err := ib.inboxEntry(messageID); err != nil {
+			if e, ok, err := ib.inboxEntry(strconv.FormatInt(id, 10)); err != nil {
 				return Check{}, err
 			} else if ok {
 				c.Entry = &e
