@@ -47,7 +47,9 @@
 #      stop      `agent-manager kill <session>` so the archived worker's
 #                process exits; skipped when it is already dead or is the
 #                calling session itself; a failed kill only warns
-#      worktree  `git worktree remove <path>`
+#      worktree  `just wt-db --drop` first when the worktree's own .env names
+#                a core_wt_* database (a failure only warns), then
+#                `git worktree remove <path>`
 #      branch    `git branch -d`, or -D once merge-base --is-ancestor agrees
 #      board     `zen-board done <task> --note "<tag> · <shas>"`, or `zen-board
 #                note <task> "phase N/M · <tag> · <shas>"` for a non-final
@@ -84,6 +86,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from types import ModuleType
+from urllib.parse import urlparse
 
 import typer
 
@@ -479,9 +482,50 @@ def phase_stop(state: State) -> None:
     state.stopped = "killed"
 
 
+WT_DB_PREFIX = "core_wt_"
+DATABASE_URL_LINE = re.compile(
+    r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$", re.MULTILINE
+)
+
+
+def worktree_database(worktree: str) -> str:
+    """The core_wt_* database named by the worktree's own .env, else ""."""
+    env = Path(worktree) / ".env"
+    if env.is_symlink() or not env.is_file():
+        return ""
+    try:
+        match = DATABASE_URL_LINE.search(env.read_text())
+    except (OSError, UnicodeDecodeError):
+        return ""
+    if match is None:
+        return ""
+    url = match[1].strip("\"'")
+    name = urlparse(url).path.lstrip("/")
+    return name if name.startswith(WT_DB_PREFIX) else ""
+
+
+def drop_worktree_database(worktree: str) -> None:
+    name = worktree_database(worktree)
+    if not name:
+        return
+    try:
+        result = mutate(worktree, ["just", "wt-db", "--drop"])
+    except OSError as exc:
+        print(f"zen-merge: could not drop {name}: {exc}", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        tail = (result.stdout + result.stderr).strip().splitlines()[-3:]
+        print(
+            f"zen-merge: just wt-db --drop failed for {name}; drop it by hand:\n"
+            + "\n".join(tail),
+            file=sys.stderr,
+        )
+
+
 def phase_worktree(state: State) -> None:
     if not Path(state.worktree).exists():
         return
+    drop_worktree_database(state.worktree)
     result = mutate(state.main, ["git", "worktree", "remove", state.worktree])
     if result.returncode != 0:
         raise Stop(EXIT_ERROR, result.stderr.strip() or "git worktree remove failed")

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -224,6 +225,91 @@ def test_failing_kill_only_warns(setup: Setup) -> None:
     assert "kill s1 failed" in res.stderr
     assert not setup.worktree.exists()
     assert not merge.state_path("task").exists()
+
+
+def _stub_just(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: int = 0) -> Path:
+    """A fake `just` on PATH that logs its cwd and args; never touches a database."""
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    log = tmp_path / "just.log"
+    stub = bin_dir / "just"
+    stub.write_text(f'#!/bin/sh\necho "$PWD $*" >> "{log}"\nexit {code}\n')
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    return log
+
+
+def _write_env(setup: Setup, url: str, symlink: bool = False) -> None:
+    common = _git(
+        "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=setup.main
+    )
+    exclude = Path(common.strip()) / "info" / "exclude"
+    exclude.parent.mkdir(exist_ok=True)
+    exclude.write_text(".env\n")
+    env = setup.worktree / ".env"
+    if symlink:
+        (setup.main / ".env").write_text(f"DATABASE_URL={url}\n")
+        env.symlink_to(setup.main / ".env")
+    else:
+        env.write_text(f"PORT=1\nDATABASE_URL={url}\n")
+
+
+def test_drops_the_worktree_database_before_removal(
+    setup: Setup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = _stub_just(tmp_path, monkeypatch)
+    _write_env(setup, "postgres://u:p@localhost:5432/core_wt_am_task")
+    wt = str(setup.worktree.resolve())
+    merge.land("task", "dev")
+    assert log.read_text().split() == [wt, "wt-db", "--drop"]
+    assert not setup.worktree.exists()
+
+
+@pytest.mark.parametrize("kind", ["none", "main-db", "symlink"])
+def test_skips_the_drop_without_a_wt_database(
+    setup: Setup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    log = _stub_just(tmp_path, monkeypatch)
+    if kind == "main-db":
+        _write_env(setup, "postgres://u:p@localhost:5432/core")
+    if kind == "symlink":
+        _write_env(setup, "postgres://u:p@localhost:5432/core_wt_x", symlink=True)
+    res = CliRunner().invoke(merge.app, ["task"])
+    assert res.exit_code == 0
+    assert not log.exists()
+    assert res.stderr == ""
+
+
+def test_failing_drop_only_warns(
+    setup: Setup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_just(tmp_path, monkeypatch, code=1)
+    _write_env(setup, "postgres://u:p@localhost:5432/core_wt_am_task")
+    res = CliRunner().invoke(merge.app, ["task"])
+    assert res.exit_code == 0
+    assert "wt-db --drop failed for core_wt_am_task" in res.stderr
+    assert not setup.worktree.exists()
+
+
+def test_missing_just_only_warns(
+    setup: Setup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_env(setup, "postgres://u:p@localhost:5432/core_wt_am_task")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    res = CliRunner().invoke(merge.app, ["task"])
+    assert res.exit_code == 0
+    assert "could not drop core_wt_am_task" in res.stderr
+
+
+def test_dry_run_does_not_drop(
+    setup: Setup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = _stub_just(tmp_path, monkeypatch)
+    _write_env(setup, "postgres://u:p@localhost:5432/core_wt_am_task")
+    res = CliRunner().invoke(merge.app, ["task", "--dry-run"])
+    assert res.exit_code == 0
+    assert "just wt-db --drop" in res.stderr
+    assert not log.exists()
 
 
 def test_never_kills_the_calling_session(
@@ -601,3 +687,11 @@ def test_no_dev_explicit_base_skips_release(
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_worker_rules_preset_names_wt_db() -> None:
+    config = json.loads(
+        (Path(__file__).parent.parent / "agent-manager" / "config.json").read_text()
+    )
+    rules = next(p for p in config["presets"] if p["name"] == "worker-rules")
+    assert "run `just wt-db` before any migrating recipe" in rules["instructions"]
