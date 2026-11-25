@@ -4,12 +4,17 @@ set -e
 # zen-lock <name> [--wait SECS] -- <cmd...>   run cmd holding ~/.cache/zen/<name>.lock
 #                                             full output goes to a log; prints its last
 #                                             40 lines and an exit/waited/ran/log line
-# zen-lock status <name>                      show the holder
+# zen-lock status <name>                      show the holder, then the queue in order
 # zen-lock break <name>                       remove the lock by hand
 #
 # The lock is a directory taken with mkdir (atomic, no flock on macOS) holding an
 # `owner` file whose first line is "<session> <date>", the format of the hand-made
 # locks. A lock without a pid line (hand-made) is never treated as stale.
+#
+# Waiters queue FIFO: each drops a ticket "<arrival>.<pid>" in <name>.queue/ and only
+# the oldest live ticket may take the lock. A ticket whose pid is gone is pruned by
+# the next poll of any waiter. A waiter from an older zen-lock has no ticket and is
+# not ordered.
 
 BASE="${ZEN_LOCK_DIR:-$HOME/.cache/zen}"
 POLL="${ZEN_LOCK_POLL:-5}"
@@ -38,7 +43,8 @@ check_name() {
     esac
 }
 
-owner_field() { sed -n "s/^$2=//p" "$1/owner" 2>/dev/null | head -n 1; }
+field() { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -n 1; }
+owner_field() { field "$1/owner" "$2"; }
 
 describe() {
     local line
@@ -88,7 +94,56 @@ reap_stale() {
     return "$reaped"
 }
 
+# A ticket is stale when its pid is gone on this host, or it is unreadable (tickets
+# are written whole and renamed into place).
+ticket_stale() {
+    local pid host
+    pid=$(field "$1" pid)
+    host=$(field "$1" host)
+    [ -z "$pid" ] || { [ "$host" = "$(hostname)" ] && ! kill -0 "$pid" 2>/dev/null; }
+}
+
+# Microseconds since the epoch, zero-padded so tickets sort by name.
+arrival() {
+    local t
+    t=$(perl -MTime::HiRes=time -e 'printf "%016d", time * 1e6' 2>/dev/null) || t=
+    [ -n "$t" ] || t=$(printf '%016d' $(($(date +%s) * 1000000)))
+    echo "$t"
+}
+
+enqueue() {
+    local tmp
+    mkdir -p "$QUEUE"
+    TICKET="$QUEUE/$(arrival).$$"
+    tmp="$QUEUE/.${TICKET##*/}"
+    {
+        echo "session=${AGENT_MANAGER_SESSION_ID:-}"
+        echo "pid=$$"
+        echo "host=$(hostname)"
+        echo "started=$(date +%s)"
+        echo "cmd=$(printf '%s' "$CMDLINE" | tr '\t\n' '  ' | cut -c1-200)"
+    } >"$tmp"
+    mv "$tmp" "$TICKET"
+}
+
+# True when this waiter holds the oldest live ticket; prunes dead tickets on the way.
+is_head() {
+    local t
+    for t in "$QUEUE"/[0-9]*; do
+        [ "$t" = "$TICKET" ] && return 0
+        [ -e "$t" ] || continue
+        if ticket_stale "$t"; then
+            rm -f "$t"
+            continue
+        fi
+        return 1
+    done
+    return 1
+}
+
 HELD=
+TICKET=
+QUEUE=
 CHILD=
 NAME=
 LOG=
@@ -123,6 +178,8 @@ release() {
         fi
     fi
     HELD=
+    [ -z "$TICKET" ] || rm -f "$TICKET"
+    TICKET=
 }
 
 on_signal() {
@@ -146,6 +203,15 @@ cmd_status() {
     else
         echo "free"
     fi
+    local t n=0 started
+    for t in "$BASE/$1.queue"/[0-9]*; do
+        [ -e "$t" ] || continue
+        ticket_stale "$t" && continue
+        n=$((n + 1))
+        [ "$n" -gt 1 ] || echo "queue:"
+        started=$(field "$t" started)
+        echo "  $n. $(field "$t" session | sed 's/^$/-/') waiting $(($(date +%s) - ${started:-0}))s: $(field "$t" cmd)"
+    done
     if [ -d "$lock.reap" ]; then
         echo "reap guard present$(guard_stale "$lock.reap" && echo " (stale)")"
     fi
@@ -184,12 +250,14 @@ cmd_run() {
     NAME=$name
     CMDLINE=$*
     local lock="$BASE/$name.lock" last="" holder
+    QUEUE="$BASE/$name.queue"
     trap release EXIT
     trap 'on_signal INT 130' INT
     trap 'on_signal TERM 143' TERM
     trap 'on_signal HUP 129' HUP
+    enqueue
     SECONDS=0
-    until mkdir "$lock" 2>/dev/null; do
+    until is_head && mkdir "$lock" 2>/dev/null; do
         if reap_stale "$lock"; then
             continue
         fi
@@ -206,6 +274,8 @@ cmd_run() {
     done
 
     HELD=$lock
+    rm -f "$TICKET"
+    TICKET=
     WAITED=$SECONDS
     RAN_FROM=$SECONDS
     find "$BASE/lock-logs" -type f -name '*.log' -mtime +"$LOG_KEEP_DAYS" -delete 2>/dev/null || true

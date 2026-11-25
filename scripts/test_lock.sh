@@ -175,6 +175,79 @@ bash "$LOCK" break t >/dev/null
 [ ! -d "$ZEN_LOCK_DIR/t.lock.reap" ]
 check "break removes a guard when the lock is free" $?
 
+# FIFO: A, B, C queue behind a holder; C polls fastest but goes last
+reset
+bash "$LOCK" t -- sleep 2 >/dev/null &
+wait_for "$ZEN_LOCK_DIR/t.lock/owner"
+: >"$TMP/order"
+for w in A B C; do
+    poll=1
+    [ "$w" = C ] && poll=0.05
+    ZEN_LOCK_POLL=$poll bash "$LOCK" t --wait 30 -- bash -c "echo $w >>'$TMP/order'" >/dev/null &
+    sleep 0.3
+done
+wait
+[ "$(tr -d '\n' <"$TMP/order")" = ABC ]
+check "waiters get the lock in arrival order" $?
+ls "$ZEN_LOCK_DIR"/t.queue/[0-9]* >/dev/null 2>&1
+[ $? != 0 ]
+check "no tickets are left after the queue drains" $?
+
+# a killed waiter drops out of the queue and never blocks it
+reset
+mkdir "$ZEN_LOCK_DIR/t.lock"
+echo "task-4 $(date)" >"$ZEN_LOCK_DIR/t.lock/owner"
+bash "$LOCK" t --wait 30 -- true >/dev/null 2>&1 &
+DEADW=$!
+sleep 0.3
+bash "$LOCK" t --wait 30 -- touch "$TMP/after-kill" >/dev/null 2>&1 &
+NEXTW=$!
+sleep 0.3
+kill -9 "$DEADW"
+wait "$DEADW" 2>/dev/null
+rm -rf "$ZEN_LOCK_DIR/t.lock"
+wait "$NEXTW"
+[ -e "$TMP/after-kill" ]
+check "waiter behind a killed waiter still goes" $?
+ls "$ZEN_LOCK_DIR"/t.queue/[0-9]* >/dev/null 2>&1
+[ $? != 0 ]
+check "killed waiter's ticket is pruned" $?
+
+# a ticket left by a dead pid ahead of us does not block
+reset
+mkdir -p "$ZEN_LOCK_DIR/t.queue"
+printf 'pid=%s\nhost=%s\n' "$DEAD" "$(hostname)" >"$ZEN_LOCK_DIR/t.queue/0000000000000001.$DEAD"
+bash "$LOCK" t --wait 5 -- true >/dev/null 2>&1
+check "a dead ticket ahead of the waiter is skipped" $?
+
+# timeout removes the ticket
+reset
+mkdir "$ZEN_LOCK_DIR/t.lock"
+echo "task-5 $(date)" >"$ZEN_LOCK_DIR/t.lock/owner"
+bash "$LOCK" t --wait 1 -- true 2>/dev/null
+ls "$ZEN_LOCK_DIR"/t.queue/[0-9]* >/dev/null 2>&1
+[ $? != 0 ]
+check "timeout removes the ticket" $?
+
+# status lists the holder, then the queue in order
+reset
+mkdir "$ZEN_LOCK_DIR/t.lock"
+echo "task-6 $(date)" >"$ZEN_LOCK_DIR/t.lock/owner"
+AGENT_MANAGER_SESSION_ID=first bash "$LOCK" t --wait 30 -- echo one >/dev/null 2>&1 &
+P1=$!
+sleep 0.3
+AGENT_MANAGER_SESSION_ID=second bash "$LOCK" t --wait 30 -- echo two >/dev/null 2>&1 &
+P2=$!
+sleep 0.3
+bash "$LOCK" status t >"$TMP/status"
+kill -9 "$P1" "$P2"
+wait "$P1" "$P2" 2>/dev/null
+[ "$(sed -n 1p "$TMP/status" | cut -c1-6)" = task-6 ] &&
+    grep -q '^queue:' "$TMP/status" &&
+    grep -Eq '^  1\. first waiting [0-9]+s: echo one' "$TMP/status" &&
+    grep -Eq '^  2\. second waiting [0-9]+s: echo two' "$TMP/status"
+check "status shows the holder, then the queue in order" $?
+
 # release on signals. Job control: an async job in a plain script ignores SIGINT.
 set -m
 for sig in INT TERM; do
@@ -186,6 +259,20 @@ for sig in INT TERM; do
     wait "$pid" 2>/dev/null
     [ ! -d "$ZEN_LOCK_DIR/t.lock" ]
     check "lock released on SIG$sig" $?
+done
+for sig in INT TERM HUP; do
+    reset
+    mkdir "$ZEN_LOCK_DIR/t.lock"
+    echo "task-7 $(date)" >"$ZEN_LOCK_DIR/t.lock/owner"
+    bash "$LOCK" t --wait 30 -- true >/dev/null 2>&1 &
+    pid=$!
+    wait_for "$ZEN_LOCK_DIR/t.queue"
+    sleep 0.3
+    kill -s "$sig" "$pid"
+    wait "$pid" 2>/dev/null
+    ls "$ZEN_LOCK_DIR"/t.queue/[0-9]* >/dev/null 2>&1
+    [ $? != 0 ]
+    check "waiting ticket removed on SIG$sig" $?
 done
 
 set +m
