@@ -588,6 +588,17 @@ DAY_ONE = {
     ),
     "explorer": ("explorer", "haiku", None, None, "default", ["zen-flow"]),
 }
+BUILTIN_EXPLORE_DENIED = {
+    "Agent",
+    "Artifact",
+    "ArtifactComments",
+    "ArtifactData",
+    "ArtifactCheck",
+    "ExitPlanMode",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+}
 EDIT_TOOLS = ["Edit", "Write", "NotebookEdit"]
 
 
@@ -693,7 +704,8 @@ def test_explore_override_runs_on_haiku_read_only() -> None:
     fields = dict(line.split(": ", 1) for line in head.strip().splitlines())
     assert fields["name"] == "Explore"
     assert fields["model"] == "haiku"
-    assert fields["disallowedTools"] == "Edit, Write, NotebookEdit"
+    denied = set(fields["disallowedTools"].split(", "))
+    assert denied >= BUILTIN_EXPLORE_DENIED
     assert "file:line" in fields["description"]
 
 

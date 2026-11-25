@@ -171,7 +171,7 @@ writes, reviews or decides:
   stays (search needs it); the preset forbids writes through it.
 - **`Explore` subagent**: `.claude/agents/Explore.md` (linked to `~/.claude/agents/`)
   is a user-level agent named `Explore`, which replaces the built-in. It sets
-  `model: haiku` and `disallowedTools: Edit, Write, NotebookEdit`. The built-in runs on
+  `model: haiku` and the built-in's denied tools (Agent, the Artifact tools, ExitPlanMode, Edit, Write, NotebookEdit). The built-in runs on
   the parent's model (Opus on a subscription).
 - `CLAUDE_CODE_SUBAGENT_MODEL` and `_FORCE` stay unset: they would also move
   `/code-review` and every `general-purpose` subagent. `Plan`, `fork` and the designer
