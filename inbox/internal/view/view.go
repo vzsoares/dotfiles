@@ -848,7 +848,7 @@ func DeliveryRow(open []inbox.Entry) (label string, lost bool) {
 // ChatStatus is a chat's stored status as shown; a loss says how to resend.
 func ChatStatus(status string) string {
 	if status == inbox.StatusLost {
-		return "lost · R in Delivery to resend"
+		return "lost · r in Delivery to resend"
 	}
 	return status
 }

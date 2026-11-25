@@ -61,10 +61,10 @@ A message for a session that is down is kept and sent when the session is back:
   failed delivery with a manual `r`.
 - Answers go to the asking session while it is live, else to the one live session
   with its name.
-- When the asker is gone, `retry SESSION --to-chief` (panel: `C` on a failed row
-  whose error is the gone reason) sends its failed and waiting answers to the one
-  live `chief`, headed as meant for the gone session. It refuses, rows untouched,
-  when the asker or a namesake is live or chief isn't exactly one.
+- `R` (panel, on a failed or waiting answer row, or in a Delivery entry) and
+  `retry SESSION --to-chief` / `delivery resend ID --to-chief` send to the one live
+  `chief` instead, headed as meant for the original recipient, whether it is gone,
+  down or refusing. They refuse, rows untouched, unless chief is exactly one.
 - The pass (`inbox.Pass`: the panel every 15 s and at start, or `zen-inbox retry
   --waiting`) lists sessions once, claims each item in its own `BEGIN IMMEDIATE`
   and sends at most one message per target: answers, then replies oldest first,

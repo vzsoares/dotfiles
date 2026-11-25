@@ -121,18 +121,32 @@ func (m *Model) cursorEntry() (inbox.Entry, bool) {
 	return inbox.Entry{}, false
 }
 
-func (m *Model) deliveryActCmd(e inbox.Entry, resend bool) tea.Cmd {
+type entryAct int
+
+const (
+	actDismiss entryAct = iota
+	actResend
+	actToChief
+)
+
+func (m *Model) deliveryActCmd(e inbox.Entry, act entryAct) tea.Cmd {
 	m.busy = "Dismissing entry " + strconv.FormatInt(e.ID, 10) + "…"
-	if resend {
+	switch act {
+	case actResend:
 		m.busy = "Resending to " + e.Recipient() + "…"
+	case actToChief:
+		m.busy = "Sending entry " + strconv.FormatInt(e.ID, 10) + " to chief…"
 	}
 	ib, client, w, sessions := m.ib, m.am, m.watched(), m.snap.sessions
 	return func() tea.Msg {
 		var flash string
 		var err error
-		if resend {
+		switch act {
+		case actResend:
 			_, flash, err = ib.Resend(e.ID)
-		} else {
+		case actToChief:
+			_, flash, err = ib.ResendToChief(e.ID)
+		default:
 			_, err = ib.Dismiss(e.ID)
 			flash = "dismissed entry " + strconv.FormatInt(e.ID, 10)
 		}
@@ -174,17 +188,20 @@ func (m *Model) keyDelivery(k string) (tea.Model, tea.Cmd) {
 	case "a":
 		m.dlAll = !m.dlAll
 		return m, m.loadCmd(false)
-	case "R":
+	case "r", "R":
 		if e, ok := m.cursorEntry(); ok {
 			if !e.Open() || e.Body == "" {
 				m.flash, m.flashOK = "nothing to resend for entry "+strconv.FormatInt(e.ID, 10), false
 				return m, nil
 			}
-			return m, m.deliveryActCmd(e, true)
+			if k == "R" {
+				return m, m.deliveryActCmd(e, actToChief)
+			}
+			return m, m.deliveryActCmd(e, actResend)
 		}
 	case "x":
 		if e, ok := m.cursorEntry(); ok && e.Open() {
-			return m, m.deliveryActCmd(e, false)
+			return m, m.deliveryActCmd(e, actDismiss)
 		}
 	}
 	return m, nil

@@ -179,8 +179,8 @@ var footers = map[screen][]key{
 	scChief:         {{"ctrl+d", "send"}, {"enter", "newline"}, {"esc", "cancel"}},
 	scThread:        {{"↑↓", ""}, {"tab", "next"}, {"enter", "open"}, {"f", "reply"}, {"a", "answer"}, {"m", "read"}, {"c", "chief"}, {"T", "refile"}, {"esc", "back"}, {"?", "help"}},
 	scRefile:        {{"ctrl+d", "save"}, {"enter", "newline"}, {"esc", "cancel"}},
-	scDelivery:      {{"↑↓", ""}, {"enter", "open"}, {"R", "resend"}, {"x", "dismiss"}, {"a", "closed"}, {"esc", "back"}, {"?", "help"}},
-	scDeliveryEntry: {{"R", "resend"}, {"x", "dismiss"}, {"esc", "back"}, {"?", "help"}},
+	scDelivery:      {{"↑↓", ""}, {"enter", "open"}, {"r", "resend"}, {"R", "to chief"}, {"x", "dismiss"}, {"a", "closed"}, {"esc", "back"}, {"?", "help"}},
+	scDeliveryEntry: {{"r", "resend"}, {"R", "to chief"}, {"x", "dismiss"}, {"esc", "back"}, {"?", "help"}},
 	scLocked:        {{"↑↓", ""}, {"enter", ""}, {"s", "skip"}, {"t", "talk"}, {"v", "full"}, {"y", "copy"}, {"←→", "move"}, {"esc", "list"}, {"?", "help"}},
 }
 
@@ -204,9 +204,9 @@ var helps = map[screen]string{
 	scConfirmManual: "y stages Done for the step shown; ↑↓, J/K and pgup/pgdn scroll it; any other key goes back without staging it.",
 	scNote:          "enter marks this note read and goes back; m toggles read or unread; opening it does not mark it. f writes a reply to the sender (as many as you like) and marks it read. T moves it to another task. J/K scroll the text. y then a number copies that code block.",
 	scDelivery: "agent-manager delivery problems, newest first: lost (dropped and not in the recipient's transcript), held (undelivered 5+ min)," +
-		" refused (a send agent-manager turned away), unverified (no transcript to check). enter shows one in full; R resends it to its recipient," +
-		" else to the one live session with its name; x dismisses it; a shows the closed ones, false drops included.",
-	scDeliveryEntry: "R resends this message to its recipient, else to the one live session with its name; x dismisses it. J/K scroll.",
+		" refused (a send agent-manager turned away), unverified (no transcript to check). enter shows one in full; r resends it to its recipient," +
+		" else to the one live session with its name; R sends it to chief instead; x dismisses it; a shows the closed ones, false drops included.",
+	scDeliveryEntry: "r resends this message to its recipient, else to the one live session with its name; R sends it to chief instead; x dismisses it. J/K scroll.",
 	scChief:         "ctrl+d sends the message to the live chief session, enter adds a line. esc cancels and keeps the draft for the next c.",
 	scReply:         "ctrl+d sends the reply to the note's sender; an empty reply sends nothing.",
 }

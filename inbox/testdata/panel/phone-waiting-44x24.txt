@@ -21,4 +21,4 @@ Waiting · sent when the session is back
 
 
 
-↑↓ · enter retry · c chief · ? help · q quit
+enter retry · R to chief · c chief · q quit

@@ -664,18 +664,41 @@ func ResendMessage(e Entry) string {
 	return fmt.Sprintf("(resent from the cockpit: %s's message %s of %s) %s", e.Sender, e.SourceID, when, e.Body)
 }
 
+// meantFor names an entry's recipient as "NAME (SID)", or whichever it has.
+func (e Entry) meantFor() string {
+	if e.RecipientName != "" && e.RecipientID != "" {
+		return e.RecipientName + " (" + e.RecipientID + ")"
+	}
+	return e.Recipient()
+}
+
+// ResendToChiefMessage is ResendMessage for a copy that goes to chief.
+func ResendToChiefMessage(e Entry) string {
+	msg := ResendMessage(e)
+	return strings.Replace(msg, " of ", ", meant for "+e.meantFor()+", of ", 1)
+}
+
+// resendable is the open entry with a body to send again.
+func (ib *Inbox) resendable(id int64) (Entry, error) {
+	e, err := ib.Entry(id)
+	switch {
+	case err != nil:
+		return e, err
+	case !e.Open():
+		return e, errf(1, "delivery entry %d is already %s", id, e.State)
+	case e.Body == "":
+		return e, errf(1, "delivery entry %d has no body to resend", id)
+	}
+	return e, nil
+}
+
 // Resend sends an open entry's body again: to its recipient when live, else
 // to the one live session with its name, under pacing and retry. A sent one
 // closes as resent; a recipient that is down or a refusal is exit 3.
 func (ib *Inbox) Resend(id int64) (Entry, string, error) {
-	e, err := ib.Entry(id)
-	switch {
-	case err != nil:
+	e, err := ib.resendable(id)
+	if err != nil {
 		return e, "", err
-	case !e.Open():
-		return e, "", errf(1, "delivery entry %d is already %s", id, e.State)
-	case e.Body == "":
-		return e, "", errf(1, "delivery entry %d has no body to resend", id)
 	}
 	sessions := ib.AM.Sessions()
 	if sessions == nil {
@@ -692,24 +715,47 @@ func (ib *Inbox) Resend(id int64) (Entry, string, error) {
 	if target == "" {
 		return e, "", errf(3, "%s is down: nothing resent", e.Recipient())
 	}
-	msg := ResendMessage(e)
-	ok, mid, errText, _, err := ib.attempt(target, outgoing{e.RecipientName, msg}, func() (bool, string, string) {
+	return ib.resendTo(e, target, e.RecipientName, ResendMessage(e), e.Recipient())
+}
+
+// ResendToChief sends an open entry's body to the one live session named
+// chief, whatever kept it from its recipient; it refuses when chief is not
+// exactly one, leaving the entry open.
+func (ib *Inbox) ResendToChief(id int64) (Entry, string, error) {
+	e, err := ib.resendable(id)
+	if err != nil {
+		return e, "", err
+	}
+	sessions := ib.AM.Sessions()
+	if sessions == nil {
+		return e, "", errf(3, "agent-manager could not list sessions")
+	}
+	chief := chiefLive(sessions)
+	if len(chief) != 1 {
+		return e, "", errf(1, "need exactly one live session named %s, found %d", am.ChiefName, len(chief))
+	}
+	return ib.resendTo(e, chief[0], am.ChiefName, ResendToChiefMessage(e), am.ChiefName)
+}
+
+// resendTo sends msg to target and closes the entry as resent.
+func (ib *Inbox) resendTo(e Entry, target, name, msg, label string) (Entry, string, error) {
+	ok, mid, errText, _, err := ib.attempt(target, outgoing{name, msg}, func() (bool, string, string) {
 		return ib.AM.Send(target, msg)
 	})
 	if err != nil {
 		return e, "", err
 	}
 	if !ok {
-		return e, "", errf(3, "resend to %s: %s", e.Recipient(), errText)
+		return e, "", errf(3, "resend to %s: %s", label, errText)
 	}
 	ib.mu.Lock()
-	err = ib.immediate(func() error { return ib.resolve("resent", "id = ?", id) })
+	err = ib.immediate(func() error { return ib.resolve("resent", "id = ?", e.ID) })
 	ib.mu.Unlock()
 	if err != nil {
 		return e, "", err
 	}
 	e.State, e.Resolution = "resolved", "resent"
-	text := "resent entry " + strconv.FormatInt(id, 10) + " to " + e.Recipient()
+	text := "resent entry " + strconv.FormatInt(e.ID, 10) + " to " + label
 	if mid != "" {
 		text += " as message " + mid
 	}

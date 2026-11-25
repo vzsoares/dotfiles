@@ -167,10 +167,10 @@ func (a *App) deliveryDismiss() *cobra.Command {
 }
 
 func (a *App) deliveryResend() *cobra.Command {
-	var asJSON bool
+	var asJSON, toChief bool
 	cmd := &cobra.Command{
-		Use:   "resend ENTRY_ID [--json]",
-		Short: "Send an open entry's message again: to its recipient, else its one live namesake.",
+		Use:   "resend ENTRY_ID [--to-chief] [--json]",
+		Short: "Send an open entry's message again: to its recipient, else its one live namesake; --to-chief sends it to the one live chief.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			id, err := entryID(args[0])
@@ -178,7 +178,11 @@ func (a *App) deliveryResend() *cobra.Command {
 				return err
 			}
 			return a.withInbox(func(ib *inbox.Inbox) error {
-				e, text, err := ib.Resend(id)
+				resend := ib.Resend
+				if toChief {
+					resend = ib.ResendToChief
+				}
+				e, text, err := resend(id)
 				if err != nil {
 					return err
 				}
@@ -191,6 +195,7 @@ func (a *App) deliveryResend() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&toChief, "to-chief", false, "send the message to the one live chief, noting whom it was meant for")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the entry as JSON")
 	return cmd
 }

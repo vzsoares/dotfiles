@@ -111,14 +111,14 @@ func TestDeliveryScreenResendAndDismiss(t *testing.T) {
 	d.has("synthetic vanished", "am_inbox 3")
 
 	d.am.sessions = am.Sessions{sess("s1"), sess("s2")}
-	d.rawKeys("R")
+	d.rawKeys("r")
 	if len(d.am.sends) != 1 || d.am.sends[0][0] != "s1" ||
 		!strings.HasPrefix(d.am.sends[0][1], "(resent from the cockpit: worker's message 3 of ") ||
 		!strings.HasSuffix(d.am.sends[0][1], ") synthetic vanished") {
 		t.Fatalf("%q", d.am.sends)
 	}
 	if d.m.scr != scDelivery || !strings.Contains(d.view(), "» resent entry") {
-		t.Fatalf("R did not go back with a flash:\n%s", d.view())
+		t.Fatalf("r did not go back with a flash:\n%s", d.view())
 	}
 	d.has("Delivery · 1 open")
 
@@ -147,7 +147,7 @@ func TestChiefStatusTrustsTheTranscriptOverDropped(t *testing.T) {
 		seen       []string
 	}{
 		{"false drop", "✉ chief · message 42 delivered", []string{"ping"}},
-		{"lost", "✉ chief · message 42 lost · R in Delivery to resend", nil},
+		{"lost", "✉ chief · message 42 lost · r in Delivery to resend", nil},
 	} {
 		d := newDrvWith(t, 92, 29, func(d *drv) {
 			d.deliveryWorld([]amtest.Row{droppedRow(42, "c1", "ping")}, c.seen...)
@@ -181,5 +181,40 @@ func TestChiefStatusDropWithoutStateDBIsLoggedUnverified(t *testing.T) {
 	es, err := d.ib.Entries(false)
 	if err != nil || len(es) != 1 || es[0].Source != inbox.SourceStatus || es[0].Kind != inbox.KindUnverified || es[0].Body != "ping" {
 		t.Fatalf("%+v %v", es, err)
+	}
+}
+
+func TestDeliveryRSendsAnEntryToChiefFromListAndEntryView(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrvWith(t, 92, 29, func(d *drv) {
+		d.deliveryWorld([]amtest.Row{heldRow(2, "synthetic waits"), droppedRow(3, "s1", "synthetic vanished")})
+	})
+	d.poll()
+	d.cursorTo("Delivery · 2 open")
+	d.rawKeys("enter")
+	d.has("r resend", "R to chief")
+	chief := sess("c1")
+	chief["name"] = "chief"
+	d.am.sessions = am.Sessions{sess("s1"), sess("s2"), chief}
+	d.am.sends = nil
+
+	d.rawKeys("R")
+	if len(d.am.sends) != 1 || d.am.sends[0][0] != "c1" || !strings.Contains(d.am.sends[0][1], "meant for spec-s1 (s1)") ||
+		!strings.HasSuffix(d.am.sends[0][1], ") synthetic vanished") {
+		t.Fatalf("list view: %q", d.am.sends)
+	}
+	d.has("» resent entry", "Delivery · 1 open")
+
+	d.rawKeys("enter")
+	if d.m.scr != scDeliveryEntry {
+		t.Fatalf("enter did not open the entry:\n%s", d.view())
+	}
+	d.rawKeys("R")
+	if len(d.am.sends) != 2 || d.am.sends[1][0] != "c1" || !strings.HasSuffix(d.am.sends[1][1], ") synthetic waits") {
+		t.Fatalf("entry view: %q", d.am.sends)
+	}
+	d.has("Delivery · 0 open")
+	if es, _ := d.ib.Entries(false); len(es) != 0 {
+		t.Fatalf("%+v", es)
 	}
 }

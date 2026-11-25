@@ -269,30 +269,38 @@ func (d *drv) failedRow(gone bool) {
 	d.poll()
 }
 
-func TestCockpitOffersSendToChiefOnAGoneRowOnly(t *testing.T) {
+func TestCockpitRForceRetriesToChiefOnAFailedRow(t *testing.T) {
+	for _, gone := range []bool{true, false} {
+		d := newDrv(t, 92, 29)
+		d.failedRow(gone)
+		d.cursorTo("retry spec-s1")
+		if !strings.Contains(d.last(), "r retry") || !strings.Contains(d.last(), "R to chief") {
+			t.Fatalf("gone=%v: %q", gone, d.last())
+		}
+		if !gone {
+			d.am.fail = ""
+			d.am.sessions = am.Sessions{sess("s1"), func() am.Session { c := sess("c1"); c["name"] = "chief"; return c }()}
+		}
+		sent := len(d.am.sends)
+		d.keys("R")
+		last := d.am.sends[len(d.am.sends)-1]
+		if len(d.am.sends) != sent+1 || last[0] != "c1" || !strings.Contains(last[1], "meant for spec-s1 (s1)") {
+			t.Fatalf("gone=%v: %q", gone, d.am.sends)
+		}
+		if strings.Contains(d.view(), "Failed delivery") {
+			t.Fatalf("gone=%v: row still failed:\n%s", gone, d.view())
+		}
+	}
+}
+
+func TestCockpitRRefusedWithoutOneChiefLeavesTheRow(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.failedRow(true)
+	d.am.sessions = am.Sessions{{"id": "s1", "name": "spec-s1", "running": true, "archived": true}}
 	d.cursorTo("retry spec-s1")
-	if !strings.Contains(d.last(), "enter retry") || !strings.Contains(d.last(), "C send to chief") {
-		t.Fatalf("gone row lacks the key: %q\n%s", d.last(), d.view())
-	}
-	d.keys("C")
-	if len(d.am.sends) != 1 || d.am.sends[0][0] != "c1" || !strings.Contains(d.am.sends[0][1], "meant for spec-s1 (s1), which is gone") {
-		t.Fatalf("%q", d.am.sends)
-	}
-	if strings.Contains(d.view(), "Failed delivery") {
-		t.Fatalf("row still failed:\n%s", d.view())
-	}
-
-	d = newDrv(t, 92, 29)
-	d.failedRow(false)
-	d.cursorTo("retry spec-s1")
-	if !strings.Contains(d.view(), "boom") || strings.Contains(d.last(), "send to chief") {
-		t.Fatalf("other error offers chief: %q", d.last())
-	}
 	sent := len(d.am.sends)
-	d.keys("C")
-	if len(d.am.sends) != sent {
-		t.Fatalf("C sent on a non-gone row: %q", d.am.sends)
+	d.keys("R")
+	if len(d.am.sends) != sent || !strings.Contains(d.view(), "Failed delivery") || !strings.Contains(d.view(), "exactly one") {
+		t.Fatalf("%q\n%s", d.am.sends, d.view())
 	}
 }

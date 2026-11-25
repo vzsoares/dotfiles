@@ -26,4 +26,4 @@ Delivery · 2 open · 1 false drop this week
 
 
 
-↑↓ · enter open · R resend · x dismiss · a closed · esc back · ? help
+↑↓ · enter open · r resend · R to chief · x dismiss · a closed · esc back · ? help

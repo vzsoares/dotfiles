@@ -179,13 +179,8 @@ func LiveNamed(sessions Sessions, name string) []string {
 
 // GoneText is the delivery error for a session that cannot receive.
 func GoneText(sessionID string) string {
-	return fmt.Sprintf("session %s %s", sessionID, goneSuffix)
+	return fmt.Sprintf("session %s is gone (dead, archived or missing)", sessionID)
 }
-
-const goneSuffix = "is gone (dead, archived or missing)"
-
-// IsGone is whether a delivery error is GoneText's.
-func IsGone(errText string) bool { return strings.HasSuffix(errText, goneSuffix) }
 
 func (e Exec) Send(sessionID, message string) (bool, string, string) {
 	if sessions := e.Sessions(); sessions != nil && !Live(Find(sessions, sessionID)) {

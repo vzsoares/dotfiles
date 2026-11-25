@@ -1604,8 +1604,8 @@ func (m *Model) listKeys() []ranked {
 		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
 	case "r", "nr", "w", "nw", "cw":
 		keys = append(keys, ranked{key{"enter", "retry"}, 0})
-		if kind == "r" && m.goneRow(strings.TrimPrefix(row, "r:")) {
-			keys = append(keys, ranked{key{"C", "send to chief"}, 1})
+		if kind == "r" || kind == "w" {
+			keys = append(keys, ranked{key{"R", "to chief"}, 1})
 		}
 	case "nh":
 		keys = append(keys, ranked{key{"enter", "expand"}, 0})
@@ -1654,17 +1654,7 @@ func (m *Model) retryRowCmd(kind, id string) tea.Cmd {
 	return m.passNowCmd()
 }
 
-// goneRow is whether the failed row for sid failed because its asker is gone.
-func (m *Model) goneRow(sid string) bool {
-	for _, b := range m.snap.undelivered {
-		if b.SessionID == sid {
-			return am.IsGone(b.Decisions[0].DeliveryError)
-		}
-	}
-	return false
-}
-
-// toChiefCmd sends a gone asker's failed answers to chief.
+// toChiefCmd sends a session's failed or waiting answers to chief.
 func (m *Model) toChiefCmd(sid string) tea.Cmd {
 	m.busy = "Sending " + m.undeliveredName(sid) + "'s answers to chief…"
 	ib, client, sessions := m.ib, m.am, m.snap.sessions
@@ -1713,8 +1703,8 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 		return m, m.retryFirst()
 	case "c":
 		return m, m.openChief(m.rowTask(m.focusedRow()), scList)
-	case "C":
-		if kind, id, _ := strings.Cut(m.focusedRow(), ":"); kind == "r" && m.goneRow(id) {
+	case "R":
+		if kind, id, _ := strings.Cut(m.focusedRow(), ":"); kind == "r" || kind == "w" {
 			return m, m.toChiefCmd(id)
 		}
 	case "T":

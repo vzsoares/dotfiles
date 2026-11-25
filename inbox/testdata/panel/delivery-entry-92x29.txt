@@ -26,4 +26,4 @@ synthetic vanished
 
 
 
-R resend · x dismiss · esc back · ? help
+r resend · R to chief · x dismiss · esc back · ? help

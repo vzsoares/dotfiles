@@ -9,4 +9,4 @@ Failed delivery · 1
 
 
 
-↑↓ · enter retry · c chief · ? help · q quit
+↑↓ · enter retry · R to chief · c chief · ? help · q quit
