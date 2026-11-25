@@ -260,10 +260,10 @@ profile inherits its group's, else its spawner's, so every spawn names one.
 - **orchestrator** spawns workers (`saved: worker-rules`; Opus for design-heavy or
   cross-cutting work, Sonnet for pattern or spec work; max 3 core workers, or 2 while the
   5-minute load average (middle number of `uptime`) is over 150, checked before each core
-  claim and never by stopping running workers; check entries count; all repos together at
-  most 3 live workers while the load is over 60, and with more than 3 live it parks the
-  newest or least urgent (commit first, branch stays) instead of letting 5 or 6 run; plus
-  up to 2 dotfiles workers (light: unit
+  claim (check entries count) and never by stopping running workers, except that with the load over 60 and more
+  than 3 workers live it parks the newest or least urgent (commit first, branch stays)
+  instead of letting 5 or 6 run; all repos together at most 3 live workers while the load
+  is over 60; plus up to 2 dotfiles workers, which count toward that 3 (light: unit
   tests, no browsers or dev servers); the core-heavy lock `~/.cache/zen/core-heavy.lock`
   covers browser runs, `just check`, tsc/tsgo, `just test` and builds; `list_reservations`
   before a second worker in one repo) and waits on them. When auto mode blocks a spawn it
