@@ -84,7 +84,7 @@ rerun adds 0 rows and a hook row for the same call always wins (the hook upserts
 write) per transcript, a session's own and each subagent's, into `tool_usage`. A
 response streamed over several transcript lines repeats its message id, so the last
 line counts once. Rows are replaced on a rerun (a live session's totals grow), so a rerun
-adds 0 new rows. The hook never writes it, and only agent-manager sessions are imported.
+adds 0 new rows. Known limit: a resumed or forked session that copies earlier turns into a new transcript counts them again under the new session id (dedup is per transcript). The hook never writes it, and only agent-manager sessions are imported.
 `agent_type` comes from the subagent's `.meta.json`; the main session has an empty
 `agent_id`. A session's role comes from agent-manager's `environment`: `role-explorer`
 gives `explorer`, otherwise the name and worktree rule.

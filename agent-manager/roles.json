@@ -80,6 +80,18 @@
       "enabledPlugins": { "figma@claude-plugins-official": false }
     },
     "skills": { "only": ["zen-flow"] },
-    "tools": { "deny": ["Edit", "Write", "NotebookEdit"] }
+    "tools": {
+      "deny": [
+        "Agent",
+        "Artifact",
+        "ArtifactComments",
+        "ArtifactData",
+        "ArtifactCheck",
+        "ExitPlanMode",
+        "Edit",
+        "Write",
+        "NotebookEdit"
+      ]
+    }
   }
 }

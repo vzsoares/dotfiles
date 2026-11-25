@@ -165,7 +165,7 @@ Read-only exploration runs on Haiku (task #1009). Two pieces, neither moves a ro
 writes, reviews or decides:
 
 - **`explorer` role** (`role-explorer`, preset `explorer`): `model: haiku`, no effort,
-  `tools.deny` of `Edit`, `Write`, `NotebookEdit`, spec-writer's overlay, skills
+  `tools.deny` of the Explore override's list (`Agent`, the Artifact tools, `ExitPlanMode`, `Edit`, `Write`, `NotebookEdit`), spec-writer's overlay, skills
   `zen-flow` only. Chief's step 12 spawns it for question-only investigation, research
   and support digging; digging that may change code or data stays `role-worker`. Bash
   stays (search needs it); the preset forbids writes through it.

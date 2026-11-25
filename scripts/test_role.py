@@ -599,7 +599,6 @@ BUILTIN_EXPLORE_DENIED = {
     "Write",
     "NotebookEdit",
 }
-EDIT_TOOLS = ["Edit", "Write", "NotebookEdit"]
 
 
 def test_tracked_file_is_the_day_one_table(tracked: None) -> None:
@@ -618,7 +617,7 @@ def test_tracked_file_is_the_day_one_table(tracked: None) -> None:
         assert r.settings["enabledPlugins"] == {FIGMA: False}
         assert r.only == only
         assert (r.off, r.append) == ([], None)
-        assert r.deny == (EDIT_TOOLS if name == "explorer" else [])
+        assert set(r.deny) == (BUILTIN_EXPLORE_DENIED if name == "explorer" else set())
 
 
 RTK_HOOK = {
@@ -684,7 +683,8 @@ def test_explorer_is_haiku_and_read_only(tracked: None) -> None:
     flags = role.role_flags(role.load_role("explorer"), [], "R")
     assert flags[:2] == ["--model", "haiku"]
     assert "--effort" not in flags
-    assert flags[flags.index("--disallowedTools") + 1] == "Edit,Write,NotebookEdit"
+    denied = flags[flags.index("--disallowedTools") + 1].split(",")
+    assert set(denied) == BUILTIN_EXPLORE_DENIED
 
 
 def test_chief_sends_questions_to_the_explorer(tracked: None) -> None:
