@@ -4,6 +4,7 @@
 //	zen-telemetry hook                       PostToolUse/PostToolUseFailure hook (stdin)
 //	zen-telemetry import [--days 31] [--dry-run]
 //	zen-telemetry report [--days 7] [--slow 30s] [--json] [--due]
+//	zen-telemetry report --by-model [--days 7] [--json]
 //	zen-telemetry filed <week> <sink-key> <task-id>
 //	zen-telemetry mark-done <week>
 //	zen-telemetry sink-task [<task-id> [--fold <task-id>]...]
@@ -45,6 +46,7 @@ func usage(w io.Writer) {
   import [--days 31] [--dry-run]         one-time import from ~/.claude/projects transcripts
   report [--days 7] [--slow 30s] [--json] [--due]
                                          time-sink report; --due exits 10 if this week is done
+  report --by-model [--days 7] [--json]  tokens by role, agent and model, this window and the last
   filed <week> <sink-key> <task-id>      record a task filed for a sink
   mark-done <week>                       close the week's review
   sink-task [<task-id> [--fold <id>]...] print or set the rolling sink task; --fold
@@ -86,8 +88,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now time.Time
 		fs.DurationVar(&o.Slow, "slow", 30*time.Second, "slow-call threshold")
 		fs.BoolVar(&o.JSON, "json", false, "print JSON")
 		fs.BoolVar(&o.Due, "due", false, "exit 10, printing nothing, if this ISO week is marked done")
+		byModel := fs.Bool("by-model", false, "tokens by role, agent type and model instead of the time-sink report")
 		if fs.Parse(args[1:]) != nil || fs.NArg() != 0 || o.Days < 1 {
 			return 2
+		}
+		if *byModel {
+			if err := runByModel(home, o.Days, o.JSON, stdout, now); err != nil {
+				return fail(err)
+			}
+			return 0
 		}
 		code, err := runReport(home, o, stdout, now)
 		if err != nil {

@@ -236,6 +236,7 @@ Notion MCP (zen-flow skill).
 zen-telemetry hook                              # PostToolUse/PostToolUseFailure hook; reads stdin, always exits 0
 zen-telemetry import [--days 31] [--dry-run]    # one-time import from ~/.claude/projects transcripts
 zen-telemetry report [--days 7] [--slow 30s] [--json] [--due]   # --due: exit 10 if this week is done
+zen-telemetry report --by-model [--days 7] [--json]             # tokens by role, agent and model; import fills tool_usage
 zen-telemetry filed <week> <sink-key> <task-id> # chief records a filed task
 zen-telemetry mark-done <week>                  # chief closes the week
 zen-telemetry sink-task [<id> [--fold <id>]...] # print/set the rolling sink task; --fold

@@ -18,6 +18,7 @@ type amSession struct {
 	Name           string `json:"name"`
 	Group          string `json:"group"`
 	Directory      string `json:"directory"`
+	Environment    string `json:"environment"`
 	AgentSessionID string `json:"agent_session_id"`
 }
 
@@ -43,8 +44,10 @@ func amSessions() map[string]amSession {
 	return out
 }
 
-func roleOf(name, dir string) string {
+func roleOf(name, dir, env string) string {
 	switch {
+	case env == "role-explorer":
+		return "explorer"
 	case strings.EqualFold(name, "chief"):
 		return "chief"
 	case strings.EqualFold(name, "orchestrator"):
@@ -158,14 +161,14 @@ func upsertSession(db *sql.DB, m sessionMeta, now time.Time) error {
 // first cwd seen in its calls.
 func metaFor(sessionID, cwd, model string, am map[string]amSession) sessionMeta {
 	m := sessionMeta{SessionID: sessionID, Model: model}
-	dir := cwd
+	dir, env := cwd, ""
 	if s, ok := am[sessionID]; ok {
-		m.AMSession, m.Name, m.Group = s.ID, s.Name, s.Group
+		m.AMSession, m.Name, m.Group, env = s.ID, s.Name, s.Group, s.Environment
 		if s.Directory != "" {
 			dir = s.Directory
 		}
 	}
-	m.Role = roleOf(m.Name, dir)
+	m.Role = roleOf(m.Name, dir, env)
 	m.Repo = repoOf(dir)
 	return m
 }

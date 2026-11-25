@@ -174,3 +174,7 @@ Pages updated: none (rule lives in the zen-flow skill and presets)
 ## [2026-11-24] feature | Delivery log for agent-manager drops (#1007)
 zen-inbox schema v15 adds `delivery_log`: a read-only scan of agent-manager's `state.db` (panel every 60 s, `zen-resume-watch` every 5 min) classifies dropped, held and refused messages, and the recipient's Claude transcript decides lost vs false drop. `zen-inbox delivery scan|list|check|dismiss|resend`; the cockpit gets a Delivery row and screen; chief's status line stops calling a delivered message dropped. Presets: run `delivery check` before resending a dropped message.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-24] feature | Explore and explorer on Haiku, token telemetry (#1009)
+`.claude/agents/Explore.md` shadows the built-in Explore subagent with `model: haiku` and the edit tools denied; a sixth role, `explorer` (`role-explorer`, Haiku, Edit/Write/NotebookEdit denied), takes chief's question-only support and research sessions, and chief's step 12 names it. `zen-telemetry import` fills a new `tool_usage` table (model and tokens per session and subagent) and `report --by-model` compares windows.
+Pages updated: architecture/agent-roles.md, architecture/agent-telemetry.md

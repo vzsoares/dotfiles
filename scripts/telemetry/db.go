@@ -141,7 +141,7 @@ func openDB(path string, busyMS int) (*sql.DB, error) {
 }
 
 func initSchema(db *sql.DB) error {
-	_, err := db.Exec(schema)
+	_, err := db.Exec(schema + usageSchema)
 	return err
 }
 

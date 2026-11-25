@@ -76,6 +76,8 @@ typst/        # long-form writing (books, TCC): tinymist LSP in nvim +
               #   `cp -r typst/template ~/my-book && just` -- see its README
 zsh/          # zsh aliases, plugins, themes
 .claude/      # Claude Code settings & skills
+              #   agents/Explore.md — user-level Explore subagent on Haiku
+              #   (shadows the built-in; read-only)
               #   skills/clawd-status/ — status line sprite plugin (auto-loads
               #   as clawd-status@skills-dir; see its README)
               #   output-styles/adhd.md — commands + why, numbered

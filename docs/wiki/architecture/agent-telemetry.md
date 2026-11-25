@@ -1,7 +1,7 @@
 ---
 title: Agent Tool Telemetry — zen-telemetry
 category: architecture
-updated: 2026-11-18
+updated: 2026-11-24
 related: [decision-inbox, overview]
 ---
 
@@ -29,6 +29,7 @@ and Manjaro). `./link-bin` runs `go build` into `scripts/telemetry/bin/` (gitign
 |---|---|
 | `tool_calls` | One row per call, unique on `(session_id, tool_use_id)` |
 | `tool_sessions` | name, group, role, model, repo per session (import and report fill it) |
+| `tool_usage` | model and summed token usage per `(session, agent, model, UTC day)`; written by import only |
 | `telemetry_filed` | tasks chief filed per `(week, sink_key)` |
 | `telemetry_weeks` | ISO weeks whose review is done |
 | `telemetry_entries` | sinks with an open (or ticked) item on the rolling sink task |
@@ -76,6 +77,22 @@ pairs with its `tool_result`; duration is the result timestamp minus the use tim
 (approximate, includes permission waits). Only `assistant`/`user` entries count:
 `api-request-blob` lines repeat tool blocks. Inserts are `ON CONFLICT DO NOTHING`, so a
 rerun adds 0 rows and a hook row for the same call always wins (the hook upserts).
+
+## Token usage
+
+`import` also sums each assistant message's `usage` (input, output, cache read, cache
+write) per transcript, a session's own and each subagent's, into `tool_usage`. A
+response streamed over several transcript lines repeats its message id, so the last
+line counts once. Rows are replaced on a rerun (a live session's totals grow), so a rerun
+adds 0 new rows. The hook never writes it, and only agent-manager sessions are imported.
+`agent_type` comes from the subagent's `.meta.json`; the main session has an empty
+`agent_id`. A session's role comes from agent-manager's `environment`: `role-explorer`
+gives `explorer`, otherwise the name and worktree rule.
+
+`zen-telemetry report --by-model [--days 7] [--json]` prints tokens and runs by role,
+agent type (`main` for the session itself) and model for the last N UTC days and the N
+before. It is for comparing Explore and explorer tokens on Haiku against the Opus
+baseline (task #1009); it replaces the time-sink report for that call, with no `--due`.
 
 ## Report
 

@@ -45,12 +45,14 @@ type transcript struct {
 	path      string
 	sessionID string
 	agentType string // set for subagent transcripts
+	agentID   string // subagent transcripts only
 }
 
 type parsed struct {
 	calls []call
 	model string
 	cwd   string
+	usage usageTally
 }
 
 var bannerMarkers = [][]byte{[]byte("[agent-manager]"), []byte("agent-manager rename")}
@@ -71,7 +73,8 @@ func listTranscripts(home string, cutoff time.Time) []transcript {
 		subs, _ := filepath.Glob(filepath.Join(filepath.Dir(p), id, "subagents", "*.jsonl"))
 		sort.Strings(subs)
 		for _, s := range subs {
-			out = append(out, transcript{path: s, sessionID: id, agentType: subagentType(s)})
+			out = append(out, transcript{path: s, sessionID: id, agentType: subagentType(s),
+				agentID: strings.TrimPrefix(strings.TrimSuffix(filepath.Base(s), ".jsonl"), "agent-")})
 		}
 	}
 	return out
@@ -148,6 +151,7 @@ func parseTranscript(r io.Reader, t transcript, am string) (parsed, error) {
 }
 
 func (out *parsed) consume(line []byte, t transcript, am string, open map[string]pending, mode, promptID *string) {
+	out.usage.add(line)
 	isUse := bytes.Contains(line, []byte(`"tool_use"`))
 	isResult := bytes.Contains(line, []byte(`"tool_result"`))
 	if !isUse && !isResult {
@@ -264,6 +268,7 @@ type importStats struct {
 	Sessions    int
 	Parsed      int
 	Added       int
+	UsageAdded  int
 }
 
 func runImport(home string, days int, dryRun bool, stdout io.Writer, now time.Time) error {
@@ -323,6 +328,11 @@ func runImport(home string, days int, dryRun bool, stdout io.Writer, now time.Ti
 			return err
 		}
 		stats.Added += added
+		usageAdded, err := insertUsage(db, t, &p.usage)
+		if err != nil {
+			return err
+		}
+		stats.UsageAdded += usageAdded
 	}
 	if !dryRun {
 		for id, info := range infos {
@@ -335,7 +345,7 @@ func runImport(home string, days int, dryRun bool, stdout io.Writer, now time.Ti
 	if dryRun {
 		fmt.Fprintln(stdout, " (dry run, nothing written)")
 	} else {
-		fmt.Fprintf(stdout, ", %d added\n", stats.Added)
+		fmt.Fprintf(stdout, ", %d added, %d usage rows added\n", stats.Added, stats.UsageAdded)
 	}
 	return nil
 }
