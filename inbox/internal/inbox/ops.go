@@ -763,6 +763,75 @@ func (ib *Inbox) Retry(session string) (*Delivery, error) {
 	return ib.deliver(sid, todo)
 }
 
+// ToChiefHeader opens a message that stands in for answers whose asker is gone.
+func ToChiefHeader(name, sid string, prod bool) string {
+	h := fmt.Sprintf("[zen-inbox] These answers were meant for %s (%s), which is gone:", name, sid)
+	if prod {
+		h += " (a prod approval below is a notice only; zen-inbox approval use consumes it)"
+	}
+	return h
+}
+
+// RetryToChief sends a gone asker's failed and waiting answers to the one live
+// session named chief. It refuses, leaving the rows as they are, when the
+// asker is live or has a single live namesake, or chief is not exactly one.
+func (ib *Inbox) RetryToChief(session string) (*Delivery, error) {
+	rows, err := ib.Select("(session_id = ? OR session_name = ?) AND ("+undeliveredSQL+" OR delivery = 'waiting')",
+		session, session, staleCutoff())
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		e := errf(1, "no failed delivery for session %s", session)
+		e.Empty = true
+		return nil, e
+	}
+	sid, name := rows[0].SessionID, rows[0].SessionName
+	var batch []Decision
+	for _, d := range rows {
+		if d.SessionID == sid {
+			batch = append(batch, d)
+		}
+	}
+	sessions := ib.AM.Sessions()
+	if sessions == nil {
+		return nil, errf(1, "agent-manager did not answer; cannot tell that %s is gone", sid)
+	}
+	if am.Live(am.Find(sessions, sid)) {
+		return nil, errf(1, "session %s is live; zen-inbox retry %s sends there", sid, session)
+	}
+	if live := am.LiveNamed(sessions, name); len(live) == 1 {
+		return nil, errf(1, "session %s is gone but %s is live as %s; zen-inbox retry %s sends there", sid, name, live[0], session)
+	}
+	chief := chiefLive(sessions)
+	if len(chief) != 1 {
+		return nil, errf(1, "need exactly one live session named %s, found %d", am.ChiefName, len(chief))
+	}
+	prod := slices.ContainsFunc(batch, func(d Decision) bool { return d.Prod != nil })
+	header := ToChiefHeader(name, sid, prod)
+	res := &Delivery{SessionID: sid, Target: chief[0], IDs: ids(batch), OK: true}
+	for _, g := range packAnswers(batch, SendLimit-len(header)-1) {
+		text := header + "\n" + BuildMessage(g, SendLimit-len(header)-1)
+		ok, mid, errText, _, err := ib.attempt(chief[0], outgoing{am.ChiefName, text}, func() (bool, string, string) {
+			return ib.AM.Send(chief[0], text)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, errf(3, "send to %s failed: %s", am.ChiefName, errText)
+		}
+		if err := ib.settle(g, "sent", mid, ""); err != nil {
+			return nil, err
+		}
+		res.MessageID = mid
+	}
+	if err := ib.closeRefusals("answers:" + sid + ":"); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // FollowupText is what a send's stuck-paste followup adds to its outcome line.
 func FollowupText(f, sid string) string {
 	switch f {

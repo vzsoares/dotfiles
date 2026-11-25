@@ -561,9 +561,9 @@ func (a *App) resolve() *cobra.Command {
 }
 
 func (a *App) retry() *cobra.Command {
-	var waiting bool
+	var waiting, toChief bool
 	cmd := &cobra.Command{
-		Use:   "retry (SESSION | --waiting)",
+		Use:   "retry (SESSION [--to-chief] | --waiting)",
 		Short: "Resend a session's failed or waiting answers as one message, and its note replies; --waiting sends what waits for any session that is back.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -577,6 +577,14 @@ func (a *App) retry() *cobra.Command {
 			defer ib.Close()
 			if waiting {
 				return a.passWaiting(ib)
+			}
+			if toChief {
+				res, err := ib.RetryToChief(args[0])
+				if err != nil {
+					return err
+				}
+				a.out(fmt.Sprintf("sent %s to chief as %s", strings.Join(res.IDs, ", "), res.MessageID))
+				return nil
 			}
 			res, err := ib.Retry(args[0])
 			var ie *inbox.Error
@@ -611,6 +619,7 @@ func (a *App) retry() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&toChief, "to-chief", false, "send the answers of a gone session to the one live chief, with a note that they were meant for it")
 	cmd.Flags().BoolVar(&waiting, "waiting", false, "one delivery pass over everything that waits for a session that was down")
 	return cmd
 }

@@ -7,6 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/vzsoares/dotfiles/inbox/internal/am"
 )
 
 func TestCockpitGoldens(t *testing.T) {
@@ -246,5 +248,51 @@ func TestCockpitNotesExpandKeepsCursorAndFlash(t *testing.T) {
 	}
 	if !strings.Contains(v, "Task 707 merged") || !strings.Contains(v, "Session spec-s2 died") {
 		t.Fatalf("notes not expanded:\n%s", v)
+	}
+}
+
+// failedRow leaves s1's answer failed on a given error, s1 being archived
+// first when gone.
+func (d *drv) failedRow(gone bool) {
+	d.t.Helper()
+	d.ask("7", "s1", "Q?", "a", "b")
+	if gone {
+		d.am.sessions = am.Sessions{{"id": "s1", "name": "spec-s1", "running": true, "archived": true}, sess("c1")}
+		d.am.sessions[1]["name"] = "chief"
+	} else {
+		d.am.fail = "boom"
+	}
+	a := "a"
+	if _, err := d.ib.Answer("7.1", &a, nil, "", nil); err != nil {
+		d.t.Fatal(err)
+	}
+	d.poll()
+}
+
+func TestCockpitOffersSendToChiefOnAGoneRowOnly(t *testing.T) {
+	d := newDrv(t, 92, 29)
+	d.failedRow(true)
+	d.cursorTo("retry spec-s1")
+	if !strings.Contains(d.last(), "enter retry") || !strings.Contains(d.last(), "C send to chief") {
+		t.Fatalf("gone row lacks the key: %q\n%s", d.last(), d.view())
+	}
+	d.keys("C")
+	if len(d.am.sends) != 1 || d.am.sends[0][0] != "c1" || !strings.Contains(d.am.sends[0][1], "meant for spec-s1 (s1), which is gone") {
+		t.Fatalf("%q", d.am.sends)
+	}
+	if strings.Contains(d.view(), "Failed delivery") {
+		t.Fatalf("row still failed:\n%s", d.view())
+	}
+
+	d = newDrv(t, 92, 29)
+	d.failedRow(false)
+	d.cursorTo("retry spec-s1")
+	if !strings.Contains(d.view(), "boom") || strings.Contains(d.last(), "send to chief") {
+		t.Fatalf("other error offers chief: %q", d.last())
+	}
+	sent := len(d.am.sends)
+	d.keys("C")
+	if len(d.am.sends) != sent {
+		t.Fatalf("C sent on a non-gone row: %q", d.am.sends)
 	}
 }
