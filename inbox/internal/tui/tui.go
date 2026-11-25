@@ -1440,7 +1440,7 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// jumpEnds moves to the top (g, gg) or bottom (G) of the cursor lists and
+// jumpEnds moves to the top (g) or bottom (G) of the cursor lists and
 // the body screens; the thread and the text-entry screens handle their own.
 func (m *Model) jumpEnds(k string) bool {
 	if k != "g" && k != "G" {
