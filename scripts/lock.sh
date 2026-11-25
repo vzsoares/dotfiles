@@ -178,7 +178,7 @@ release() {
         fi
     fi
     HELD=
-    [ -z "$TICKET" ] || rm -f "$TICKET"
+    [ -z "$TICKET" ] || rm -f "$TICKET" "${TICKET%/*}/.${TICKET##*/}"
     TICKET=
 }
 
