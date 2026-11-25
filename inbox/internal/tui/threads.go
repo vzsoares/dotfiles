@@ -266,6 +266,9 @@ func (m *Model) listRows() []listRow {
 	var out []listRow
 	if m.loaded {
 		out = append(out, listRow{item{pyfmt.Clip(m.inboxLabel(), room), "i:"}, gInbox, &unreadStyle})
+		if r, ok := m.deliveryRow(room); ok {
+			out = append(out, r)
+		}
 	}
 	for _, b := range m.snap.undelivered {
 		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s) · " +

@@ -780,7 +780,7 @@ func PanelThreadEntry(it inbox.ThreadItem, width int, at time.Time, p Painter) [
 		return out
 	}
 	c := *it.Chat
-	head := "✉ you → chief · " + Age(c.SentAt, at) + " · " + c.Status
+	head := "✉ you → chief · " + Age(c.SentAt, at) + " · " + ChatStatus(c.Status)
 	switch {
 	case c.Status == "waiting":
 		head += " for chief"

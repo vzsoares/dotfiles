@@ -47,12 +47,15 @@ func TestTranscriptIgnoresToolResults(t *testing.T) {
 	path := filepath.Join(projects, "-w", "a1.jsonl")
 	amtest.Transcript(t, projects, "-w", "a1", t0, "unrelated")
 	appendLine(t, path, `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"echoed body"}]}}`)
-	appendLine(t, path, `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"block body"}]}}`)
+	appendLine(t, path, `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[agent-manager] Message from w:\n\nblock body"}]}}`)
 	files := am.Transcripts(projects, am.StateSession{AgentIDs: []string{"a1"}}, t0)
 	if am.InTranscripts(files, "echoed body") {
 		t.Error("a tool result counted as delivery")
 	}
 	if !am.InTranscripts(files, "block body") {
 		t.Error("a text block did not count")
+	}
+	if am.InTranscripts(files, "unrelated") {
+		t.Error("a user turn without the delivery marker counted")
 	}
 }

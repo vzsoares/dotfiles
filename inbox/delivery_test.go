@@ -81,7 +81,7 @@ func TestDeliveryScanListDismissResend(t *testing.T) {
 	if lost.SourceID != "22" || held.SourceID != "23" {
 		t.Fatalf("%+v", es)
 	}
-	if r = f.zen(nil, "delivery", "list"); !strings.Contains(r.stdout, "lost · worker → spec-s1 · 10m · marked dropped") {
+	if r = f.zen(nil, "delivery", "list"); !strings.Contains(r.stdout, "lost · worker → spec-s1 · 10m · dropped; not in its transcripts") {
 		t.Fatalf("%q", r.stdout)
 	}
 	if r = f.zen(nil, "delivery", "list", "--all"); !strings.Contains(r.stdout, "false drop · worker → spec-s1") {

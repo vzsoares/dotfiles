@@ -1,0 +1,29 @@
+cockpit · all clear                                                                quota n/a
+Delivery · 2 open · 1 false drop this week
+› lost · worker → spec-s1 · 20m · dropped; not in its transcripts · “synthetic vanished”
+  held · worker → spec-s2 · 12m · a dialog on screen · “synthetic waits second line”
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter open · R resend · x dismiss · a closed · esc back · ? help

@@ -1,0 +1,29 @@
+cockpit · all clear                                                                quota n/a
+Delivery entry 2
+kind      lost
+state     open
+from      worker
+to        spec-s1 (s1)
+sent      2026-11-10T11:40:00+00:00 (20m ago)
+source    am_inbox 3
+reason    dropped; not in its transcripts
+
+synthetic vanished
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+R resend · x dismiss · esc back · ? help

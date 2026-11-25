@@ -258,6 +258,10 @@ func (m *Model) frame() frame {
 		return m.viewThread()
 	case scRefile:
 		return m.viewRefile()
+	case scDelivery:
+		return m.viewDelivery()
+	case scDeliveryEntry:
+		return m.viewDeliveryEntry()
 	case scReviewNote:
 		return frame{s: scReviewNote, top: []section{{lines: []string{"note for all " + strconv.Itoa(m.p.answers()) + " answers (optional)"}}},
 			body: []section{{lines: strings.Split(m.ti.View(), "\n")}}, cur: -1, help: true}

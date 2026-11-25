@@ -31,7 +31,7 @@ type chiefMsg struct {
 }
 
 func (c chiefMsg) final() bool {
-	return slices.Contains(finalStatuses, c.status) || c.status == statusUnknown
+	return slices.Contains(finalStatuses, c.status) || c.status == statusUnknown || c.status == inbox.StatusLost
 }
 
 // statusUnknown is shown when agent-manager cannot report the message.
@@ -118,9 +118,10 @@ func (m *Model) chiefPoll() tea.Cmd {
 		return nil
 	}
 	m.chief.checking = true
-	client, id := m.am, m.chief.id
+	ib, client, id, chat := m.ib, m.am, m.chief.id, m.chief.chat
 	return func() tea.Msg {
 		status, errText := client.ChiefStatus(id)
+		status, errText = settleStatus(ib, id, chat, status, errText)
 		return chiefStatusMsg{id, status, errText}
 	}
 }
@@ -191,13 +192,13 @@ func (m *Model) viewChief() frame {
 
 // chiefStatusLine is the header's text while a message is tracked.
 func (m *Model) chiefStatusLine() string {
-	return "✉ chief · message " + m.chief.id + " " + m.chief.status
+	return "✉ chief · message " + m.chief.id + " " + view.ChatStatus(m.chief.status)
 }
 
 // chatDone are the statuses a stored chat's message is not polled in: final
 // ones, and those of a chat the delivery pass still has to send.
 func chatDone() []string {
-	return append([]string{"failed", "waiting", "sending", statusUnknown}, finalStatuses...)
+	return append([]string{"failed", "waiting", "sending", statusUnknown, inbox.StatusLost}, finalStatuses...)
 }
 
 // maxChatMisses is how many empty status polls in a row end a chat's tracking.
@@ -259,6 +260,7 @@ func pollChats(ib *inbox.Inbox, client am.Client, skip int64, misses map[int64]i
 			continue
 		}
 		status, errText := client.ChiefStatus(c.MessageID)
+		status, errText = settleStatus(ib, c.MessageID, c.ID, status, errText)
 		if errText != "" || status == "" {
 			if misses[c.ID]++; misses[c.ID] >= maxChatMisses {
 				_ = ib.UpdateChat(c.ID, "", statusUnknown, "")

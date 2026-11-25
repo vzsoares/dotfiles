@@ -125,6 +125,8 @@ type drv struct {
 	other *inbox.Inbox
 	am    *fakeAM
 	quit  bool
+	// state and projects are where the panel's delivery scan reads.
+	state, projects string
 }
 
 func newDrv(t *testing.T, w, h int) *drv { return newDrvWith(t, w, h, nil) }
@@ -143,7 +145,9 @@ func newDrvWith(t *testing.T, w, h int, setup func(*drv)) *drv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ib.Close(); _ = other.Close() })
-	d := &drv{t: t, ib: ib, other: other, am: fake}
+	d := &drv{t: t, ib: ib, other: other, am: fake, state: filepath.Join(t.TempDir(), "state.db"), projects: t.TempDir()}
+	t.Setenv(am.StateEnv, d.state)
+	t.Setenv(am.ProjectsEnv, d.projects)
 	d.m = New(ib, fake)
 	d.m.quotaFile, d.m.loc = filepath.Join(t.TempDir(), "claude-quota.json"), time.UTC
 	d.m.stateFile = filepath.Join(t.TempDir(), "inbox-panel.json")

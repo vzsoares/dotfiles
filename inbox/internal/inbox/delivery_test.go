@@ -81,7 +81,7 @@ func TestScanClassifiesAgentManagerRows(t *testing.T) {
 	all := entries(t, ib, true)
 	want := map[string]struct{ kind, state, reason, body string }{
 		"am_inbox:1":  {KindFalseDrop, "resolved", "marked dropped", ""},
-		"am_inbox:2":  {KindLost, "open", "not in the recipient's transcripts", "synthetic lost"},
+		"am_inbox:2":  {KindLost, "open", "not in its transcripts", "synthetic lost"},
 		"am_inbox:3":  {KindHeld, "open", "a dialog on screen", "synthetic held dialog"},
 		"am_inbox:4":  {KindLost, "open", "recipient is archived", "synthetic to archived"},
 		"am_inbox:5":  {KindHeld, "open", "not running", "synthetic to dead"},

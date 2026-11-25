@@ -94,8 +94,12 @@ func matchKey(body string) string {
 	return string(k)
 }
 
-// InTranscripts reports whether body is in a user turn of one of files; tool
-// results do not count, since a tool can echo a message it never delivered.
+// Marker starts the user turn agent-manager pastes for a delivered message.
+const Marker = "[agent-manager] Message from"
+
+// InTranscripts reports whether body is in a user turn of one of files that
+// carries Marker; tool results do not count, since a tool can echo a message
+// it never delivered, and the marker keeps a short body from matching any turn.
 func InTranscripts(files []string, body string) bool {
 	key := matchKey(body)
 	if key == "" {
@@ -144,7 +148,7 @@ func userText(line []byte, key string) bool {
 	}
 	var text string
 	if json.Unmarshal(t.Message.Content, &text) == nil {
-		return strings.Contains(squash(text), key)
+		return delivered(text, key)
 	}
 	var blocks []struct {
 		Type string `json:"type"`
@@ -159,5 +163,9 @@ func userText(line []byte, key string) bool {
 			parts = append(parts, b.Text)
 		}
 	}
-	return strings.Contains(squash(strings.Join(parts, "\n")), key)
+	return delivered(strings.Join(parts, "\n"), key)
+}
+
+func delivered(text, key string) bool {
+	return strings.Contains(text, Marker) && strings.Contains(squash(text), key)
 }

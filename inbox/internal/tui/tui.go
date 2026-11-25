@@ -59,6 +59,8 @@ const (
 	scChief
 	scThread
 	scRefile
+	scDelivery
+	scDeliveryEntry
 )
 
 // snapshot is one read of everything the panel shows.
@@ -80,6 +82,10 @@ type snapshot struct {
 	titles map[string]string
 	// thread is the open thread's timeline, read only while one is open.
 	thread *inbox.Thread
+	// delivery are the open delivery entries (all of them while the Delivery
+	// screen shows closed ones); falseWeek counts this week's false drops.
+	delivery  []inbox.Entry
+	falseWeek int
 	// lastClosed stamps the latest close or note read, for the empty list.
 	lastClosed string
 	// gen is the panel's draftGen when the read started.
@@ -273,6 +279,13 @@ type Model struct {
 	chiefTask  string
 	refileNote inbox.Note
 	refileFrom screen
+	// dlAll shows closed delivery entries; dlEntry is the one scDeliveryEntry
+	// shows; dlWhy is why the last scan could not read agent-manager's state.db.
+	dlAll      bool
+	dlEntry    int64
+	dlWhy      string
+	dlScanning bool
+	dlScanAt   time.Time
 }
 
 func New(ib *inbox.Inbox, client am.Client) *Model {
@@ -309,6 +322,8 @@ func Watch(client am.Client) func(*inbox.Inbox) error {
 type watch struct {
 	ids  []string
 	task string
+	// deliveryAll reads closed delivery entries too.
+	deliveryAll bool
 }
 
 func load(ib *inbox.Inbox, client am.Client, w watch, sessions am.Sessions, refresh bool) snapshot {
@@ -344,6 +359,12 @@ func load(ib *inbox.Inbox, client am.Client, w watch, sessions am.Sessions, refr
 		return s
 	}
 	if s.titles, s.err = ib.TaskTitles(); s.err != nil {
+		return s
+	}
+	if s.delivery, s.err = ib.Entries(w.deliveryAll); s.err != nil {
+		return s
+	}
+	if s.falseWeek, s.err = ib.FalseDrops(inbox.Now().Add(-7 * 24 * time.Hour)); s.err != nil {
 		return s
 	}
 	if w.task != "" {
@@ -383,7 +404,7 @@ func (m *Model) watchedIDs() []string {
 	return slices.Collect(maps.Keys(set))
 }
 
-func (m *Model) watched() watch { return watch{m.watchedIDs(), m.thread.task} }
+func (m *Model) watched() watch { return watch{m.watchedIDs(), m.thread.task, m.dlAll} }
 
 func (m *Model) loadCmd(refresh bool) tea.Cmd {
 	ib, client, w, sessions, gen, qpath := m.ib, m.am, m.watched(), m.snap.sessions, m.draftGen, m.quotaFile
@@ -457,6 +478,9 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		cmds = append(cmds, c)
 	}
 	if c := m.chiefPassDue(); c != nil {
+		cmds = append(cmds, c)
+	}
+	if c := m.deliveryScanDue(); c != nil {
 		cmds = append(cmds, c)
 	}
 	m.pruneThreadsOpen()
@@ -1318,6 +1342,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.onNoteSent(msg)
 	case refiledMsg:
 		return m, m.onRefiled(msg)
+	case deliveryScanMsg:
+		return m, m.onDeliveryScan(msg)
+	case deliveryActMsg:
+		m.onDeliveryAct(msg)
+		return m, nil
 	case retriedMsg:
 		m.busy, m.snap = "", msg.snap
 		m.toList(msg.flash)
@@ -1347,6 +1376,8 @@ func (m *Model) menuLen() int {
 		return len(m.sessionOpen())
 	case scTalkPick:
 		return len(m.talkOpen)
+	case scDelivery:
+		return len(m.deliveryShown())
 	}
 	return 0
 }
@@ -1436,6 +1467,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyNoteScreen(k)
 	case scThread:
 		return m.keyThread(k)
+	case scDelivery, scDeliveryEntry:
+		return m.keyDelivery(k)
 	}
 	return m, nil
 }
@@ -1447,7 +1480,7 @@ func (m *Model) jumpEnds(k string) bool {
 		return false
 	}
 	switch m.scr {
-	case scFull, scNote, scConfirm:
+	case scFull, scNote, scConfirm, scDeliveryEntry:
 		m.scroll = 0
 		if k == "G" {
 			m.scroll = 1 << 30
@@ -1493,7 +1526,7 @@ func (m *Model) scrollBy(k string) int {
 	case "K":
 		return -3
 	}
-	if m.scr == scFull || m.scr == scNote || m.scr == scThread || m.scr == scConfirm {
+	if m.scr == scFull || m.scr == scNote || m.scr == scThread || m.scr == scConfirm || m.scr == scDeliveryEntry {
 		switch k {
 		case "down", "j":
 			return 1
@@ -1565,7 +1598,7 @@ func (m *Model) listKeys() []ranked {
 		if t.unread() > 0 {
 			keys = append(keys, ranked{key{"m", "read all"}, 3})
 		}
-	case "i":
+	case "i", "dl":
 		keys = append(keys, ranked{key{"enter", "open"}, 0})
 	case "s":
 		keys = append(keys, ranked{key{"enter", "open"}, 0}, ranked{key{"a", "answer"}, 1})
@@ -1691,6 +1724,9 @@ func (m *Model) keyList(k string) (tea.Model, tea.Cmd) {
 		switch kind {
 		case "i":
 			m.inboxOpen, m.cursor = true, 0
+			return m, nil
+		case "dl":
+			m.openDeliveryScreen()
 			return m, nil
 		case "r", "nr", "w", "nw", "cw":
 			return m, m.retryRowCmd(kind, sid)

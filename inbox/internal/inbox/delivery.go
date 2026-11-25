@@ -222,18 +222,18 @@ func classify(r am.InboxRow, sessions map[string]am.StateSession, projects strin
 	case !r.DroppedAt.IsZero():
 		switch {
 		case !known:
-			return verdict{kind: KindUnverified, reason: "marked dropped; recipient session is gone, no transcript to check"}
+			return verdict{kind: KindUnverified, reason: "dropped; recipient session is gone"}
 		case s.Tool != "claude":
-			return verdict{kind: KindUnverified, reason: "marked dropped; recipient runs " + s.Tool}
+			return verdict{kind: KindUnverified, reason: "dropped; recipient runs " + s.Tool}
 		}
 		files := am.Transcripts(projects, s, r.SentAt)
 		switch {
 		case len(files) == 0:
-			return verdict{kind: KindUnverified, reason: "marked dropped; no transcript found"}
+			return verdict{kind: KindUnverified, reason: "dropped; no transcript found"}
 		case am.InTranscripts(files, r.Body):
 			return verdict{kind: KindFalseDrop, reason: "marked dropped"}
 		}
-		return verdict{kind: KindLost, reason: "marked dropped; not in the recipient's transcripts"}
+		return verdict{kind: KindLost, reason: "dropped; not in its transcripts"}
 	case !r.DeliveredAt.IsZero():
 		return verdict{delivered: true}
 	case !known:
