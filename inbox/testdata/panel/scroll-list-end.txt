@@ -27,4 +27,4 @@ cockpit                                                                         
   spec-t47 · #737 · 1 open · 0s · [gone]
   spec-t48 · #738 · 1 open · 0s · [gone]
 › spec-t49 · #739 · 1 open · 0s · [gone]
-↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d J/K scroll
+↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d J/K scroll · g/G top/bottom

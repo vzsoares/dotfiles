@@ -27,4 +27,4 @@ Threads · 40
   spec-t32 · #722 · 1 open · 0s · [gone]
   spec-t33 · #723 · 1 open · 0s · [gone]
 ↓ 16 more
-↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d J/K scroll
+↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d J/K scroll · g/G top/bottom

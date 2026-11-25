@@ -16,5 +16,5 @@ do eiusmod lorem ipsum dolor sit amet con
 
 ## Part 3
 ↓ 106 more
-↑↓ · enter read · back · m mark · f reply · T refile
-y copy · esc back · ? help · ^u/^d J/K scroll
+↑↓ · enter read · back · m mark · f reply · y copy
+esc back · ? help · ^u/^d J/K scroll · g/G top/bottom

@@ -522,7 +522,9 @@ func (m *Model) footer(s screen, scroll bool) []string {
 	}
 	keys := m.listKeys()
 	if scroll {
-		keys = append(keys, ranked{scrollKey(s), 8})
+		for _, k := range scrollKeys(s) {
+			keys = append(keys, ranked{k, 8})
+		}
 	}
 	return []string{paintKeys(fitKeys(keys, m.w))}
 }

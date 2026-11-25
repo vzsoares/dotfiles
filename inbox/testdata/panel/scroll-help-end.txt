@@ -27,4 +27,4 @@ without a task, then held answers, most urgent first. enter opens the row under 
 to a note, m marks a note read or unread (a thread: all its notes read), M marks them all
 read, T moves a note to another task, r retries a failed delivery, c writes to chief (about
 the thread under the cursor).
-↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d J/K scroll
+↑↓ · enter open · a answer · c chief · ? help · q quit · ^u/^d J/K scroll · g/G top/bottom

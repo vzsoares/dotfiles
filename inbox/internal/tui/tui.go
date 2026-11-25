@@ -1372,6 +1372,9 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.keyYank(k) {
 		return m, nil
 	}
+	if m.jumpEnds(k) {
+		return m, nil
+	}
 	if n := m.scrollBy(k); n != 0 {
 		m.scroll = max(m.scroll+n, 0)
 		return m, nil
@@ -1435,6 +1438,34 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyThread(k)
 	}
 	return m, nil
+}
+
+// jumpEnds moves to the top (g, gg) or bottom (G) of the cursor lists and
+// the body screens; the thread and the text-entry screens handle their own.
+func (m *Model) jumpEnds(k string) bool {
+	if k != "g" && k != "G" {
+		return false
+	}
+	switch m.scr {
+	case scFull, scNote, scConfirm:
+		m.scroll = 0
+		if k == "G" {
+			m.scroll = 1 << 30
+		}
+		return true
+	case scThread:
+		return false
+	}
+	n := m.menuLen()
+	if n == 0 {
+		return false
+	}
+	m.cursor = 0
+	if k == "G" {
+		m.cursor = n - 1
+	}
+	m.scroll = 0
+	return true
 }
 
 // scrollBy is how far k scrolls the body, 0 when k does not scroll here.
@@ -1794,6 +1825,9 @@ func (m *Model) keyWalk(k string) (tea.Model, tea.Cmd) {
 func (m *Model) keyConfirm(k string) (tea.Model, tea.Cmd) {
 	d, ok := m.decision(m.p.cur)
 	if ok && d.Kind == inbox.KindManual {
+		if m.jumpEnds(k) {
+			return m, nil
+		}
 		if n := m.scrollBy(k); n != 0 {
 			m.scroll = max(m.scroll+n, 0)
 			return m, nil

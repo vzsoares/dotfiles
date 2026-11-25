@@ -249,17 +249,17 @@ func packKeys(keys []key, width int) [][]key {
 
 // scrollKey is the scroll hint; ctrl+u/d edit text on the input screens,
 // so only pgup/dn scroll there.
-func scrollKey(s screen) key {
+func scrollKeys(s screen) []key {
 	if s == scFree || s == scFreeBlank || s == scTalkNote || s == scReviewNote || s == scReply || s == scChief || s == scRefile {
-		return key{"pgup/dn", "scroll"}
+		return []key{{"pgup/dn", "scroll"}}
 	}
-	return key{"^u/^d J/K", "scroll"}
+	return []key{{"^u/^d J/K", "scroll"}, {"g/G", "top/bottom"}}
 }
 
 func footerLines(s screen, width int, scroll bool) []string {
 	keys := footers[s]
 	if scroll {
-		keys = append(slices.Clone(keys), scrollKey(s))
+		keys = append(slices.Clone(keys), scrollKeys(s)...)
 	}
 	rows := packKeys(keys, width)
 	if len(rows) > 2 {

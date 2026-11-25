@@ -21,4 +21,4 @@ cockpit                            quota n/a
 ↓ 41 more
 ↑↓ · tab next · enter open · f reply
 a answer · m read · esc back · ? help
-^u/^d J/K scroll
+^u/^d J/K scroll · g/G top/bottom
