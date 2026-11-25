@@ -499,7 +499,11 @@ def worktree_database(worktree: str) -> str:
         return ""
     if match is None:
         return ""
-    url = match[1].strip("\"'")
+    value = match[1]
+    if value[:1] in ("'", '"'):
+        url = value[1:].split(value[0], 1)[0]
+    else:
+        url = value.split(" #", 1)[0].strip()
     name = urlparse(url).path.lstrip("/")
     return name if name.startswith(WT_DB_PREFIX) else ""
 
