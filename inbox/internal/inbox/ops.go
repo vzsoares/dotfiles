@@ -554,8 +554,9 @@ func (ib *Inbox) sendGroup(t target, sid string, batch []Decision) (*Delivery, e
 	ok, mid, errText, deferred := false, "", t.reason, false
 	if t.id != "" {
 		var err error
-		ok, mid, errText, deferred, err = ib.attempt(t.id, func() (bool, string, string) {
-			return ib.AM.Send(t.id, BuildMessage(batch, SendLimit))
+		text := BuildMessage(batch, SendLimit)
+		ok, mid, errText, deferred, err = ib.attempt(t.id, outgoing{batch[0].SessionName, text}, func() (bool, string, string) {
+			return ib.AM.Send(t.id, text)
 		})
 		if err != nil {
 			return nil, err
@@ -576,6 +577,20 @@ func (ib *Inbox) sendGroup(t target, sid string, batch []Decision) (*Delivery, e
 	}
 	if err := ib.settle(batch, state, mid, errText); err != nil {
 		return nil, err
+	}
+	answers := "answers:" + sid + ":"
+	switch state {
+	case "sent":
+		if err := ib.closeRefusals(answers); err != nil {
+			return nil, err
+		}
+	case "failed":
+		if strings.HasPrefix(errText, GaveUp) {
+			break
+		}
+		if err := ib.NoteRefusal(answers+batch[0].ID, t.id, batch[0].SessionName, BuildMessage(batch, SendLimit), errText); err != nil {
+			return nil, err
+		}
 	}
 	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: ok, MessageID: mid, Error: errText,
 		Waiting: state == "waiting"}

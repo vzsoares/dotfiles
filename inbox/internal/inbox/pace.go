@@ -38,6 +38,9 @@ const (
 	RetryGiveUp = 30 * time.Minute
 	// Deferred starts the error of a send held back to be retried.
 	Deferred = "retrying"
+	// GaveUp starts the error of a send whose retries ran out; its refusal
+	// entry is the retry chain's.
+	GaveUp = "gave up after"
 	// PaceOffEnv set to "off" skips pacing, for the golden run's frozen clock.
 	PaceOffEnv = "ZEN_INBOX_PACE"
 )
@@ -102,7 +105,9 @@ func (ib *Inbox) sendHold(target string) (string, error) {
 // attempt runs one send to target under pacing and retry. deferred means the
 // send was held or refused as transient and will be retried (errText says
 // why); otherwise ok or a final failure.
-func (ib *Inbox) attempt(target string, send func() (ok bool, mid, errText string)) (ok bool, mid, errText string, deferred bool, err error) {
+// A transient refusal opens a refused delivery entry for the retry chain; the
+// next success to target closes it as retried, and a give-up leaves it open.
+func (ib *Inbox) attempt(target string, msg outgoing, send func() (ok bool, mid, errText string)) (ok bool, mid, errText string, deferred bool, err error) {
 	ib.mu.Lock()
 	var hold string
 	err = ib.immediate(func() error {
@@ -125,6 +130,12 @@ func (ib *Inbox) attempt(target string, send func() (ok bool, mid, errText strin
 	switch {
 	case ok || !am.Transient(errText):
 		return ok, mid, errText, false, ib.immediate(func() error {
+			if ok {
+				prefix := retryKey(target, "")
+				if e := ib.resolve("retried", "source = ? AND substr(source_id, 1, ?) = ?", SourceSend, len(prefix), prefix); e != nil {
+					return e
+				}
+			}
 			return ib.exec("DELETE FROM send_retry WHERE target = ?", target)
 		})
 	}
@@ -145,8 +156,14 @@ func (ib *Inbox) attempt(target string, send func() (ok bool, mid, errText strin
 			return e
 		}
 		if t, ok := ParseStamp(first); ok && now.Sub(t) >= RetryGiveUp {
-			errText = fmt.Sprintf("gave up after %d attempts: %s", attempts, errText)
+			errText = fmt.Sprintf("%s %d attempts: %s", GaveUp, attempts, errText)
+			if e := ib.logRefusal(retryKey(target, first), target, msg, errText); e != nil {
+				return e
+			}
 			return ib.exec("DELETE FROM send_retry WHERE target = ?", target)
+		}
+		if e := ib.logRefusal(retryKey(target, first), target, msg, fmt.Sprintf("attempt %d: %s", attempts, raw)); e != nil {
+			return e
 		}
 		next := now.Add(backoff(attempts))
 		deferred = true

@@ -133,9 +133,10 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 	if live := chiefLive(ib.AM.Sessions()); len(live) > 0 {
 		key = live[0]
 	}
-	_, id, errText, deferred, err := ib.attempt(key, func() (bool, string, string) {
+	text := ChatMessage(c.Task, title, c.Text, c.SentAt, c.Waited)
+	_, id, errText, deferred, err := ib.attempt(key, outgoing{am.ChiefName, text}, func() (bool, string, string) {
 		var mid, e string
-		mid, e, down = ib.AM.Chief(ChatMessage(c.Task, title, c.Text, c.SentAt, c.Waited))
+		mid, e, down = ib.AM.Chief(text)
 		return e == "", mid, e
 	})
 	if err != nil {
@@ -149,6 +150,15 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 		c.Status = "waiting"
 	case errText != "":
 		c.Status = "failed"
+		target := ""
+		if key != am.ChiefName {
+			target = key
+		}
+		if !strings.HasPrefix(errText, GaveUp) {
+			if err := ib.NoteRefusal("chat:"+c.Label(), target, am.ChiefName, text, errText); err != nil {
+				return c, err
+			}
+		}
 	}
 	if err := ib.UpdateChat(c.ID, id, c.Status, errText); err != nil {
 		if errText == "" {

@@ -493,8 +493,9 @@ func (ib *Inbox) sendReplyTo(n Note, t target) (NoteDelivery, error) {
 		n, err := ib.markReply(n, state, "", t.reason)
 		return NoteDelivery{Note: n, Error: t.reason, Waiting: t.down}, err
 	}
-	ok, mid, errText, deferred, err := ib.attempt(t.id, func() (bool, string, string) {
-		return ib.AM.Send(t.id, ReplyMessage(n, n.Reply))
+	reply := ReplyMessage(n, n.Reply)
+	ok, mid, errText, deferred, err := ib.attempt(t.id, outgoing{n.SessionName, reply}, func() (bool, string, string) {
+		return ib.AM.Send(t.id, reply)
 	})
 	if err != nil {
 		return NoteDelivery{}, err
