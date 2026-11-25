@@ -49,7 +49,18 @@ n=$(cat "$STUB_DIR/sleeps" 2>/dev/null || echo 0)
 echo $((n + 1)) >"$STUB_DIR/sleeps"
 [ $((n + 1)) -lt "$STUB_PASSES" ] || kill -TERM "$PPID"
 STUB
-chmod +x "$TMP/bin/agent-manager" "$TMP/bin/claude" "$TMP/bin/zen-rotate" "$TMP/bin/sleep"
+# Records each call; STUB_INBOX_FAIL makes it fail. Never the real zen-inbox,
+# which would scan the live db.
+cat >"$TMP/bin/zen-inbox" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >>"$STUB_DIR/inbox"
+if [ -n "${STUB_INBOX_FAIL:-}" ]; then
+	echo "zen-inbox: db unavailable" >&2
+	exit 4
+fi
+echo "scanned 3 messages · 0 open entries · 0 false drops this week"
+STUB
+chmod +x "$TMP/bin/agent-manager" "$TMP/bin/claude" "$TMP/bin/zen-rotate" "$TMP/bin/sleep" "$TMP/bin/zen-inbox"
 
 export STUB_DIR="$TMP/state"
 export PATH="$TMP/bin:$PATH"
@@ -61,6 +72,7 @@ check() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 reset() { rm -rf "$STUB_DIR"; mkdir -p "$STUB_DIR"; }
 calls() { cat "$STUB_DIR/calls" 2>/dev/null; }
 ticks() { cat "$STUB_DIR/rotate" 2>/dev/null; }
+scans() { grep -c '^delivery scan$' "$STUB_DIR/inbox" 2>/dev/null || echo 0; }
 
 LIMIT_SCREEN="You've hit your usage limit. Your limit will reset at 3pm."
 
@@ -162,6 +174,32 @@ rc=$?
 mv "$TMP/zen-rotate.off" "$TMP/bin/zen-rotate"
 if [ "$rc" = 0 ] && [ "$(grep -c 'zen-rotate tick failed (exit 127)' "$TMP/out")" = 1 ] \
 	&& [ "$(wc -l <"$TMP/out" | tr -d ' ')" = 1 ]; then ok "a missing zen-rotate prints one line"; else bad "a missing zen-rotate prints one line"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+bash "$WATCH" --once >"$TMP/out"
+if [ "$(scans)" = 1 ] && [ ! -s "$TMP/out" ]; then ok "--once runs one quiet delivery scan"; else bad "--once runs one quiet delivery scan"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+STUB_PASSES=11 bash "$WATCH" >/dev/null
+if [ "$(scans)" = 3 ] && [ "$(ticks | wc -l | tr -d ' ')" = 11 ]; then ok "the loop scans deliveries every 5th pass"; else bad "the loop scans deliveries every 5th pass ($(scans) scans)"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+STUB_INBOX_FAIL=1 STUB_PASSES=6 bash "$WATCH" >"$TMP/out"
+rc=$?
+if [ "$rc" = 0 ] && [ "$(grep -c 'zen-inbox delivery scan failed (exit 4): zen-inbox: db unavailable$' "$TMP/out")" = 2 ] \
+	&& [ "$(ticks | wc -l | tr -d ' ')" = 6 ]; then ok "a failing scan prints one line and the loop goes on"; else bad "a failing scan prints one line and the loop goes on"; fi
+
+reset
+echo "$IDLE" >"$STUB_DIR/sessions.json"
+mv "$TMP/bin/zen-inbox" "$TMP/zen-inbox.off"
+PATH="$TMP/bin:/usr/bin:/bin" bash "$WATCH" --once >"$TMP/out"
+rc=$?
+mv "$TMP/zen-inbox.off" "$TMP/bin/zen-inbox"
+if [ "$rc" = 0 ] && [ "$(grep -c 'zen-inbox delivery scan failed (exit 127)' "$TMP/out")" = 1 ] \
+	&& [ "$(wc -l <"$TMP/out" | tr -d ' ')" = 1 ]; then ok "a missing zen-inbox prints one line"; else bad "a missing zen-inbox prints one line"; fi
 
 echo
 if [ "$FAILS" = 0 ]; then

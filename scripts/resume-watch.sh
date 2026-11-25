@@ -3,7 +3,7 @@ set -u
 
 # zen-resume-watch [--once]
 # Revives chief when its process dies, resumes sessions a Claude usage limit
-# stopped, and runs `zen-rotate tick`. A screen match alone resumes nothing: a
+# stopped, runs `zen-rotate tick`, and backs up the cockpit's delivery scan. A screen match alone resumes nothing: a
 # haiku probe must fail first.
 
 usage() {
@@ -17,7 +17,10 @@ usage: zen-resume-watch [--once]
   every 5 min    running claude sessions whose screen tail shows a usage limit
                  are resumed once a `claude -p --model haiku` probe passes
                  (re-probed every 10 min); a failed send is retried at the
-                 next 3 scans without a new probe
+                 next 3 scans without a new probe;
+                 `zen-inbox delivery scan` logs agent-manager's delivery
+                 problems before its rows age out (the cockpit scans every
+                 minute; this covers the cockpit being closed)
 
   --once         one pass of each check, then exit
   -h, --help     show this help
@@ -103,6 +106,16 @@ rotate_tick() {
 	fi
 }
 
+# A failing or missing zen-inbox never stops the watcher.
+delivery_scan() {
+	local out rc
+	out=$(zen-inbox delivery scan 2>&1)
+	rc=$?
+	if [ "$rc" -ne 0 ]; then
+		echo "$(stamp) zen-inbox delivery scan failed (exit $rc): $(printf '%s' "$out" | tail -1)"
+	fi
+}
+
 send_continue() {
 	agent-manager send "$1" "The Claude usage limit has reset. Continue exactly where you left off." </dev/null >/dev/null 2>&1
 }
@@ -165,15 +178,17 @@ if [ "${1:-}" = "--once" ]; then
 	revive_chief
 	scan_limits
 	rotate_tick
+	delivery_scan
 	exit 0
 fi
 
-echo "$(date '+%F %H:%M') resume-watch started: chief revive check every minute, limit scan every 5"
+echo "$(date '+%F %H:%M') resume-watch started: chief revive check every minute, limit scan and delivery scan every 5"
 tick=0
 while true; do
 	revive_chief
 	[ $((tick % 5)) -eq 0 ] && scan_limits
 	rotate_tick
+	[ $((tick % 5)) -eq 0 ] && delivery_scan
 	tick=$((tick + 1))
 	sleep 60
 done
