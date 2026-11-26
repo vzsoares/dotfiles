@@ -27,6 +27,7 @@ type thread struct {
 	notes  []inbox.Note
 	prod   bool
 	manual bool
+	agent  bool
 	open   int
 	held   int
 	newest string
@@ -80,6 +81,7 @@ func (m *Model) threads() []thread {
 			if d.SessionID == r.SessionID && d.Task == r.First {
 				t.open++
 				t.manual = t.manual || d.Kind == inbox.KindManual
+				t.agent = t.agent || d.Kind == inbox.KindAgentRuns
 			}
 		}
 		t.newest = max(t.newest, r.Newest)
@@ -149,16 +151,19 @@ type listRow struct {
 	style *lipgloss.Style
 }
 
-// askLabel is a session's row: PROD, MANUAL, then its RowLabel with drafting
+// askLabel is a session's row: the run tags, then its RowLabel with drafting
 // progress.
 func (m *Model) askLabel(r view.Row, prod bool) string {
 	r.Drafted, _ = m.progress(r.SessionID)
 	label := view.RowLabel(r, m.now())
+	if r.AgentRuns {
+		label = view.TagAgent + " · " + label
+	}
 	if r.Manual {
-		label = "MANUAL · " + label
+		label = view.TagYou + " · " + label
 	}
 	if prod {
-		label = "PROD · " + label
+		label = view.TagProd + " · " + label
 	}
 	return label
 }
@@ -195,7 +200,7 @@ func (m *Model) threadRows(room int) []listRow {
 			continue
 		}
 		open := m.threadsOpen[t.task]
-		head := view.ThreadHead{Task: t.task, Title: t.title, Expanded: open, Prod: t.prod, Manual: t.manual, Open: t.open, Held: t.held,
+		head := view.ThreadHead{Task: t.task, Title: t.title, Expanded: open, Prod: t.prod, Manual: t.manual, AgentRuns: t.agent, Open: t.open, Held: t.held,
 			Unread: t.unread(), Items: t.open + len(t.notes), Newest: t.newest}
 		var st *lipgloss.Style
 		switch {
@@ -321,8 +326,8 @@ func (m *Model) inboxRows(room int) []listRow {
 	var out []listRow
 	for _, d := range m.snap.open {
 		label := d.SessionName + " · #" + d.Task + " · " + md.Plain(strings.Join(strings.Fields(d.Question), " "))
-		if d.Kind == inbox.KindManual {
-			label = "MANUAL · " + label
+		if tag, _ := tagOf(d); tag != "" {
+			label = tag + " · " + label
 		}
 		var st *lipgloss.Style
 		if d.Prod != nil {

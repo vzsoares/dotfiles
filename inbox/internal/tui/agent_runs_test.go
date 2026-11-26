@@ -9,7 +9,7 @@ func TestAgentRunsAskShowsBanner(t *testing.T) {
 	d := newDrvWith(t, 92, 29, userPanel)
 	d.askBody()
 	d.openWalk()
-	if v := d.view(); !strings.Contains(v, "The agent runs this after you answer; don't run it yourself.") {
+	if v := d.view(); !strings.Contains(v, "The agent runs this after you answer. Don't run it yourself.") {
 		t.Fatalf("banner missing:\n%s", v)
 	}
 }

@@ -1,5 +1,5 @@
 cockpit                                                                            quota n/a
-929.1  manual step
+ YOU RUN THIS  929.1
 929.1 manual  Rotate the signing key?
   Run on the build machine:
 

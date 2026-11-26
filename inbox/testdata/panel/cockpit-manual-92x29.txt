@@ -3,7 +3,7 @@ cockpit                                                                         
 
 Threads · 2
 › spec-s2 · #7 · 1 open · 0s · [idle]
-  MANUAL · spec-s1 · #929 Key rotation · 1 open · 0s · [idle]
+  YOU RUN THIS · spec-s1 · #929 Key rotation · 1 open · 0s · [idle]
 
 
 

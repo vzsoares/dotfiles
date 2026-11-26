@@ -1164,8 +1164,6 @@ func (m *Model) onTalk(msg talkMsg) tea.Cmd {
 // locked is a prod-action ask this panel may not answer.
 func (m *Model) locked(d inbox.Decision) bool { return d.Prod != nil && !m.ib.User }
 
-const agentRunsBanner = "The agent runs this after you answer; don't run it yourself."
-
 // notice is the line under the question: why a prod ask is locked, else
 // its draft and why a manual ask's Done is refused here.
 func (m *Model) notice(d inbox.Decision) string {
@@ -1175,12 +1173,6 @@ func (m *Model) notice(d inbox.Decision) string {
 	var parts []string
 	if _, text := m.draftText(d); text != "" {
 		parts = append(parts, "draft: "+text)
-	}
-	if d.Kind == inbox.KindAgentRuns && d.ConfirmedAt == "" {
-		parts = append(parts, agentRunsBanner)
-	}
-	if d.UserRan() {
-		parts = append(parts, "you ran it: the agent skips its run")
 	}
 	if d.Kind == inbox.KindManual && !m.ib.User {
 		parts = append(parts, "Done only from the cockpit terminal ("+m.prodBlock+")")

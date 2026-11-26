@@ -1,4 +1,5 @@
 cockpit                                                                            quota n/a
+ AGENT RUNS THIS  The agent runs this after you answer. Don't run it yourself.
 #926 Deploy steps
 926.1  Run the deploy steps now?
   Three commands, run in this order:
@@ -17,7 +18,6 @@ cockpit                                                                         
      -w "%{http_code}\n" https://example.com/health 
 
   • Rollback is just rollback.
-The agent runs this after you answer; don't run it yourself.
 │ The bucket is the staging one.
 a) Run: an agent runs all three
 b) Hold: nothing runs  ← rec

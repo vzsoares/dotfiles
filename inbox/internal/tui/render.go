@@ -69,6 +69,11 @@ func (m *Model) banner() []string {
 	return []string{pyfmt.Clip("» "+m.p.notes[len(m.p.notes)-1], max(m.w, view.MinWidth))}
 }
 
+// walkBanner is the pinned tag over the question, then the banner.
+func (m *Model) walkBanner(d inbox.Decision) []string {
+	return append(tagLines(d, m.w), m.banner()...)
+}
+
 func menuSection(items []item, cursor, n, width int) []section {
 	rows := menuWindow(items, cursor, n, width)
 	out := make([]section, len(rows))
@@ -465,7 +470,11 @@ func (m *Model) viewList() frame {
 			if r.group != last && r.group != gInbox {
 				body = group(body, heads[r.group], headStyle[r.group])
 			}
-			body = append(body, section{lines: []string{prefix + r.label}, style: st})
+			if tagWord.MatchString(r.label) {
+				body = append(body, section{lines: []string{paintTags(prefix+r.label, st)}})
+			} else {
+				body = append(body, section{lines: []string{prefix + r.label}, style: st})
+			}
 		}
 		last = r.group
 		if i == m.cursor {
@@ -562,7 +571,7 @@ func (m *Model) walkFit() (walkFit, inbox.Decision) {
 	if m.showHelp {
 		help = len(helpLines(s, m.w))
 	}
-	f := fitWalk(d, m.brief(d), m.banner(), m.notice(d), m.w, m.rows(), len(questionMenu(d, m.locked(d))), m.footRows(s),
+	f := fitWalk(d, m.brief(d), m.walkBanner(d), m.notice(d), m.w, m.rows(), len(questionMenu(d, m.locked(d))), m.footRows(s),
 		help, m.paint)
 	return f, d
 }
@@ -570,8 +579,9 @@ func (m *Model) walkFit() (walkFit, inbox.Decision) {
 func (m *Model) viewWalk() frame {
 	f, d := m.walkFit()
 	top := f.top
-	nb := min(len(m.banner()), len(top))
-	return frame{s: m.walkKeys(d), top: []section{{lines: top[:nb], style: &bannerStyle}, {lines: top[nb:]}},
+	nt := min(len(tagLines(d, m.w)), len(top))
+	nb := min(len(m.banner()), len(top)-nt)
+	return frame{s: m.walkKeys(d), top: []section{{lines: top[:nt]}, {lines: top[nt : nt+nb], style: &bannerStyle}, {lines: top[nt+nb:]}},
 		body: []section{{lines: f.body}}, menu: menuSection(questionMenu(d, m.locked(d)), m.cursor, f.menuH, m.w),
 		cur: -1, help: f.help}
 }
@@ -612,7 +622,7 @@ func (m *Model) viewReview() frame {
 func (m *Model) viewConfirm() frame {
 	d, _ := m.decision(m.p.cur)
 	if d.Kind == inbox.KindManual {
-		return frame{s: scConfirmManual, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  manual step", m.w)}, style: &bannerStyle}},
+		return frame{s: scConfirmManual, top: []section{{lines: []string{tagHead(d, d.ID, m.w)}}},
 			body: []section{{lines: view.PanelAskLines(d, m.w, m.paint)}},
 			menu: []section{{lines: []string{"", "Did you run it? type y"}, style: &bannerStyle}}, cur: -1, help: true}
 	}
@@ -621,7 +631,7 @@ func (m *Model) viewConfirm() frame {
 		p = *d.Prod
 	}
 	body := append(prodLines(p, m.w, true), "", "Approve? y/N")
-	return frame{s: scConfirm, top: []section{{lines: []string{pyfmt.Clip(d.ID+"  prod approval", m.w)}, style: &bannerStyle}},
+	return frame{s: scConfirm, top: []section{{lines: []string{tagHead(d, d.ID+"  prod approval", m.w)}}},
 		body: []section{{lines: body}}, cur: -1, help: true}
 }
 

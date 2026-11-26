@@ -396,7 +396,7 @@ step again and takes a typed `y`, and the answer arrives as `a: Done (confirmed)
 `zen-inbox answer <id> a` is refused on it. A fenced code block in `--body` needs
 `--manual` (the user runs it) or `--agent-runs` (you run it after the answer), else
 `ask` exits 2 (`--prod` asks are exempt). An `--agent-runs` ask shows the user "The
-agent runs this after you answer; don't run it yourself."; if they ran it anyway the
+agent runs this after you answer. Don't run it yourself."; if they ran it anyway the
 answer line ends `(user ran it; skip your run)` (`show <id> --json`: `confirmed_at`
 set), and you skip your run. A
 terminal named `cockpit` in group `chief` runs `zen-inbox watch`: one row per asking

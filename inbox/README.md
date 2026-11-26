@@ -39,10 +39,15 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
   with `--body has a code block: add --manual (the user runs it) or
   --agent-runs (you run it after the answer)` (`--prod` asks are exempt).
   `--agent-runs` is for the asker: the panel shows "The agent runs this after you
-  answer; don't run it yourself." If the user copies a block anyway (`y`, a number)
+  answer. Don't run it yourself." If the user copies a block anyway (`y`, a number)
   the panel asks "Did you run it? type y"; on `y` the answer reads `... (user ran
   it; skip your run)` and `show <id> --json` has a non-empty `confirmed_at` with
   `"kind": "agent-runs"`, so the asker skips its run.
+- Every ask that runs a command wears a filled tag at the top of its view and on
+  its list row: `YOU RUN THIS` (black on yellow, a `--manual` ask), `AGENT RUNS
+  THIS` (black on cyan, an `--agent-runs` ask) and `PROD` (white on red). ANSI
+  colours 3, 6 and 1, so they follow the terminal theme; the text stays black or
+  white on the fill, which reads on light and dark themes.
 - `y` then a block's number copies its source exactly; a `--prod run` ask shows
   its `--cmd` as such a block. A code line wider than the pane wraps at the pane
   edge on screen only.

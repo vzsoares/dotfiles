@@ -1,5 +1,5 @@
 cockpit · 1 prod                                                                   quota n/a
-736.1  prod approval
+ PROD  736.1  prod approval
 action run
 repo   core
 command
