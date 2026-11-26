@@ -79,3 +79,30 @@ func TestAnswerRefusesDoneOnManualAsk(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestAskWithCommandBodyNeedsWhoRuns(t *testing.T) {
+	f := newFake(t)
+	env := []string{"AGENT_MANAGER_SESSION_ID=s1"}
+	body := "```sh\njust rotate\n```\n"
+	ask := func(extra ...string) result {
+		c := f.cmd(env, append([]string{zenBin, "ask", "929", "-q", "Run it?"}, append(extra, "--body", "-")...)...)
+		c.Stdin = strings.NewReader(body)
+		return run(c)
+	}
+	r := ask("-o", "Run", "-o", "Hold")
+	if r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "add --manual (the user runs it) or --agent-runs (you run it after the answer)") {
+		t.Fatalf("%+v", r)
+	}
+	if r := ask("--agent-runs"); r.code != 0 || r.stdout != "929.1\n" {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(nil, "show", "929.1", "--json"); !strings.Contains(r.stdout, `"kind": "agent-runs"`) {
+		t.Fatalf("%+v", r)
+	}
+	if r := ask("--agent-runs", "--manual"); r.code != 2 {
+		t.Fatalf("%+v", r)
+	}
+	if r := f.zen(env, "ask", "929", "-q", "No code?", "--body", "plain text"); r.code != 0 {
+		t.Fatalf("%+v", r)
+	}
+}

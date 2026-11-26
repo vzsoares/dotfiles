@@ -49,6 +49,20 @@ func checkBody(body string) error {
 	return nil
 }
 
+// HasFence is whether body holds a fenced code block.
+func HasFence(body string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		t := strings.TrimLeft(line, " ")
+		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			return true
+		}
+	}
+	return false
+}
+
+// NeedsRunner is the refusal for a body with a command and no word on who runs it.
+const NeedsRunner = "--body has a code block: add --manual (the user runs it) or --agent-runs (you run it after the answer)"
+
 func (ib *Inbox) insertOptions(id string, options []string) error {
 	for i, o := range options {
 		if err := ib.exec("INSERT INTO decision_options (decision_id, letter, text) VALUES (?, ?, ?)",
@@ -73,6 +87,8 @@ type AskInput struct {
 	Prod *ProdAction
 	// Manual makes it a manual-step ask: Options must be empty.
 	Manual bool
+	// AgentRuns marks that the asker runs the body's command after the answer.
+	AgentRuns bool
 }
 
 func (ib *Inbox) Ask(in AskInput) (Decision, error) {
@@ -80,6 +96,12 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 		return Decision{}, err
 	}
 	kind := ""
+	if in.Manual && in.AgentRuns {
+		return Decision{}, errf(2, "--manual and --agent-runs conflict: say who runs the command")
+	}
+	if in.AgentRuns {
+		kind = KindAgentRuns
+	}
 	if in.Manual {
 		if len(in.Options) > 0 || in.Gate || in.Prod != nil {
 			return Decision{}, errf(2, "--manual writes its own options (Done, Later); drop -o, --gate and --prod")
@@ -100,6 +122,9 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 	}
 	if pyfmt.Blank(in.Body) {
 		in.Body = ""
+	}
+	if kind == "" && in.Prod == nil && HasFence(in.Body) {
+		return Decision{}, errf(2, "%s", NeedsRunner)
 	}
 	now := stamp()
 	gate := 0
@@ -344,6 +369,9 @@ func (ib *Inbox) closeOne(id string, a closeArgs) (Decision, error) {
 			return errf(2, "%s has no option %s", id, pyfmt.Repr(a.option))
 		}
 		confirmed := ""
+		if d.Kind == KindAgentRuns {
+			confirmed = d.ConfirmedAt
+		}
 		if a.status == "answered" && a.kind == "pick" && d.ManualDone(a.option) {
 			if !ib.User {
 				return errf(1, "%s is a manual-step ask; confirm Done in the decisions panel", id)
@@ -891,10 +919,8 @@ func answerLine(d Decision, width int) string {
 	answer := "free text: " + d.AnswerText
 	if d.AnswerKind == "pick" {
 		answer = d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
-		if d.ConfirmedAt != "" {
-			answer += " (confirmed)"
-		}
 	}
+	answer += ConfirmNote(d)
 	question := d.Question
 	if width >= 0 {
 		question = pyfmt.Clip(question, width)
@@ -984,4 +1010,36 @@ func BuildMessage(answers []Decision, limit int) string {
 	}
 	tail := "\n… truncated; see zen-inbox show <id>"
 	return strings.ToValidUTF8(msg[:budget-len(tail)], "") + tail
+}
+
+// MarkRan records that the user ran an --agent-runs ask's command themselves.
+// Only the panel may: the asker reads it in the answer and skips its run.
+func (ib *Inbox) MarkRan(id string) error {
+	if !ib.User {
+		return errf(1, "only the decisions panel records that you ran it")
+	}
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	return ib.immediate(func() error {
+		d, err := ib.openOwned(id, "", true)
+		if err != nil {
+			return err
+		}
+		if d.Kind != KindAgentRuns {
+			return errf(2, "%s is not an --agent-runs ask", id)
+		}
+		now := stamp()
+		return ib.exec("UPDATE decisions SET confirmed_at = ?, updated_at = ? WHERE id = ? AND status = 'open'", now, now, id)
+	})
+}
+
+// ConfirmNote is the suffix an answer carries when the panel confirmed it.
+func ConfirmNote(d Decision) string {
+	switch {
+	case d.UserRan():
+		return " (" + RanItNote + ")"
+	case d.ConfirmedAt != "":
+		return " (confirmed)"
+	}
+	return ""
 }

@@ -732,11 +732,9 @@ func DecisionState(d inbox.Decision) string {
 		state = "talk"
 	case d.AnswerKind == "pick":
 		state = "→ " + d.AnswerOption + ": " + d.OptionText(d.AnswerOption)
-		if d.ConfirmedAt != "" {
-			state += " (confirmed)"
-		}
+		state += inbox.ConfirmNote(d)
 	default:
-		state = "free text: " + d.AnswerText
+		state = "free text: " + d.AnswerText + inbox.ConfirmNote(d)
 	}
 	if d.Delivery == "held" {
 		state = "held · " + state

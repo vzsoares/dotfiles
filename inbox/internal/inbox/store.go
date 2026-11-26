@@ -106,6 +106,13 @@ ALTER TABLE decisions ADD COLUMN confirmed_at TEXT NOT NULL DEFAULT '';
 // ManualOptions, and only the panel's confirm may pick Done.
 const KindManual = "manual"
 
+// KindAgentRuns is an ask whose body command the asker runs after the answer;
+// ConfirmedAt then records that the user ran it first.
+const KindAgentRuns = "agent-runs"
+
+// RanItNote is what the asker reads when the user ran an --agent-runs command.
+const RanItNote = "user ran it; skip your run"
+
 var ManualOptions = []string{"Done", "Later"}
 
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
@@ -212,6 +219,9 @@ type Decision struct {
 	// ConfirmedAt is when the panel's confirm recorded a manual ask's Done.
 	ConfirmedAt string
 }
+
+// UserRan is whether the user ran an --agent-runs ask's command themselves.
+func (d Decision) UserRan() bool { return d.Kind == KindAgentRuns && d.ConfirmedAt != "" }
 
 // ManualDone is whether letter is a manual ask's Done.
 func (d Decision) ManualDone(letter string) bool {

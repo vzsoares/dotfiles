@@ -164,7 +164,7 @@ func (a *App) ask() *cobra.Command {
 	var session string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S | --prod run --repo R --cmd C | --manual -q QUESTION) [--body TEXT | --body -]",
+		Use:   "ask TASK (-q QUESTION [-o OPTION]... | --prod ACTION --repo R --branch B --sha S | --prod run --repo R --cmd C | --manual -q QUESTION) [--agent-runs] [--body TEXT | --body -]",
 		Short: "Record a decision; print its ID.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -217,6 +217,7 @@ func (a *App) ask() *cobra.Command {
 	f.StringVar(&session, "session", "", "asking session id")
 	f.BoolVar(&asJSON, "json", false, "print the decision as JSON")
 	f.BoolVar(&in.Manual, "manual", false, "a step the user runs by hand: options Done/Later, Done needs a typed y in the panel")
+	f.BoolVar(&in.AgentRuns, "agent-runs", false, "with a command in --body: you run it after the answer; the panel tells the user not to")
 	f.StringVar(&prod.Action, "prod", "", "prod-action ask for ACTION (e.g. release)")
 	f.StringVar(&prod.Repo, "repo", "", "with --prod: repo name")
 	f.StringVar(&prod.Branch, "branch", "", "with --prod: target branch")

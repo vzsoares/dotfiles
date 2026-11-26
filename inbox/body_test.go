@@ -9,12 +9,12 @@ func TestAskBodyFromStdinShowsEverywhere(t *testing.T) {
 	f := newFake(t)
 	env := []string{"AGENT_MANAGER_SESSION_ID=s1"}
 	body := "Steps:\n\n```sh\nmake deploy\n```\n"
-	c := f.cmd(env, zenBin, "ask", "7", "-q", "Deploy now?", "-o", "yes", "-o", "no", "--body", "-")
+	c := f.cmd(env, zenBin, "ask", "7", "-q", "Deploy now?", "-o", "yes", "-o", "no", "--agent-runs", "--body", "-")
 	c.Stdin = strings.NewReader(body)
 	if r := run(c); r.code != 0 || r.stdout != "7.1\n" {
 		t.Fatalf("%+v", r)
 	}
-	if r := f.zen(nil, "show", "7.1", "--json"); !strings.Contains(r.stdout, `"body": "Steps:\n\n`+"```sh"+`\nmake deploy\n`+"```"+`\n"}`) {
+	if r := f.zen(nil, "show", "7.1", "--json"); !strings.Contains(r.stdout, `"body": "Steps:\n\n`+"```sh"+`\nmake deploy\n`+"```"+`\n", "kind": "agent-runs"`) {
 		t.Fatalf("%+v", r)
 	}
 	if r := f.zen(nil, "show", "7.1"); !strings.Contains(r.stdout, "Deploy now?\n"+body) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
 
@@ -32,6 +33,18 @@ func (m *Model) copiedLines() []string {
 // keyYank handles y and the block number after it; it reports whether it
 // consumed k. Any other key after y cancels the copy and acts as usual.
 func (m *Model) keyYank(k string) bool {
+	if id := m.ranAsk; id != "" {
+		m.ranAsk, m.copied = "", ""
+		if k != "y" {
+			return false
+		}
+		if err := m.ib.MarkRan(id); err != nil {
+			m.copied = err.Error()
+		} else {
+			m.copied = "recorded: you ran it; the agent skips its run"
+		}
+		return true
+	}
 	pending := m.yank
 	m.yank = false
 	if !m.copyScreen() {
@@ -57,6 +70,9 @@ func (m *Model) keyYank(k string) bool {
 	if n >= 1 && n <= len(m.blocks) {
 		m.clip(m.blocks[n-1])
 		m.copied = "copied " + k
+		if d, ok := m.walkDecision(); ok && d.Kind == inbox.KindAgentRuns && d.ConfirmedAt == "" {
+			m.ranAsk, m.copied = d.ID, "copied "+k+" · Did you run it? type y"
+		}
 	}
 	return true
 }
@@ -70,4 +86,12 @@ func copyText(s string) {
 		c.Stdin = strings.NewReader(s)
 		_ = c.Run()
 	}
+}
+
+// walkDecision is the question on screen while walking.
+func (m *Model) walkDecision() (inbox.Decision, bool) {
+	if m.scr != scWalk || m.p == nil {
+		return inbox.Decision{}, false
+	}
+	return m.decision(m.p.cur)
 }

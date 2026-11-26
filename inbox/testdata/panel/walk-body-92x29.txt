@@ -17,6 +17,7 @@ cockpit                                                                         
      -w "%{http_code}\n" https://example.com/health 
 
   • Rollback is just rollback.
+The agent runs this after you answer; don't run it yourself.
 │ The bucket is the staging one.
 a) Run: an agent runs all three
 b) Hold: nothing runs  ← rec
@@ -24,6 +25,5 @@ b) Hold: nothing runs  ← rec
   b  ← rec
   Free text
   Skip
-  Talk
 ↑↓ · enter · a-d pick · f free · s skip · t talk · v full · y copy · ←→ move · esc list
 ? help

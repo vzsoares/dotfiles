@@ -25,7 +25,7 @@ func (d *drv) askBody() inbox.Decision {
 	d.t.Helper()
 	dec, err := d.other.Ask(inbox.AskInput{Task: "926", Question: "Run the deploy steps now?", Body: askBody,
 		Context: "The bucket is the staging one.", Options: []string{"Run: an agent runs all three", "Hold: nothing runs"},
-		Rec: "b", SessionID: "s1", Name: "spec-s1", Title: "Deploy steps"})
+		Rec: "b", SessionID: "s1", Name: "spec-s1", Title: "Deploy steps", AgentRuns: true})
 	if err != nil {
 		d.t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestAskBodyCopiesBlocksRaw(t *testing.T) {
 	d.askBody()
 	got := d.copies()
 	d.openWalk()
-	d.keys("y", "1")
+	d.keys("y", "1", "n")
 	d.keys("y", "2")
 	if want := []string{longCmd, checkBlock}; strings.Join(*got, "|") != strings.Join(want, "|") {
 		t.Fatalf("copied %q", *got)

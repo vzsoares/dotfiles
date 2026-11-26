@@ -84,7 +84,7 @@ func TestV10DBMigratesToCurrentKeepingRows(t *testing.T) {
 	if d := get(t, ib, "7.3"); d.Body != "" || d.Question != "From v10?" {
 		t.Fatalf("%+v", d)
 	}
-	d, err := ib.Ask(AskInput{Task: "7", Question: "New?", Body: "- one\n- two", Options: []string{"a", "b"},
+	d, err := ib.Ask(AskInput{Task: "7", Question: "New?", Body: "- one\n- two", Options: []string{"a", "b"}, AgentRuns: true,
 		SessionID: "s1", Name: "spec-s1"})
 	if err != nil || d.ID != "7.4" || d.Body != "- one\n- two" {
 		t.Fatalf("%+v %v", d, err)
@@ -105,12 +105,12 @@ func TestAskBodyStoredAndInJSONOnlyWhenSet(t *testing.T) {
 	if strings.Contains(jsonKeys(plain.JSON()), "body") {
 		t.Fatalf("body key on an ask without one: %s", jsonKeys(plain.JSON()))
 	}
-	d, err := ib.Ask(AskInput{Task: "7", Question: "Run?", Body: "```sh\nmake x\n```", Options: []string{"a", "b"},
+	d, err := ib.Ask(AskInput{Task: "7", Question: "Run?", Body: "```sh\nmake x\n```", Options: []string{"a", "b"}, AgentRuns: true,
 		SessionID: "s1", Name: "spec-s1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := get(t, ib, d.ID); got.Body != "```sh\nmake x\n```" || !strings.HasSuffix(jsonKeys(got.JSON()), ",brief,body") {
+	if got := get(t, ib, d.ID); got.Body != "```sh\nmake x\n```" || !strings.HasSuffix(jsonKeys(got.JSON()), ",brief,body,kind,confirmed_at") {
 		t.Fatalf("%+v %s", got, jsonKeys(got.JSON()))
 	}
 	var ie *Error
