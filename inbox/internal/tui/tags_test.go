@@ -2,14 +2,10 @@ package tui
 
 import (
 	"bytes"
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
@@ -93,71 +89,5 @@ func TestWalkPinsTheTagOverEachCase(t *testing.T) {
 		if !strings.Contains(v, c.want) {
 			t.Fatalf("%s: %q missing:\n%s", c.name, c.want, v)
 		}
-	}
-}
-
-// TestWriteProof dumps each case when ZEN_PROOF_DIR is set: .txt as the pane
-// reads, .ansi with the tag colours (cat it in a terminal).
-func TestWriteProof(t *testing.T) {
-	dir := os.Getenv("ZEN_PROOF_DIR")
-	if dir == "" {
-		t.Skip("set ZEN_PROOF_DIR to write the proof dumps")
-	}
-	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	lipgloss.DefaultRenderer().SetColorProfile(termenv.ANSI)
-	t.Cleanup(func() { lipgloss.DefaultRenderer().SetColorProfile(termenv.Ascii) })
-	dump := func(name string, d *drv) {
-		v := d.view()
-		plain := ansi.Strip(v)
-		for ext, body := range map[string]string{".txt": plain, ".ansi": v} {
-			if err := os.WriteFile(filepath.Join(dir, name+ext), []byte(body+"\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	for _, sz := range [][2]int{{92, 29}, {44, 24}} {
-		suffix := fmt.Sprintf("-%dx%d", sz[0], sz[1])
-		d := newDrvWith(t, sz[0], sz[1], userPanel)
-		d.askManual(manualBody)
-		d.openWalk()
-		dump("manual-walk"+suffix, d)
-		d.keys("a")
-		dump("manual-confirm"+suffix, d)
-
-		d = newDrvWith(t, sz[0], sz[1], userPanel)
-		d.askBody()
-		d.copies()
-		d.openWalk()
-		dump("agent-runs-walk"+suffix, d)
-		d.keys("y", "1")
-		dump("agent-runs-copied"+suffix, d)
-		d.keys("y")
-		d.poll()
-		dump("agent-runs-ran-it"+suffix, d)
-
-		d = newDrvWith(t, sz[0], sz[1], userPanel)
-		d.askProd("s1")
-		d.openWalk()
-		dump("prod-walk"+suffix, d)
-		d.keys("a")
-		dump("prod-confirm"+suffix, d)
-
-		d = newDrvWith(t, sz[0], sz[1], userPanel)
-		d.ask("7", "s2", "Which way?", "left", "right")
-		d.openWalk()
-		dump("plain-walk"+suffix, d)
-
-		d = newDrvWith(t, sz[0], sz[1], userPanel)
-		d.askManual(manualBody)
-		d.askBody()
-		d.askProd("s3")
-		d.ask("7", "s2", "Which way?", "left", "right")
-		d.poll()
-		dump("list"+suffix, d)
-		d.keys("enter")
-		dump("list-expanded"+suffix, d)
 	}
 }
