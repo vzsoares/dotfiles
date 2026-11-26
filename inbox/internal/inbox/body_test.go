@@ -164,3 +164,26 @@ func TestBodyStaysOutOfTheDeliveredMessage(t *testing.T) {
 		t.Fatalf("%q", fake.sends)
 	}
 }
+
+func TestAmendKeepsRunnerRule(t *testing.T) {
+	ib, _, _ := open(t)
+	plain := ask(t, ib, "7", "s1", false, "Plain?")
+	fenced := "```sh\nmake x\n```"
+	if _, err := ib.Amend(plain, "s1", false, AmendInput{Body: &fenced}); err == nil {
+		t.Fatal("a plain ask gained a fenced body")
+	}
+	d, err := ib.Ask(AskInput{Task: "7", Question: "Run?", Body: fenced, Options: []string{"a", "b"}, AgentRuns: true,
+		SessionID: "s1", Name: "spec-s1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ib.User = true
+	if err := ib.MarkRan(d.ID); err != nil {
+		t.Fatal(err)
+	}
+	other := "```sh\nmake y\n```"
+	got, err := ib.Amend(d.ID, "s1", false, AmendInput{Body: &other})
+	if err != nil || got.UserRan() {
+		t.Fatalf("%v %+v", err, got)
+	}
+}

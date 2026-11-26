@@ -52,7 +52,7 @@ func checkBody(body string) error {
 // HasFence is whether body holds a fenced code block.
 func HasFence(body string) bool {
 	for _, line := range strings.Split(body, "\n") {
-		t := strings.TrimLeft(line, " ")
+		t := strings.TrimLeft(line, " \t")
 		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
 			return true
 		}
@@ -98,6 +98,9 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 	kind := ""
 	if in.Manual && in.AgentRuns {
 		return Decision{}, errf(2, "--manual and --agent-runs conflict: say who runs the command")
+	}
+	if in.AgentRuns && in.Prod != nil {
+		return Decision{}, errf(2, "--agent-runs does not apply to a --prod ask")
 	}
 	if in.AgentRuns {
 		kind = KindAgentRuns
@@ -316,9 +319,16 @@ func (ib *Inbox) Amend(id, caller string, force bool, in AmendInput) (Decision, 
 		if in.Context != nil {
 			context = *in.Context
 		}
+		confirmed := d.ConfirmedAt
+		if d.Kind == KindAgentRuns && body != d.Body {
+			confirmed = ""
+		}
+		if d.Kind == "" && in.Body != nil && HasFence(body) {
+			return errf(2, "%s", NeedsRunner)
+		}
 		if err := ib.exec("UPDATE decisions SET question = ?, body = ?, context = ?, rec = ?, amended = 1,"+
-			" updated_at = ?, rev = rev + 1 WHERE id = ?",
-			question, body, context, rec, stamp(), id); err != nil {
+			" confirmed_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?",
+			question, body, context, rec, confirmed, stamp(), id); err != nil {
 			return err
 		}
 		if in.Options != nil {
