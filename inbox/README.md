@@ -35,9 +35,11 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
   "<the step>"` with its commands in `--body`: the options are fixed (Done, Later),
   Done opens a confirm that shows the step again and takes a typed `y`, and the
   asker gets `a: Done (confirmed)`. `zen-inbox answer` refuses Done on one.
-- A `--body` with a fenced code block must say who runs it, or `ask` exits 2
-  with `--body has a code block: add --manual (the user runs it) or
-  --agent-runs (you run it after the answer)` (`--prod` asks are exempt).
+- A `--body` with a command fence (untagged, or sh, bash, zsh, shell, console)
+  must say who runs it, or `ask` exits 2 with `--body has a code block: add
+  --manual (the user runs it) or --agent-runs (you run it after the answer); tag
+  an example's fence with its language`. A fence tagged sql, json, ts, diff and
+  the like is an example and passes. `--prod` asks are exempt.
   `--agent-runs` is for the asker: the panel shows "The agent runs this after you
   answer. Don't run it yourself." If the user copies a block anyway (`y`, a number)
   the panel asks "Did you run it? type y"; on `y` the answer reads `... (user ran

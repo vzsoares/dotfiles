@@ -71,7 +71,7 @@ func (m *Model) keyYank(k string) bool {
 		m.clip(m.blocks[n-1])
 		m.copied = "copied " + k
 		if d, ok := m.walkDecision(); ok && d.Kind == inbox.KindAgentRuns && d.ConfirmedAt == "" {
-			m.ranAsk, m.copied = d.ID, "copied "+k+" · Did you run it? type y"
+			m.ranAsk, m.copied = d.ID, "copied "+k+" · Did you run it? type y (any other key: no, copy another)"
 		}
 	}
 	return true

@@ -49,19 +49,43 @@ func checkBody(body string) error {
 	return nil
 }
 
-// HasFence is whether body holds a fenced code block.
+// shellFences are the info strings whose block is a command; other tags
+// (sql, json, ts, diff...) mark an example.
+var shellFences = map[string]bool{"": true, "sh": true, "bash": true, "zsh": true, "shell": true, "console": true}
+
+// HasFence is whether body holds a fenced block that is a command: untagged
+// or tagged sh, bash, zsh, shell or console.
 func HasFence(body string) bool {
+	open := ""
 	for _, line := range strings.Split(body, "\n") {
 		t := strings.TrimLeft(line, " \t")
-		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
-			return true
+		mark := ""
+		for _, m := range []string{"```", "~~~"} {
+			if strings.HasPrefix(t, m) {
+				mark = m
+			}
+		}
+		switch {
+		case mark == "":
+		case open == "":
+			open = mark
+			info := strings.Fields(strings.TrimLeft(t, mark[:1]))
+			lang := ""
+			if len(info) > 0 {
+				lang = strings.ToLower(info[0])
+			}
+			if shellFences[lang] {
+				return true
+			}
+		case mark == open:
+			open = ""
 		}
 	}
 	return false
 }
 
 // NeedsRunner is the refusal for a body with a command and no word on who runs it.
-const NeedsRunner = "--body has a code block: add --manual (the user runs it) or --agent-runs (you run it after the answer)"
+const NeedsRunner = "--body has a code block: add --manual (the user runs it) or --agent-runs (you run it after the answer); tag an example's fence with its language"
 
 func (ib *Inbox) insertOptions(id string, options []string) error {
 	for i, o := range options {

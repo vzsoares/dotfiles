@@ -393,9 +393,9 @@ stays one sentence: commands, lists and anything to copy go in `--body "<markdow
 step the user runs by hand is `zen-inbox ask <task> --manual -q ... [--body ...]`: no
 `-o` (the options are Done and Later, rec `a`), Done opens a confirm that shows the
 step again and takes a typed `y`, and the answer arrives as `a: Done (confirmed)`;
-`zen-inbox answer <id> a` is refused on it. A fenced code block in `--body` needs
+`zen-inbox answer <id> a` is refused on it. A fenced command block (untagged, sh, bash, zsh, shell, console) in `--body` needs
 `--manual` (the user runs it) or `--agent-runs` (you run it after the answer), else
-`ask` exits 2 (`--prod` asks are exempt). An `--agent-runs` ask shows the user "The
+`ask` exits 2 (`--prod` asks are exempt); a fence tagged sql, json, ts or the like is an example and passes. An `--agent-runs` ask shows the user "The
 agent runs this after you answer. Don't run it yourself."; if they ran it anyway the
 answer line ends `(user ran it; skip your run)` (`show <id> --json`: `confirmed_at`
 set), and you skip your run. A

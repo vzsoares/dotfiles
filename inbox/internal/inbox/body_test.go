@@ -187,3 +187,34 @@ func TestAmendKeepsRunnerRule(t *testing.T) {
 		t.Fatalf("%v %+v", err, got)
 	}
 }
+
+func TestOnlyShellFencesNeedARunner(t *testing.T) {
+	cases := []struct {
+		body string
+		want bool
+	}{
+		{"```sh\nmake x\n```", true},
+		{"```bash\nmake x\n```", true},
+		{"```\nmake x\n```", true},
+		{"~~~console\n$ make x\n~~~", true},
+		{"```SQL\nselect 1;\n```", false},
+		{"```json\n{}\n```", false},
+		{"```sql\nselect 1;\n```\n\n```sh\nmake x\n```", true},
+		{"```sql\nselect 1;\n```\n\nplain text", false},
+		{"no fence at all", false},
+	}
+	for _, c := range cases {
+		if got := HasFence(c.body); got != c.want {
+			t.Errorf("%q: %v, want %v", c.body, got, c.want)
+		}
+	}
+	ib, _, _ := open(t)
+	_, err := ib.Ask(AskInput{Task: "7", Question: "Schema ok?", Body: "```sql\ncreate table t (id int);\n```", SessionID: "s1", Name: "spec-s1"})
+	if err != nil {
+		t.Fatalf("a sql example was refused: %v", err)
+	}
+	_, err = ib.Ask(AskInput{Task: "7", Question: "Run?", Body: "```bash\nmake x\n```", SessionID: "s1", Name: "spec-s1"})
+	if err == nil || !strings.Contains(err.Error(), "tag an example's fence with its language") {
+		t.Fatalf("a bash fence passed or the hint is wrong: %v", err)
+	}
+}
