@@ -75,7 +75,9 @@ The relation is two-way, so one write links both pages.
   the checklist task only when none is open for that project and kind. A Human Only
   step that goes to the inbox is a manual-step ask: `zen-inbox ask <task> --manual -q
   "<the step>" --body "<its commands>"` (options fixed: Done, Later). Picking Done
-  asks the user to type `y` in the panel; agents never answer Done on one.
+  asks the user to type `y` in the panel; agents never answer Done on one. A command
+  you run yourself after the answer goes in `--body` with `--agent-runs`; a fenced
+  `--body` with neither flag is refused (exit 2).
 - `Human Approval` — a step an agent can run from this machine with credentials it
   already has, once the user approves: pushes, remote branch deletes, edits to
   `.claude/settings.json` or permissions, tool installs, `gh` repo settings, prod
@@ -391,7 +393,12 @@ stays one sentence: commands, lists and anything to copy go in `--body "<markdow
 step the user runs by hand is `zen-inbox ask <task> --manual -q ... [--body ...]`: no
 `-o` (the options are Done and Later, rec `a`), Done opens a confirm that shows the
 step again and takes a typed `y`, and the answer arrives as `a: Done (confirmed)`;
-`zen-inbox answer <id> a` is refused on it. A
+`zen-inbox answer <id> a` is refused on it. A fenced code block in `--body` needs
+`--manual` (the user runs it) or `--agent-runs` (you run it after the answer), else
+`ask` exits 2 (`--prod` asks are exempt). An `--agent-runs` ask shows the user "The
+agent runs this after you answer; don't run it yourself."; if they ran it anyway the
+answer line ends `(user ran it; skip your run)` (`show <id> --json`: `confirmed_at`
+set), and you skip your run. A
 terminal named `cockpit` in group `chief` runs `zen-inbox watch`: one row per asking
 session (zen-bell rings once per session per poll). Opening one shows the task context, then
 its questions; the user walks them (pick, free text, skip) and sends them from a

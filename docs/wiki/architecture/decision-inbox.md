@@ -18,7 +18,11 @@ message.
 
 1. **ask** — `zen-inbox ask <task> -q ... -o ... --rec <letter> [--context ...]
    [--body <markdown> | --body -] [--gate] [--title ... --brief ...]` (`--manual`
-   instead of `-o`: see Manual-step asks). `-q` is one
+   instead of `-o`: see Manual-step asks). A fenced block in `--body` needs
+   `--manual` or `--agent-runs` (the asker runs it after the answer, `kind`
+   `agent-runs`), else exit 2; the panel banners an `--agent-runs` ask, and a
+   copied block then asks "Did you run it? type y", recorded in `confirmed_at`
+   and the answer line (`user ran it; skip your run`) (#1092). `-q` is one
    sentence; `--body` (at most 16 KiB, also on `amend`, `""` clears it) carries
    commands and lists and is shown under the question (#928). The asker is `--session`, else
    `$AGENT_MANAGER_SESSION_ID` (set in every agent-manager pane); its name comes from

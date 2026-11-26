@@ -35,6 +35,14 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
   "<the step>"` with its commands in `--body`: the options are fixed (Done, Later),
   Done opens a confirm that shows the step again and takes a typed `y`, and the
   asker gets `a: Done (confirmed)`. `zen-inbox answer` refuses Done on one.
+- A `--body` with a fenced code block must say who runs it, or `ask` exits 2
+  with `--body has a code block: add --manual (the user runs it) or
+  --agent-runs (you run it after the answer)` (`--prod` asks are exempt).
+  `--agent-runs` is for the asker: the panel shows "The agent runs this after you
+  answer; don't run it yourself." If the user copies a block anyway (`y`, a number)
+  the panel asks "Did you run it? type y"; on `y` the answer reads `... (user ran
+  it; skip your run)` and `show <id> --json` has a non-empty `confirmed_at` with
+  `"kind": "agent-runs"`, so the asker skips its run.
 - `y` then a block's number copies its source exactly; a `--prod run` ask shows
   its `--cmd` as such a block. A code line wider than the pane wraps at the pane
   edge on screen only.

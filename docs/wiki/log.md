@@ -178,3 +178,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-24] feature | Explore and explorer on Haiku, token telemetry (#1009)
 `.claude/agents/Explore.md` shadows the built-in Explore subagent with `model: haiku` and the edit tools denied; a sixth role, `explorer` (`role-explorer`, Haiku, Edit/Write/NotebookEdit denied), takes chief's question-only support and research sessions, and chief's step 12 names it. `zen-telemetry import` fills a new `tool_usage` table (model and tokens per session and subagent) and `report --by-model` compares windows.
 Pages updated: architecture/agent-roles.md, architecture/agent-telemetry.md
+
+## [2026-11-26] fix | zen-inbox asks with a command say who runs it (#1092)
+A fenced block in `--body` needs `--manual` or the new `--agent-runs` (exit 2 otherwise, `--prod` exempt); an `--agent-runs` ask banners "The agent runs this after you answer" and a copied block asks "Did you run it? type y", recorded in `confirmed_at` and the answer line.
+Pages updated: architecture/decision-inbox.md
