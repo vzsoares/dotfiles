@@ -110,7 +110,8 @@ A message for a session that is down is kept and sent when the session is back:
   that fit `SendLimit` unclipped (`packAnswers`). A refused group and the groups
   after it stay `waiting` and the pass sends them again together. A send with
   a note (`FlushSession(sid, true)`) goes now even while the task has open
-  asks, ending in `Left open: <ids>` (recomputed on a retry); with every ask
+  asks; any send ahead of open asks in its tasks ends in `Left open: <ids>`
+  (recomputed on each retry); with every ask
   skipped, `SendNote` sends only the note and the asks, which stay open.
 - A chat or reply delivered 10 minutes or more after it was written says so:
   `(written 3h ago, queued while chief was down) …` when chief being down kept

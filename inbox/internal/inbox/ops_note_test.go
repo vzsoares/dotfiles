@@ -47,3 +47,14 @@ func TestBuildMessageSharedNoteNamesItsAnswers(t *testing.T) {
 		t.Fatalf("message:\n%s", msg)
 	}
 }
+
+func TestBuildMessageTruncationKeepsLeftOpen(t *testing.T) {
+	ds := []Decision{{ID: "1.1", Question: "Q", AnswerKind: "text", AnswerText: strings.Repeat("a", 9000)}}
+	msg := buildMessage(ds, []string{"1.2", "1.3"}, SendLimit)
+	if len(msg) > SendLimit-SendMargin {
+		t.Fatalf("message %d bytes over budget", len(msg))
+	}
+	if !strings.Contains(msg, "truncated") || !strings.HasSuffix(msg, "\nLeft open: 1.2, 1.3") {
+		t.Fatalf("left-open line lost:\n…%s", msg[len(msg)-120:])
+	}
+}

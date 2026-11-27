@@ -578,7 +578,11 @@ func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
 // SendLimit. A group that is held back or refused leaves itself and every
 // later group waiting (or failed) with the same error, so none is sent twice.
 func (ib *Inbox) send(t target, sid string, batch []Decision, open []string) (*Delivery, error) {
-	groups := packAnswers(batch, SendLimit-len(leftOpenLine(open)))
+	reserve := 0
+	if line := leftOpenLine(open); line != "" {
+		reserve = len(line) + 1
+	}
+	groups := packAnswers(batch, SendLimit-reserve)
 	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: true, LeftOpen: open}
 	for i, g := range groups {
 		r, err := ib.sendGroup(t, sid, g, open)
@@ -806,11 +810,14 @@ func (ib *Inbox) SendNote(sid string, open []string, note string) (*Delivery, er
 			return nil, err
 		}
 		if deferred {
-			res.Error = "rate limited: " + res.Error
+			res.Error = "not retried: " + res.Error
 		}
 	}
 	if res.OK {
 		res.Followup = ib.AM.Followup(t.id)
+		return res, nil
+	}
+	if strings.HasPrefix(res.Error, GaveUp) {
 		return res, nil
 	}
 	return res, ib.NoteRefusal("note:"+sid+":"+open[0], t.id, ds[0].SessionName, msg, res.Error)
@@ -1128,7 +1135,12 @@ func buildMessage(answers []Decision, open []string, limit int) string {
 		}
 	}
 	tail := "\n… truncated; see zen-inbox show <id>"
-	return strings.ToValidUTF8(msg[:budget-len(tail)], "") + tail
+	if len(open) > 0 {
+		tail += "\n" + leftOpenLine(open)
+		msg = renderAnswers(ordered, nil, 0, noteWidths[len(noteWidths)-1])
+	}
+	cut := min(len(msg), max(budget-len(tail), 0))
+	return strings.ToValidUTF8(msg[:cut], "") + tail
 }
 
 // MarkRan records that the user ran an --agent-runs ask's command themselves.
