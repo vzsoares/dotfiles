@@ -26,6 +26,14 @@ mkdir -p "$TMP/bin" "$TMP/home/pi-box/work/t1/sub" "$TMP/home/pi-box/agent" \
   "$TMP/home/pi-box/in" "$TMP/outside"
 cat >"$TMP/bin/docker" <<'FAKE'
 #!/usr/bin/env bash
+if [ "$1" = image ]; then
+  [ -z "$FAKE_NO_IMAGE" ]
+  exit
+fi
+if [ "$1" = info ]; then
+  [ -z "$FAKE_NO_DAEMON" ]
+  exit
+fi
 if [ "$1" = ps ] && [ "$2" = --format ]; then
   [ -n "$FAKE_HOLDER" ] && echo "$FAKE_HOLDER"
   exit 0
@@ -68,6 +76,7 @@ export PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_LOG="$TMP/log" FAKE_PS="$TMP/
 export FAKE_RUNS="$TMP/runs" FAKE_TAKEN_PID="$TMP/taken.pid"
 unset VENICE_API_KEY CRAWL_DELAY_MS FAKE_RUNNING FAKE_SLEEP FAKE_APPEND
 unset FAKE_HOLDER FAKE_BIND_FAIL FAKE_BIND_TAKEN FAKE_RC AGENT_BROWSER_PAIR_TOKEN PIBOX_BRIDGE_SRC
+unset FAKE_NO_IMAGE FAKE_NO_DAEMON
 # The browser section below turns it on, against a port this test owns.
 export PIBOX_BROWSER=0
 W="$HOME/pi-box/work"
@@ -76,13 +85,43 @@ run_in() { # dir, args... -> exit code; stdout in $TMP/out
   (cd "$1" && shift && bash "$WRAPPER" "$@") >"$TMP/out" 2>"$TMP/err"
 }
 
-# cwd guard
-run_in "$TMP/outside"
-expect_rc 2 "refuses a cwd outside work/ (exit 2)"
-run_in "$W"
-expect_rc 2 "refuses work/ itself (exit 2)"
+# workspaces: new from anywhere, open by name, list
+PIBOX_DRY_RUN=1 run_in "$TMP/outside" -m glm
+check "runs from outside work/" $?
+new="$(sed -n 's/^pi-box: workspace .*work\/\([^ ]*\) (reopen.*/\1/p' "$TMP/err")"
+[ -n "$new" ] && [ -d "$W/$new" ] && grep -q -- "-v $W/$new:$W/$new " "$TMP/out" &&
+  grep -q -- "-w $W/$new " "$TMP/out" && grep -q -- "pi-box pi -m glm \$" "$TMP/out"
+check "outside work/: creates a timestamped workspace and mounts only it" $?
+rm -rf "${W:?}/$new"
+PIBOX_DRY_RUN=1 run_in "$W"
+check "work/ itself also gets a new workspace" $?
+rm -rf "${W:?}/$(sed -n 's/^pi-box: workspace .*work\/\([^ ]*\) (reopen.*/\1/p' "$TMP/err")"
+PIBOX_DRY_RUN=1 run_in "$TMP/outside" open research -c
+check "open runs from anywhere" $?
+[ -d "$W/research" ] && grep -q -- "-w $W/research " "$TMP/out" &&
+  grep -q -- "--name pi-box-research " "$TMP/out" && grep -q -- "pi-box pi -c \$" "$TMP/out"
+check "open creates work/<task>, works there and passes the rest to pi" $?
+PIBOX_DRY_RUN=1 run_in "$TMP/outside" open research
+check "open reuses an existing workspace" $?
+run_in "$TMP/outside" open ../etc
+expect_rc 2 "open refuses a bad task id (exit 2)"
+run_in "$TMP/outside" open
+expect_rc 2 "open needs a task id (exit 2)"
 ln -s "$TMP/outside" "$W/link"
-run_in "$W/link"
+run_in "$TMP/outside" open link
+expect_rc 2 "open refuses a symlinked workspace (exit 2)"
+run_in "$TMP/outside" ls
+check "ls runs" $?
+grep -q ' research$' "$TMP/out" && grep -q ' t1$' "$TMP/out" && ! grep -q 'link' "$TMP/out"
+check "ls lists workspaces, not symlinks" $?
+rm -rf "$W/research"
+run_in "$TMP/outside" help
+check "help exits 0" $?
+grep -q 'pi-box open <task>' "$TMP/out"
+check "help prints usage" $?
+
+# cwd guard
+(cd "$W/link" && bash "$WRAPPER") >"$TMP/out" 2>"$TMP/err"
 expect_rc 2 "refuses a symlinked task dir (exit 2)"
 mkdir -p "$W/.hidden"
 run_in "$W/.hidden"
@@ -148,6 +187,32 @@ check "host env overrides config.env" $?
 run_in "$W/t1"
 ! grep -qx 'VENICE_API_KEY' "$TMP/log"
 check "an unset key is not passed" $?
+grep -q 'VENICE_API_KEY is unset' "$TMP/err"
+check "an unset key warns" $?
+printf 'export OTHER=1\nexport VENICE_API_KEY="zk"\n' >"$HOME/.zshrc.local"
+run_in "$W/t1"
+grep -qx 'VENICE_API_KEY' "$TMP/log" && grep -qx 'VENICE_API_KEY=zk' "$TMP/log" &&
+  ! grep -q 'OTHER' "$TMP/log"
+check "the key falls back to ~/.zshrc.local, by name only" $?
+VENICE_API_KEY=k2 run_in "$W/t1"
+grep -qx 'VENICE_API_KEY=k2' "$TMP/log"
+check "the env key wins over ~/.zshrc.local" $?
+rm "$HOME/.zshrc.local"
+
+# preflight
+rm -f "$FAKE_LOG"
+FAKE_NO_IMAGE=1 run_in "$W/t1"
+expect_rc 6 "a missing image stops the run (exit 6)"
+grep -q 'pi-box build' "$TMP/err" && [ ! -e "$FAKE_LOG" ]
+check "a missing image says to run pi-box build" $?
+FAKE_NO_IMAGE=1 FAKE_NO_DAEMON=1 run_in "$W/t1"
+expect_rc 6 "Docker down stops the run (exit 6)"
+grep -q 'Docker is not running' "$TMP/err"
+check "Docker down says so" $?
+before="$(ls "$W" | wc -l)"
+FAKE_NO_IMAGE=1 run_in "$TMP/outside"
+[ "$(ls "$W" | wc -l)" = "$before" ]
+check "a failed preflight creates no workspace" $?
 
 # doctor: offline, from any cwd, no workspace mounts
 PIBOX_DRY_RUN=1 run_in "$TMP/outside" doctor

@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# pi-box: run pi inside the pi-box container, from ~/pi-box/work/<task-id>.
-#
-#   pi-box [pi args...]       pi with every argument passed through
-#   pi-box exec <cmd...>      a command in the box instead of pi
-#   pi-box build              build the image from this directory
-#                             (PIBOX_BRIDGE_SRC=<dir>: a local bridge checkout)
-#   pi-box doctor             offline toolkit check in a throwaway container
-#   pi-box cost [--month [YYYY-MM]]   spend per model from the ledger
+# pi-box: run pi inside the pi-box container, in ~/pi-box/work/<task-id>.
+# Run `pi-box help` for usage.
 #
 # Every start is checked against the monthly cap (config.env PIBOX_CAP_USD,
 # default 10) and recorded in ~/pi-box/ledger.jsonl; exit 4 when over.
@@ -42,6 +36,25 @@ die() {
   exit "$1"
 }
 
+usage() {
+  cat <<'EOF'
+pi-box: pi in a sealed Docker box, one workspace per task.
+
+  pi-box [pi args]            new workspace (from anywhere), or the current
+                              one when run inside ~/pi-box/work/<task>
+  pi-box open <task> [args]   open (or create) ~/pi-box/work/<task>
+  pi-box open <task> -c       continue that task's last session
+  pi-box ls                   list workspaces, newest first
+  pi-box exec <cmd...>        a command in the box instead of pi
+  pi-box cost [--month [YYYY-MM]]   spend this month against the cap
+  pi-box build | doctor       build the image | offline toolkit check
+
+Models (fuzzy): -m glm (default), -m 1017, -m deepseek-v4-1-flash-uncensored;
+/model switches inside pi.
+VENICE_API_KEY comes from the env, else from ~/.zshrc.local.
+EOF
+}
+
 real_dir() { # path -> physical path; fails when missing or a symlink
   [ -d "$1" ] && [ ! -L "$1" ] && (cd "$1" && pwd -P)
 }
@@ -51,6 +64,13 @@ config_value() { # key -> last value in config.env, quotes stripped
   sed -n "s/^[[:space:]]*$1=//p" "$ROOT/config.env" | tail -n 1 |
     sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
 }
+
+case "${1:-}" in
+  help | -h | --help)
+    usage
+    exit 0
+    ;;
+esac
 
 if [ "${1:-}" = build ]; then
   build=(build -t "$IMAGE")
@@ -86,6 +106,62 @@ for d in work agent; do
 done
 [ ! -L "$ROOT/in" ] || die 2 "$ROOT/in is a symlink"
 
+valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
+
+enter() { # task id: create work/<id> if missing and cd into it
+  valid_id "$1" || die 2 "bad task id '$1' (letters, digits, . _ -)"
+  [ -e "$ROOT/work/$1" ] || [ -L "$ROOT/work/$1" ] || mkdir "$ROOT/work/$1"
+  real_dir "$ROOT/work/$1" >/dev/null || die 2 "$ROOT/work/$1 is not a directory or is a symlink"
+  cd "$ROOT/work/$1"
+}
+
+if [ "${1:-}" = ls ]; then
+  running="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
+  python3 - "$ROOT/work" "$running" <<'PY'
+import os
+import sys
+import time
+
+work, running = sys.argv[1], set(sys.argv[2].split())
+rows = []
+for name in os.listdir(work):
+    path = os.path.join(work, name)
+    if name.startswith(".") or os.path.islink(path) or not os.path.isdir(path):
+        continue
+    rows.append((os.path.getmtime(path), name))
+if not rows:
+    print("no workspaces yet; start one with: pi-box")
+for mtime, name in sorted(rows, reverse=True):
+    state = "running" if f"pi-box-{name}" in running else ""
+    print(f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime))}  {name:<32} {state}".rstrip())
+PY
+  exit 0
+fi
+
+if [ "${PIBOX_DRY_RUN:-}" != 1 ] && ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  docker info >/dev/null 2>&1 || die 6 "Docker is not running; start Docker Desktop"
+  die 6 "image '$IMAGE' is missing; run: pi-box build"
+fi
+
+if [ "${1:-}" = open ]; then
+  [ -n "${2:-}" ] || die 2 "usage: pi-box open <task> [pi args]"
+  enter "$2"
+  shift 2
+else
+  cwd="$(pwd -P)"
+  case "$cwd/" in
+    "$ROOT/work/"?*/) ;;
+    *)
+      # A path that only looks like a workspace (a symlink out of work/) is refused.
+      case "$PWD/" in
+        "$HOME/pi-box/work/"?*/) die 2 "$PWD resolves outside $ROOT/work" ;;
+      esac
+      new="$(date +%Y%m%d-%H%M%S)"
+      enter "$new"
+      echo "pi-box: workspace $ROOT/work/$new (reopen: pi-box open $new)" >&2
+      ;;
+  esac
+fi
 cwd="$(pwd -P)"
 case "$cwd/" in
   "$ROOT/work/"?*/) ;;
@@ -112,6 +188,18 @@ fi
 PIBOX_UID="$(id -u)"
 PIBOX_GID="$(id -g)"
 export PIBOX_UID PIBOX_GID
+
+if [ -z "${VENICE_API_KEY:-}" ] && [ -f "$HOME/.zshrc.local" ]; then
+  key="$(sed -n 's/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}VENICE_API_KEY=//p' \
+    "$HOME/.zshrc.local" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+  if [ -n "$key" ]; then
+    VENICE_API_KEY="$key"
+  fi
+  unset key
+fi
+if [ -z "${VENICE_API_KEY:-}" ] && [ "${1:-}" != exec ]; then
+  echo "pi-box: VENICE_API_KEY is unset (env or ~/.zshrc.local); pi will fail to call Venice" >&2
+fi
 
 for key in "${PASS_ENV[@]}"; do
   if [ -n "${!key+set}" ]; then

@@ -46,15 +46,22 @@ every start and `link` merges it, both leaving the other entries alone.
 ## Use
 
 ```
-mkdir -p ~/pi-box/work/<task-id> && cd ~/pi-box/work/<task-id>
-pi-box --provider <p> -m <model>   # any pi args pass through unchanged
-pi-box exec bash                   # a shell in the same box, no pi
-pi-box doctor                      # needs no workspace and no network
-PIBOX_DRY_RUN=1 pi-box             # print the docker command only
+pi-box                        # from anywhere: a new timestamped workspace
+pi-box open <task> [pi args]  # open or create ~/pi-box/work/<task>
+pi-box open <task> -c         # continue that task's last session
+pi-box ls                     # workspaces, newest first, running marked
+pi-box -m 1017                # pi args pass through; -m is fuzzy
+pi-box exec bash              # a shell in the same box, no pi
+pi-box help
+PIBOX_DRY_RUN=1 pi-box        # print the docker command only
 ```
 
-The wrapper exits 2 unless the cwd is under `~/pi-box/work/<task-id>/`, and 3
-when a container for that task id is already running.
+Inside `~/pi-box/work/<task>/` the wrapper uses that workspace; anywhere else
+it creates `work/<YYYYMMDD-HHMMSS>` and prints its name. `VENICE_API_KEY`
+comes from the env, else from the `VENICE_API_KEY=` line in `~/.zshrc.local`
+(read on the host, passed by name). Exits: 2 bad task id or a symlinked
+workspace, 3 that task's container is already running, 4 over the spend cap,
+6 Docker down or the image missing (checked before any workspace is made).
 
 ## agent-manager
 
@@ -86,9 +93,10 @@ profile runs host pi.
 `agent/models.json` (copied to `~/pi-box/agent` by `link`) holds Venice only:
 `glm-5-3-flash-uncensored` is the default (eval 29/30, $0.031) and
 `deepseek-v4-1-flash-uncensored` the fallback (30/30, $0.101); Gemma 4 scored
-20/30 and is out. Switch with `pi-box --provider venice -m <id>`. The host
-`agents/models.json` lists a different DeepSeek id
-(`deepseek-v4-1-flash-1017-uncensored`); it is left as is.
+20/30 and is out. `deepseek-v4-1-flash-1017-uncensored` (not evaluated) is
+also listed, so both DeepSeek ids match the host `agents/models.json`. Switch
+with `pi-box --provider venice -m <id>`. The box caps every model at a 64K
+context and 4K output; the host lists their full 1M.
 
 ## Spend cap
 

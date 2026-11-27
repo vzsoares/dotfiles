@@ -61,6 +61,32 @@
                         "cacheRead": 0.33,
                         "cacheWrite": 0.33
                     }
+                },
+                {
+                    "id": "deepseek-v4-1-flash-1017-uncensored",
+                    "name": "DeepSeek V4.1 Flash 1017 Uncensored (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": [
+                        "text",
+                        "image"
+                    ],
+                    "contextWindow": 65536,
+                    "maxTokens": 4096,
+                    "cost": {
+                        "input": 0.33,
+                        "output": 1.32,
+                        "cacheRead": 0.33,
+                        "cacheWrite": 0.33
+                    }
                 }
             ]
         }
