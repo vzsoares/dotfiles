@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/vzsoares/dotfiles/inbox/internal/am"
 	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
@@ -75,8 +77,8 @@ func TestNotesListGoldens(t *testing.T) {
 		d := newDrv(t, sz[0], sz[1])
 		d.notesFixture()
 		v := d.view()
-		if !strings.Contains(v, "No task · 0 unread") || !strings.Contains(v, "● Task 707 m") ||
-			!strings.Contains(v, "○ Session spec-s2") {
+		if !strings.Contains(v, "No task · 0 unread") || !strings.Contains(v, "Task 707 m") ||
+			!strings.Contains(v, "Session spec-s2") {
 			t.Fatalf("no notes section:\n%s", v)
 		}
 		d.fits()
@@ -117,7 +119,7 @@ func TestNotesOnlyStatusAndCursorAcrossRows(t *testing.T) {
 	if n, ok := d.m.cursorNote(); !ok || n.Title != "one" {
 		t.Fatalf("cursor did not reach the note row:\n%s", d.view())
 	}
-	if !strings.Contains(d.view(), "› note ● one") {
+	if !strings.Contains(d.view(), "› note one") {
 		t.Fatalf("%s", d.view())
 	}
 }
@@ -235,7 +237,7 @@ func TestReplySendsOnceAndMarksRead(t *testing.T) {
 	if n := d.noteRow(1); n.Unread() || n.Delivery != "sent" {
 		t.Fatalf("%+v", n)
 	}
-	if !strings.Contains(d.view(), "○ Task 707 merged · chief · #707 · 0s ↩") {
+	if !strings.Contains(d.view(), "Task 707 merged · chief · #707 · 0s ↩") {
 		t.Fatalf("no reply mark:\n%s", d.view())
 	}
 	d.cursorTo("Task 707")
@@ -378,7 +380,7 @@ func TestEnterOnUnreadNoteMarksReadAndGoesBack(t *testing.T) {
 	if d.m.scr != scList || d.m.focusedRow() != row {
 		t.Fatalf("scr %v row %q, want the list on %q:\n%s", d.m.scr, d.m.focusedRow(), row, d.view())
 	}
-	if !strings.Contains(d.view(), "Threads · 2") || !strings.Contains(d.view(), "○ Task 707") {
+	if !strings.Contains(d.view(), "Threads · 2") || !strings.Contains(d.view(), "note Task 707") {
 		t.Fatalf("list not refreshed:\n%s", d.view())
 	}
 }
@@ -466,5 +468,36 @@ func TestNoteEnterOpensNextUnreadElseReturnsToList(t *testing.T) {
 	}
 	if n, _ := d.ib.Note(order[0]); n.Unread() {
 		t.Fatal("first note not marked read")
+	}
+}
+
+// Unread is bold and read is faint in the list; the text carries no dot, so
+// the lead's ● stays the only one.
+func TestNoteRowsShowUnreadAsBoldAndReadAsFaint(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	prev := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	d := newDrv(t, 92, 30)
+	d.addNote("", "Unread one", "")
+	d.addNote("", "Read one", "")
+	if err := d.other.MarkNotes([]int64{2}, true); err != nil {
+		t.Fatal(err)
+	}
+	d.poll()
+	d.cursorTo("Read one")
+	unread := lineWith(d.view(), "Unread one")
+	d.cursorTo("Unread one")
+	read := lineWith(d.view(), "Read one")
+	if !strings.Contains(unread, "\x1b[1m") || strings.Contains(unread, "\x1b[2m") {
+		t.Errorf("unread row not bold: %q", unread)
+	}
+	if !strings.Contains(read, "\x1b[2m") || strings.Contains(read, "\x1b[1m") {
+		t.Errorf("read row not faint: %q", read)
+	}
+	for _, l := range []string{unread, read} {
+		if strings.ContainsAny(l, "●○") {
+			t.Errorf("a dot is left in the row text: %q", l)
+		}
 	}
 }

@@ -3,10 +3,10 @@ cockpit                        quota n/a
 
 Threads · 2
 › decision spec-s1 · #7 · 1 open · 0s ·…
-  note ● Task 707 m… · chief · #707 · 0s
+  note Task 707 mer… · chief · #707 · 0s
 
 No task · 0 unread
-  note ○ Session spec-s2 d… · chief · 0s
+  note Session spec-s2 die… · chief · 0s
 
 
 

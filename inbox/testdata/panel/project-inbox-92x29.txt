@@ -1,7 +1,7 @@
 cockpit                                                                            quota n/a
   Fakeproj ● decision spec-s1 · #707 · Which way?
 › decision spec-s2 · #808 · Untagged one?
-  Fakeproj ● note ● Task 707 merged · chief · #707 · 0s
+  Fakeproj ● note Task 707 merged · chief · #707 · 0s
 
 
 

@@ -4,9 +4,9 @@ cockpit                                                                quota n/a
 Threads · 3
 › pppppppppppppppp ● decision ▾ #21 · A fair… · 1 open · 1 unread · 2 items · 0s
     pppppppppppppppp ● decision spec-s1 · #21 · 1 open · 0s · [idle]
-    pppppppppppppppp ● note ● A fairly long note title that needs … · chief · 0s
+    pppppppppppppppp ● note A fairly long note title that needs mo… · chief · 0s
   pppppppppppppppp ● decision spec-s2 · #22 · 1 open · 0s · [idle]
-  pppppppppppppppp ● note ● A fairly long note title that ne… · chief · #23 · 0s
+  pppppppppppppppp ● note A fairly long note title that need… · chief · #23 · 0s
 
 
 

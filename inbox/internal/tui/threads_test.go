@@ -89,7 +89,7 @@ func TestThreadGoldens(t *testing.T) {
 
 	d.keys("z")
 	d.fits()
-	d.has("› decision ▾ #843", "    decision spec-s1 · #843", "    note ● Phone step 10 · chief · 1h", "    note ○ Phone step 9 · chief · 1h ↩")
+	d.has("› decision ▾ #843", "    decision spec-s1 · #843", "    note Phone step 10 · chief · 1h", "    note Phone step 9 · chief · 1h ↩")
 	if strings.Contains(d.view(), "· #843 · 1h") {
 		t.Fatalf("child note repeats the task:\n%s", d.view())
 	}
@@ -127,7 +127,7 @@ func TestThreadNoTaskAndRefileGoldens(t *testing.T) {
 	}
 	d.poll()
 	d.fits()
-	d.has("Threads · 1", "› decision spec-s1 · #861", "No task · 2 unread", "○ Good night")
+	d.has("Threads · 1", "› decision spec-s1 · #861", "No task · 2 unread", "note Good night")
 	golden(t, "cockpit-threads-notask-92x29", d.view())
 	d.cursorTo("Swept")
 	d.keys("T")
@@ -177,7 +177,7 @@ func TestThreadsGroupingOrderAndSingletons(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("rows %v, want %v:\n%s", got, want, d.view())
 	}
-	d.has("approval", "spec-s1 · #7, #8", "● eight note · chief · #8")
+	d.has("approval", "spec-s1 · #7, #8", "note eight note · chief · #8")
 	if th, _ := d.m.threadOf("s:s1"); th.open != 1 {
 		t.Fatalf("#7 counts %d open, want only its own ask", th.open)
 	}
@@ -415,7 +415,7 @@ func TestRefileIntoAThreadAndBack(t *testing.T) {
 		t.Fatalf("thread still shows the note:\n%s", d.view())
 	}
 	d.keys("esc")
-	d.has("No task · 1 unread", "● Phone notes before the task")
+	d.has("No task · 1 unread", "note Phone notes before the task")
 	d.cursorTo("before the task")
 	d.keys("T", "ctrl+u", "x1", "ctrl+d")
 	if d.m.scr != scRefile || !strings.Contains(d.view(), "bad task") {

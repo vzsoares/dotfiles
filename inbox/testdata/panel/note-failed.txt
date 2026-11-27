@@ -5,7 +5,7 @@ Failed delivery · 1
 › retry reply n1 to chief · gone
 
 Threads · 1
-  note ● Task 707 merged · chief · #707 · 0s ↩
+  note Task 707 merged · chief · #707 · 0s ↩
 
 
 

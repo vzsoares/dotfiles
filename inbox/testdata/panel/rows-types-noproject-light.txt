@@ -2,4 +2,4 @@
   ␛[1;38;5;90mgate␛[0m spec-s2 · #12 · A gate?
   ␛[1;38;5;130mhuman action␛[0m spec-s3 · #13 · A human action?
 ␛[31m  ␛[0m␛[1;38;5;124mapproval␛[0m␛[31m spec-s4 · #14 · release dotfiles prod@0123456789ab?␛[0m
-␛[1m  ␛[0m␛[1;38;5;26mnote␛[0m␛[1m ● A note · chief · #15 · 0s␛[0m
+␛[1m  ␛[0m␛[1;38;5;26mnote␛[0m␛[1m A note · chief · #15 · 0s␛[0m

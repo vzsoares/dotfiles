@@ -611,19 +611,15 @@ func StagedText(d inbox.Decision, s *Staged) string {
 	return "free text: " + s.Text
 }
 
-// NoteLabel is a note's list row: ● unread or ○ read, then title, sender,
-// task and age; ↩ marks a sent reply.
+// NoteLabel is a note's list row: title, sender, task and age; ↩ marks a sent
+// reply. The panel shows unread in bold, not in the text.
 func NoteLabel(n inbox.Note, at time.Time) string {
-	dot := "○ "
-	if n.Unread() {
-		dot = "● "
-	}
 	parts := []string{md.Plain(n.Title), n.SessionName}
 	if n.Task != "" {
 		parts = append(parts, "#"+n.Task)
 	}
 	parts = append(parts, Age(n.CreatedAt, at))
-	label := dot + strings.Join(parts, " · ")
+	label := strings.Join(parts, " · ")
 	if len(n.Replies) > 0 || n.Reply != "" {
 		label += " ↩"
 	}

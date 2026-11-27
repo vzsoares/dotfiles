@@ -219,7 +219,7 @@ func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 		t.Fatalf("fold not restored:\n%s", v)
 	}
 	again.keys("enter")
-	if v := again.view(); !strings.Contains(v, "Task 707 merged") || !strings.Contains(v, "› note ● Task 707 merged") {
+	if v := again.view(); !strings.Contains(v, "Task 707 merged") || !strings.Contains(v, "› note Task 707 merged") {
 		t.Fatalf("enter did not expand onto the first note:\n%s", v)
 	}
 	third := newDrvWith(t, 92, 29, func(n *drv) { n.m.stateFile = d.m.stateFile })
@@ -230,7 +230,7 @@ func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 	}
 	third.keys("z")
 	third.keys("z")
-	if v := third.view(); !strings.Contains(v, "› note ● Task 707 merged") {
+	if v := third.view(); !strings.Contains(v, "› note Task 707 merged") {
 		t.Fatalf("z did not expand from the header:\n%s", v)
 	}
 }

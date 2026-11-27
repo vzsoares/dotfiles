@@ -3,7 +3,7 @@ cockpit · all clear                                quota n/a
   Inbox · all clear
 
 Threads · 1
-› note ○ Task 707 merged · chief · #707 · 0s ↩
+› note Task 707 merged · chief · #707 · 0s ↩
 
 
 

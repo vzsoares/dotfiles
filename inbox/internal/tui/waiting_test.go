@@ -146,7 +146,7 @@ func TestReplyToADownSenderQueuesIt(t *testing.T) {
 	if n := d.noteRow(1); n.Delivery != "waiting" || !n.Unread() || len(d.am.sends) != 0 {
 		t.Fatalf("%+v sends %q", n, d.am.sends)
 	}
-	d.cursorTo("● Task 707")
+	d.cursorTo("Task 707")
 	d.keys("enter")
 	d.has("↩ waiting for chief · 0s: thanks")
 	d.fits()

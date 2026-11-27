@@ -3,10 +3,10 @@ cockpit                                                                         
 
 Threads · 2
 › decision spec-s1 · #7 · 1 open · 0s · [idle]
-  note ● Task 707 merged · chief · #707 · 0s
+  note Task 707 merged · chief · #707 · 0s
 
 No task · 0 unread
-  note ○ Session spec-s2 died after a revive · chief · 0s
+  note Session spec-s2 died after a revive · chief · 0s
 
 
 

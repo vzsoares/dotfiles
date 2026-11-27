@@ -121,7 +121,7 @@ func TestAge(t *testing.T) {
 func TestNoteLabelsAndLines(t *testing.T) {
 	n := inbox.Note{ID: 12, Task: "707", SessionName: "chief", Title: "Task done", Body: "body",
 		CreatedAt: "2026-01-01T00:00:00+00:00"}
-	if got := NoteLabel(n, at); got != "● Task done · chief · #707 · 1m" {
+	if got := NoteLabel(n, at); got != "Task done · chief · #707 · 1m" {
 		t.Fatal(got)
 	}
 	if got := NoteHead(n, at); got != "n12 · #707 · chief · 1m" {
@@ -129,7 +129,7 @@ func TestNoteLabelsAndLines(t *testing.T) {
 	}
 	n.Task, n.ReadAt, n.Reply = "", "2026-01-01T00:00:30+00:00", "thanks"
 	n.Replies = []inbox.NoteReply{{Text: "thanks"}}
-	if got := NoteLabel(n, at); got != "○ Task done · chief · 1m ↩" {
+	if got := NoteLabel(n, at); got != "Task done · chief · 1m ↩" {
 		t.Fatal(got)
 	}
 	plain := func(k md.Key, text string) []string { return strings.Split(text, "\n") }
