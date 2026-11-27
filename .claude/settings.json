@@ -80,20 +80,29 @@
     "refreshInterval": 1
   },
   "enabledPlugins": {
-    "figma@claude-plugins-official": true
+    "figma@claude-plugins-official": true,
+    "stripe@anthropic-plugin-directory": true
   },
   "outputStyle": "adhd",
   "modelSettings": {
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "high",
+      "autoCompactWindow": 300000
+    },
+    "claude-fable-5-2": {
+      "effortLevel": "high",
+      "autoCompactWindow": 300000
     }
   },
   "autoCompactWindow": 800000,
+  "autoUpdatesChannel": "latest",
   "tui": "default",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "vim",
   "autoCompactEnabled": true,
+  "idleCompaction": true,
+  "switchModelsOnFlag": true,
   "agentPushNotifEnabled": true,
   "mcpServers": {
     "docs-mcp-server": {
@@ -109,6 +118,5 @@
         "DOCS_MCP_EMBEDDING_MODEL": "openai:nomic-embed-text"
       }
     }
-  },
-  "autoUpdatesChannel": "latest"
+  }
 }
