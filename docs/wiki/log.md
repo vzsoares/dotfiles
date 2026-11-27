@@ -190,3 +190,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-27] feat | zen-inbox delete and chats commands (#1110)
 `zen-inbox delete` hides (or `--purge`s) notes, chats and closed decisions behind state guards, in one `BEGIN IMMEDIATE`; schema v17 adds `deleted_at` and `decision_seq` so purged IDs are never reused; `zen-inbox chats` lists chat IDs. A v16 reader shows hidden rows.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-27] fix | zen-inbox delivery log (#1012)
+`am.Transcripts` skips cwd-dir jsonl files claimed by another session (a sibling in the same cwd no longer turns a lost message into `false_drop`). A clean chat or note send closes the open `chat:*` / `note:SID:*` refusals as `retried`. Retry entries carry a per-message key (`retry:TARGET:FIRST:MSGKEY`) so two refused messages in one chain no longer overwrite each other. No schema change.
+Pages updated: architecture/decision-inbox.md

@@ -650,7 +650,7 @@ func (ib *Inbox) sendGroup(t target, sid string, batch []Decision, open []string
 	text := buildMessage(batch, open, SendLimit)
 	if t.id != "" {
 		var err error
-		ok, mid, errText, deferred, err = ib.attempt(t.id, outgoing{batch[0].SessionName, text}, func() (bool, string, string) {
+		ok, mid, errText, deferred, err = ib.attempt(t.id, outgoing{name: batch[0].SessionName, body: text, key: "answers:" + sid + ":" + batch[0].ID}, func() (bool, string, string) {
 			return ib.AM.Send(t.id, text)
 		})
 		if err != nil {
@@ -804,7 +804,7 @@ func (ib *Inbox) SendNote(sid string, open []string, note string) (*Delivery, er
 	res.Target, res.Error = t.id, t.reason
 	if t.id != "" {
 		var deferred bool
-		res.OK, res.MessageID, res.Error, deferred, err = ib.attempt(t.id, outgoing{ds[0].SessionName, msg}, func() (bool, string, string) {
+		res.OK, res.MessageID, res.Error, deferred, err = ib.attempt(t.id, outgoing{name: ds[0].SessionName, body: msg, key: "note:" + sid + ":" + open[0]}, func() (bool, string, string) {
 			return ib.AM.Send(t.id, msg)
 		})
 		if err != nil {
@@ -816,7 +816,7 @@ func (ib *Inbox) SendNote(sid string, open []string, note string) (*Delivery, er
 	}
 	if res.OK {
 		res.Followup = ib.AM.Followup(t.id)
-		return res, nil
+		return res, ib.closeRefusals("note:" + sid + ":")
 	}
 	if strings.HasPrefix(res.Error, GaveUp) {
 		return res, nil
@@ -948,7 +948,7 @@ func (ib *Inbox) RetryToChief(session string) (*Delivery, error) {
 	groups := packAnswers(batch, SendLimit-len(header)-1)
 	for i, g := range groups {
 		text := header + "\n" + BuildMessage(g, SendLimit-len(header)-1)
-		ok, mid, errText, _, err := ib.attempt(chief[0], outgoing{am.ChiefName, text}, func() (bool, string, string) {
+		ok, mid, errText, _, err := ib.attempt(chief[0], outgoing{name: am.ChiefName, body: text, key: "tochief:" + sid + ":" + g[0].ID}, func() (bool, string, string) {
 			return ib.AM.Send(chief[0], text)
 		})
 		if err == nil && !ok {

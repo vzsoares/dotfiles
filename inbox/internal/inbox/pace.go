@@ -131,7 +131,7 @@ func (ib *Inbox) attempt(target string, msg outgoing, send func() (ok bool, mid,
 	case ok || !am.Transient(errText):
 		return ok, mid, errText, false, ib.immediate(func() error {
 			if ok {
-				prefix := retryKey(target, "")
+				prefix := retryPrefix(target)
 				// A given-up message was never resent, so another success does not close it.
 				if e := ib.resolve("retried", "source = ? AND substr(source_id, 1, ?) = ? AND substr(reason, 1, ?) != ?",
 					SourceSend, len(prefix), prefix, len(GaveUp), GaveUp); e != nil {
@@ -159,12 +159,12 @@ func (ib *Inbox) attempt(target string, msg outgoing, send func() (ok bool, mid,
 		}
 		if t, ok := ParseStamp(first); ok && now.Sub(t) >= RetryGiveUp {
 			errText = fmt.Sprintf("%s %d attempts: %s", GaveUp, attempts, errText)
-			if e := ib.logRefusal(retryKey(target, first), target, msg, errText); e != nil {
+			if e := ib.logRefusal(retryKey(target, first, msg.key), target, msg, errText); e != nil {
 				return e
 			}
 			return ib.exec("DELETE FROM send_retry WHERE target = ?", target)
 		}
-		if e := ib.logRefusal(retryKey(target, first), target, msg, fmt.Sprintf("attempt %d: %s", attempts, raw)); e != nil {
+		if e := ib.logRefusal(retryKey(target, first, msg.key), target, msg, fmt.Sprintf("attempt %d: %s", attempts, raw)); e != nil {
 			return e
 		}
 		next := now.Add(backoff(attempts))

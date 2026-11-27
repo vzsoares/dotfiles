@@ -226,7 +226,7 @@ func classify(r am.InboxRow, sessions map[string]am.StateSession, projects strin
 		case s.Tool != "claude":
 			return verdict{kind: KindUnverified, reason: "dropped; recipient runs " + s.Tool}
 		}
-		files := am.Transcripts(projects, s, r.SentAt)
+		files := am.Transcripts(projects, s, r.SentAt, sessions)
 		switch {
 		case len(files) == 0:
 			return verdict{kind: KindUnverified, reason: "dropped; no transcript found"}
@@ -496,10 +496,15 @@ func (ib *Inbox) scanTelemetry(names map[string]string, now time.Time) error {
 // --------------------------------------------------------- zen-inbox's sends --
 
 // outgoing is a message zen-inbox is about to send, for its refusal entry.
-type outgoing struct{ name, body string }
+// key names the message across attempts, whose bodies can differ.
+type outgoing struct{ name, body, key string }
 
-// retryKey is the source id of target's retry chain that started at first.
-func retryKey(target, first string) string { return "retry:" + target + ":" + first }
+// retryPrefix starts the source id of every retry entry of target.
+func retryPrefix(target string) string { return "retry:" + target + ":" }
+
+// retryKey is the source id of one message's entry in target's retry chain
+// that started at first.
+func retryKey(target, first, msgKey string) string { return retryPrefix(target) + first + ":" + msgKey }
 
 // logRefusal records a refused send of zen-inbox's own; the caller holds
 // the transaction.
@@ -512,7 +517,7 @@ func (ib *Inbox) logRefusal(sourceID, target string, msg outgoing, reason string
 func (ib *Inbox) NoteRefusal(sourceID, target string, name, body, reason string) error {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
-	return ib.immediate(func() error { return ib.logRefusal(sourceID, target, outgoing{name, body}, reason) })
+	return ib.immediate(func() error { return ib.logRefusal(sourceID, target, outgoing{name: name, body: body}, reason) })
 }
 
 // closeRefusals closes the open refusals whose source id starts with prefix
@@ -739,7 +744,7 @@ func (ib *Inbox) ResendToChief(id int64) (Entry, string, error) {
 
 // resendTo sends msg to target and closes the entry as resent.
 func (ib *Inbox) resendTo(e Entry, target, name, msg, label string) (Entry, string, error) {
-	ok, mid, errText, _, err := ib.attempt(target, outgoing{name, msg}, func() (bool, string, string) {
+	ok, mid, errText, _, err := ib.attempt(target, outgoing{name: name, body: msg, key: "resend:" + strconv.FormatInt(e.ID, 10)}, func() (bool, string, string) {
 		return ib.AM.Send(target, msg)
 	})
 	if err != nil {

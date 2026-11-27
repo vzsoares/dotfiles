@@ -431,14 +431,19 @@ can be resent, before agent-manager prunes its ~12 h of `session_inbox` rows.
   body (first 200 runes, whitespace folded) is in no user turn carrying
   `[agent-manager] Message from` across the current, retired and released agent
   session ids' jsonl and any jsonl in those dirs or the cwd's dir written after
-  `sent_at`. Found means `false_drop`, logged closed (`auto`) without a body; the
+  `sent_at`, except a cwd-dir file named for another session's agent id (a sibling
+  sharing the cwd; unclaimed files, e.g. a rotation's, still count). Found means `false_drop`, logged closed (`auto`) without a body; the
   Delivery screen counts them per week, the figure to cite upstream. pi/codex
   recipients and missing transcripts are `unverified`.
 - **Held** is undelivered for 5+ minutes (a dialog, not running); it closes itself as
   `delivered_late`, or is `lost` when the recipient is archived or deleted.
-- **Refusals**: zen-inbox's own transient refusals open one entry per retry chain
-  (`retry:<target>:<first_at>`), closed `retried` by the next success, left open on
-  the 30-min give-up; a chat or answers send that ends `failed` opens one too.
+- **Refusals**: zen-inbox's own transient refusals open one entry per message in
+  a retry chain (`retry:<target>:<first_at>:<msgkey>`; the key is the caller's stable
+  message id: `answers:SID:ID`, `chat:cN`, `note:SID:ID`, `reply:nN`, `tochief:SID:ID`,
+  `resend:ENTRY`), closed `retried` by the next success to the target, left open on
+  the 30-min give-up; a chat or answers send that ends `failed` opens one too. A later
+  clean chat closes every open `chat:*` refusal, a clean note send the session's
+  `note:SID:*` ones, both as `retried`.
   Agents' failed `send_session` calls in `tool_calls` (last 24 h) close when the same
   sender's next successful one lands within 10 min (upstream #1151 would retire most).
 - **Cockpit**: a `Delivery · n open` row under Inbox while anything is open (red with a

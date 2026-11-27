@@ -500,7 +500,7 @@ func (ib *Inbox) sendReplyTo(n Note, t target) (NoteDelivery, error) {
 		return NoteDelivery{Note: n, Error: t.reason, Waiting: t.down}, err
 	}
 	reply := ReplyMessage(n, n.Reply)
-	ok, mid, errText, deferred, err := ib.attempt(t.id, outgoing{n.SessionName, reply}, func() (bool, string, string) {
+	ok, mid, errText, deferred, err := ib.attempt(t.id, outgoing{name: n.SessionName, body: reply, key: "reply:" + n.Label()}, func() (bool, string, string) {
 		return ib.AM.Send(t.id, reply)
 	})
 	if err != nil {

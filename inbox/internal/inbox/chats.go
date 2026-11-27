@@ -136,7 +136,7 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 		key = live[0]
 	}
 	text := ChatMessage(c.Task, title, c.Text, c.SentAt, c.Waited)
-	_, id, errText, deferred, err := ib.attempt(key, outgoing{am.ChiefName, text}, func() (bool, string, string) {
+	_, id, errText, deferred, err := ib.attempt(key, outgoing{name: am.ChiefName, body: text, key: "chat:" + c.Label()}, func() (bool, string, string) {
 		var mid, e string
 		mid, e, down = ib.AM.Chief(text)
 		return e == "", mid, e
@@ -158,6 +158,9 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 			c.Error = "sent as " + id + ", not recorded: " + err.Error()
 		}
 		return c, err
+	}
+	if errText == "" {
+		return c, ib.closeRefusals("chat:")
 	}
 	if c.Status == "failed" && !strings.HasPrefix(errText, GaveUp) {
 		target := ""

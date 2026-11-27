@@ -44,8 +44,9 @@ func projectDir(cwd string) string {
 // Transcripts are the jsonl files that may hold a message sent to s at
 // sentAt: those named for its agent session ids in any project dir, and,
 // since a rotation clears a session in place, every jsonl in those dirs and
-// in its cwd's dir written at or after sentAt.
-func Transcripts(projects string, s StateSession, sentAt time.Time) []string {
+// in its cwd's dir written at or after sentAt. A cwd-dir file named for an
+// agent id of another session in sessions is that session's, not s's.
+func Transcripts(projects string, s StateSession, sentAt time.Time, sessions map[string]StateSession) []string {
 	if projects == "" {
 		return nil
 	}
@@ -55,6 +56,21 @@ func Transcripts(projects string, s StateSession, sentAt time.Time) []string {
 		if !seen[p] {
 			seen[p] = true
 			out = append(out, p)
+		}
+	}
+	own := map[string]bool{}
+	for _, id := range s.AgentIDs {
+		own[id] = true
+	}
+	claimed := map[string]bool{}
+	for _, o := range sessions {
+		if o.ID == s.ID {
+			continue
+		}
+		for _, id := range o.AgentIDs {
+			if !own[id] {
+				claimed[id] = true
+			}
 		}
 	}
 	dirs := map[string]bool{}
@@ -71,6 +87,9 @@ func Transcripts(projects string, s StateSession, sentAt time.Time) []string {
 	for dir := range dirs {
 		matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
 		for _, p := range matches {
+			if claimed[strings.TrimSuffix(filepath.Base(p), ".jsonl")] {
+				continue
+			}
 			if st, err := os.Stat(p); err == nil && !st.ModTime().Before(sentAt.Add(-time.Second)) {
 				add(p)
 			}

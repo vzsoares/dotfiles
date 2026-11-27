@@ -482,3 +482,173 @@ func TestV14DumpMigratesToLatest(t *testing.T) {
 		t.Fatalf("%q %v", target, err)
 	}
 }
+
+func sendEntries(t *testing.T, ib *Inbox, prefix string) []Entry {
+	t.Helper()
+	var out []Entry
+	for key, e := range entries(t, ib, true) {
+		if strings.HasPrefix(key, SourceSend+":"+prefix) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func TestSiblingTranscriptIsNotTheRecipients(t *testing.T) {
+	at(t, t0)
+	state, projects := deliveryEnv(t)
+	sent := Now().Add(-10 * time.Minute)
+	now := Now()
+	sessions := []amtest.Session{
+		{ID: "A", Name: "wa", Cwd: "/w/repo", Agent: "aa"},
+		{ID: "B", Name: "wb", Cwd: "/w/repo", Agent: "bb"},
+	}
+	amtest.Transcript(t, projects, "-w-repo", "bb", now, amtest.Delivered("w", "for sibling"))
+	amtest.Transcript(t, projects, "-w-repo", "aa", now, amtest.Delivered("w", "in own file"))
+	amtest.Transcript(t, projects, "-w-repo", "rotated", now, amtest.Delivered("w", "in rotated file"))
+	amtest.State(t, state, sessions, []amtest.Row{
+		{ID: 1, To: "A", FromName: "w", Body: "for sibling", Sent: sent, Delivered: sent, Dropped: sent},
+		{ID: 2, To: "A", FromName: "w", Body: "in own file", Sent: sent, Delivered: sent, Dropped: sent},
+		{ID: 3, To: "A", FromName: "w", Body: "in rotated file", Sent: sent, Delivered: sent, Dropped: sent},
+	})
+	ib, _, _ := open(t)
+	scan(t, ib)
+	all := entries(t, ib, true)
+	if e := all["am_inbox:1"]; e.Kind != KindLost || !e.Open() {
+		t.Errorf("sibling body: %+v", e)
+	}
+	for _, id := range []string{"am_inbox:2", "am_inbox:3"} {
+		if e := all[id]; e.Kind != KindFalseDrop || e.Open() {
+			t.Errorf("%s: %+v", id, e)
+		}
+	}
+	if c, err := ib.CheckMessage("1"); err != nil || c.Status != "lost" {
+		t.Errorf("check: %+v %v", c, err)
+	}
+}
+
+func TestSuccessfulChatClosesOpenChatRefusals(t *testing.T) {
+	at(t, t0)
+	deliveryEnv(t)
+	ib, fake, _ := open(t)
+	fake.sessions = am.Sessions{session("c1", "chief", "idle")}
+	fake.chiefErr = "message is over 8000 bytes"
+	c1, err := ib.SendChat("", "first")
+	if err != nil || c1.Status != "failed" {
+		t.Fatalf("%+v %v", c1, err)
+	}
+	c2, _ := ib.SendChat("", "second")
+	if es := sendEntries(t, ib, "chat:"); len(es) != 2 || !es[0].Open() || !es[1].Open() {
+		t.Fatalf("a failing chat closed another: %+v", es)
+	}
+	fake.chiefErr = ""
+	if c, err := ib.SendChat("", "third"); err != nil || c.Status != "queued" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for _, e := range sendEntries(t, ib, "chat:") {
+		if e.State != "resolved" || e.Resolution != "retried" {
+			t.Errorf("%s: %+v", e.SourceID, e)
+		}
+	}
+	_ = c2
+}
+
+func TestGivenUpRetryEntryIsNotClosedByAChat(t *testing.T) {
+	at(t, t0)
+	deliveryEnv(t)
+	ib, fake, _ := open(t)
+	fake.sessions = am.Sessions{session("s1", "spec-s1", "idle"), session("c1", "chief", "idle")}
+	fake.failFirst = 1000
+	answerTo(t, ib, "7", "s1")
+	for range 40 {
+		advance(t, time.Minute)
+		pass(t, ib)
+	}
+	fake.failFirst = 0
+	if _, err := ib.SendChat("", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range sendEntries(t, ib, "retry:s1:") {
+		if !e.Open() || !strings.HasPrefix(e.Reason, GaveUp) {
+			t.Fatalf("%+v", e)
+		}
+	}
+}
+
+func TestSuccessfulNoteClosesThatSessionsNoteRefusals(t *testing.T) {
+	at(t, t0)
+	deliveryEnv(t)
+	ib, fake, _ := open(t)
+	fake.sessions = am.Sessions{session("s1", "spec-s1", "idle"), session("s2", "spec-s2", "idle")}
+	fake.fail = "bad request"
+	a1, a2 := ask(t, ib, "7", "s1", false, "Q?"), ask(t, ib, "8", "s2", false, "Q?")
+	for sid, id := range map[string]string{"s1": a1, "s2": a2} {
+		if _, err := ib.SendNote(sid, []string{id}, "note"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if es := sendEntries(t, ib, "note:"); len(es) != 2 {
+		t.Fatalf("%+v", es)
+	}
+	fake.fail = ""
+	if _, err := ib.SendNote("s1", []string{a1}, "note"); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range sendEntries(t, ib, "note:") {
+		if got := e.Open(); got != (e.RecipientID == "s2") {
+			t.Errorf("%s open=%v", e.SourceID, got)
+		}
+	}
+}
+
+func TestTwoMessagesRefusedInOneChainKeepTheirOwnEntries(t *testing.T) {
+	at(t, t0)
+	deliveryEnv(t)
+	ib, fake, _ := open(t)
+	fake.sessions = am.Sessions{session("s1", "spec-s1", "idle")}
+	fake.failFirst = 1000
+	answerTo(t, ib, "7", "s1")
+	advance(t, 16*time.Second)
+	answerTo(t, ib, "8", "s1")
+	es := sendEntries(t, ib, "retry:s1:")
+	if len(es) != 2 || es[0].Body == es[1].Body || !strings.Contains(es[0].Body+es[1].Body, "7.1") ||
+		!strings.Contains(es[0].Body+es[1].Body, "8.1") {
+		t.Fatalf("%+v", es)
+	}
+	advance(t, 31*time.Second)
+	pass(t, ib)
+	es = sendEntries(t, ib, "retry:s1:")
+	if len(es) != 2 {
+		t.Fatalf("retries split the chain: %+v", es)
+	}
+	fake.failFirst = 0
+	for range 6 {
+		advance(t, time.Minute)
+		pass(t, ib)
+	}
+	for _, e := range sendEntries(t, ib, "retry:s1:") {
+		if e.Resolution != "retried" {
+			t.Errorf("%+v", e)
+		}
+	}
+}
+
+func TestChatRefusedTwiceWithAChangedAgeStaysOneEntry(t *testing.T) {
+	at(t, t0)
+	deliveryEnv(t)
+	ib, fake, _ := open(t)
+	fake.sessions = am.Sessions{session("c1", "chief", "idle")}
+	fake.failFirst = 1000
+	if _, err := ib.SendChat("", "synthetic chat"); err != nil {
+		t.Fatal(err)
+	}
+	first := sendEntries(t, ib, "retry:")
+	advance(t, 20*time.Second)
+	pass(t, ib)
+	advance(t, 40*time.Second)
+	pass(t, ib)
+	es := sendEntries(t, ib, "retry:")
+	if len(first) != 1 || len(es) != 1 || es[0].Reason == first[0].Reason {
+		t.Fatalf("first %+v now %+v", first, es)
+	}
+}
