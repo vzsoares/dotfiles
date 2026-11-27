@@ -36,6 +36,10 @@ type App struct {
 	AM             am.Client
 	// Watch runs the panel; set by main so this package stays TUI-free.
 	Watch func(ib *inbox.Inbox) error
+	// Lookup asks the board for a task's project; nil runs zen-board.
+	Lookup inbox.Lookup
+	// Spawn runs zen-inbox with args in the background; nil does nothing.
+	Spawn func(args ...string)
 }
 
 // Run executes argv and returns the process exit code.
@@ -76,7 +80,7 @@ func (a *App) root() *cobra.Command {
 	root.SetErr(a.Stderr)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })
 	root.AddCommand(a.ask(), a.brief(), a.amend(), a.withdraw(), a.list(), a.show(),
-		a.answer(), a.resolve(), a.retry(), a.watch(), a.approval(), a.note(), a.notes(), a.read(), a.refile(), a.delivery())
+		a.answer(), a.resolve(), a.retry(), a.watch(), a.projects(), a.approval(), a.note(), a.notes(), a.read(), a.refile(), a.delivery())
 	return root
 }
 
@@ -197,6 +201,7 @@ func (a *App) ask() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			a.resolveLater(ib, d.Task)
 			if asJSON {
 				a.out(pyfmt.Dumps(d.JSON()))
 			} else {

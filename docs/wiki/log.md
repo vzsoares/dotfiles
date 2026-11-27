@@ -182,3 +182,7 @@ Pages updated: architecture/agent-roles.md, architecture/agent-telemetry.md
 ## [2026-11-26] fix | zen-inbox asks with a command say who runs it (#1092)
 A fenced block in `--body` needs `--manual` or the new `--agent-runs` (exit 2 otherwise, `--prod` exempt); an `--agent-runs` ask banners "The agent runs this after you answer" and a copied block asks "Did you run it? type y", recorded in `confirmed_at` and the answer line.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-27] feat | zen-inbox leads each decision and note with its board project (#1094)
+`zen-board project` reads the task's project (vault `projects[].tag` as display name); `task_projects` (schema v16) stores it; asks and notes file first, a detached `zen-inbox projects` and the panel's retry resolve it; `zen-inbox projects` is the one-off backfill. A failing board leaves the row untagged.
+Pages updated: architecture/decision-inbox.md

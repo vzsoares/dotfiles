@@ -78,6 +78,10 @@ type snapshot struct {
 	waiting      []inbox.Batch
 	waitingNotes []inbox.Note
 	waitingChats []inbox.Chat
+	// projects maps a task to its board project tag; unresolved are the tasks
+	// the board has not answered for yet.
+	projects   map[string]string
+	unresolved []string
 	// titles is each task's newest brief title, for thread rows.
 	titles map[string]string
 	// thread is the open thread's timeline, read only while one is open.
@@ -95,6 +99,9 @@ type snapshot struct {
 }
 
 type tickMsg struct{}
+
+// projectsMsg ends a board lookup pass.
+type projectsMsg struct{}
 type loadedMsg struct {
 	snap  snapshot
 	quota quota
@@ -258,6 +265,11 @@ type Model struct {
 	// loc is where its reset times are shown.
 	quota     quota
 	quotaFile string
+	// lookup asks the board for a task's project; nil turns the pass off.
+	// projTried is when each task was last asked, projBusy a pass in flight.
+	lookup    inbox.Lookup
+	projTried map[string]time.Time
+	projBusy  bool
 	// stateFile keeps notesFolded and threadsOpen across restarts.
 	stateFile   string
 	notesFolded bool
@@ -310,6 +322,7 @@ func Watch(client am.Client) func(*inbox.Inbox) error {
 		ok, reason := guard.Current()
 		ib.User = ok
 		m := New(ib, client)
+		m.lookup = inbox.BoardLookup(boardBin())
 		m.prodBlock = reason
 		_, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 		if errors.Is(err, tea.ErrInterrupted) {
@@ -346,6 +359,9 @@ func load(ib *inbox.Inbox, client am.Client, w watch, sessions am.Sessions, refr
 	if s.drafts, s.err = ib.Drafts(); s.err != nil {
 		return s
 	}
+	// A failed read leaves rows untagged; it must not hide the inbox.
+	s.projects, _ = ib.Projects()
+	s.unresolved, _ = ib.Unresolved()
 	if s.notes, s.err = ib.Notes(false); s.err != nil {
 		return s
 	}
@@ -484,6 +500,9 @@ func (m *Model) apply(s snapshot) []tea.Cmd {
 		cmds = append(cmds, c)
 	}
 	if c := m.deliveryScanDue(); c != nil {
+		cmds = append(cmds, c)
+	}
+	if c := m.projectsDue(); c != nil {
 		cmds = append(cmds, c)
 	}
 	m.pruneThreadsOpen()
@@ -1317,6 +1336,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.quota = msg.quota
 		cmds := m.apply(msg.snap)
 		return m, tea.Batch(append(cmds, m.after(PollEvery, tickMsg{}))...)
+	case projectsMsg:
+		m.projBusy = false
+		return m, m.loadCmd(false)
 	case sentMsg:
 		return m, m.onSent(msg)
 	case draftsSavedMsg:

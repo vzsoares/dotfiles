@@ -62,7 +62,7 @@ func newFake(t *testing.T) *fake {
 		}
 	}
 	src, _ := filepath.Abs("testdata/fakes")
-	for _, name := range []string{"agent-manager", "tmux", "zen-bell"} {
+	for _, name := range []string{"agent-manager", "tmux", "zen-bell", "zen-board"} {
 		body, err := os.ReadFile(filepath.Join(src, name))
 		if err != nil {
 			t.Fatal(err)
@@ -75,13 +75,13 @@ func newFake(t *testing.T) *fake {
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
 		switch k {
-		case "PATH", "AGENT_MANAGER_SESSION_ID", "TMUX", "ZEN_FLOW_DB", "FAKE_AM", "COLUMNS", "ZEN_INBOX_NOW", "ZEN_AM_STATE_DB", "ZEN_CLAUDE_PROJECTS":
+		case "PATH", "AGENT_MANAGER_SESSION_ID", "TMUX", "ZEN_FLOW_DB", "FAKE_AM", "COLUMNS", "ZEN_INBOX_NOW", "ZEN_AM_STATE_DB", "ZEN_CLAUDE_PROJECTS", "ZEN_INBOX_NO_SPAWN", "ZEN_BOARD_BIN":
 			continue
 		}
 		f.env = append(f.env, kv)
 	}
 	f.env = append(f.env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"FAKE_AM="+f.data, "ZEN_FLOW_DB="+f.db,
+		"FAKE_AM="+f.data, "ZEN_FLOW_DB="+f.db, "ZEN_INBOX_NO_SPAWN=1", "ZEN_BOARD_BIN="+filepath.Join(bin, "zen-board"),
 		"ZEN_AM_STATE_DB="+filepath.Join(root, "state.db"), "ZEN_CLAUDE_PROJECTS="+filepath.Join(root, "projects"))
 	return f
 }

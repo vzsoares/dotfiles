@@ -12,6 +12,6 @@ import (
 
 func main() {
 	client := am.Exec{TmuxEnv: am.TmuxEnv()}
-	app := &cli.App{Stdout: os.Stdout, Stderr: os.Stderr, AM: client, Watch: tui.Watch(client)}
+	app := &cli.App{Stdout: os.Stdout, Stderr: os.Stderr, AM: client, Watch: tui.Watch(client), Spawn: cli.Detach}
 	os.Exit(app.Run(os.Args[1:]))
 }

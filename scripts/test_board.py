@@ -500,6 +500,35 @@ def test_note_is_one_bold_dated_paragraph(fake: Fake) -> None:
     assert note_text(body) == ([f"{TODAY}:", " waiting on review"], [True, None])
 
 
+def test_project_prints_the_mapped_name(fake: Fake) -> None:
+    fake.push(results(page(570, project=WORK)))
+    assert run("project", "#570") == (0, "Work\n", "")
+
+
+def test_project_prefers_the_vault_tag(
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "vault" / "config" / "zen-flow.json"
+    config = json.loads(path.read_text())
+    config["projects"][1]["tag"] = "WK"
+    path.write_text(json.dumps(config))
+    fake.push(results(page(570, project=WORK)))
+    code, out, _ = run("project", "570", "--json")
+    assert (code, json.loads(out)) == (0, {"id": 570, "project": "Work", "tag": "WK"})
+
+
+def test_project_is_empty_when_unmapped(fake: Fake) -> None:
+    fake.push(results(page(570, project=OTHER)))
+    assert run("project", "570") == (0, "\n", "")
+
+
+def test_project_fails_on_an_api_error(fake: Fake) -> None:
+    fake.push({"message": "down"}, status=500)
+    fake.push({"message": "down"}, status=500)
+    fake.push({"message": "down"}, status=500)
+    assert run("project", "570")[0] == board.EXIT_API
+
+
 @pytest.mark.parametrize(
     ("project", "page_id"), [("me", ME), ("Work", WORK), ("OFFICE", WORK)]
 )

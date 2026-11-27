@@ -282,8 +282,12 @@ func (m *Model) viewNote() frame {
 	if n.Unread() {
 		mark, markStyle = "● unread", &cursorStyle
 	}
-	head := pyfmt.Clip(view.NoteHead(n, m.now()), max(m.w-lipgloss.Width(mark)-1, 0))
-	line := bannerStyle.Render(head) + " " + markStyle.Render(mark)
+	chip := projectChip(m.projectOf(n.Task))
+	if chip != "" {
+		chip += " "
+	}
+	head := pyfmt.Clip(view.NoteHead(n, m.now()), max(m.w-lipgloss.Width(mark)-lipgloss.Width(chip)-1, 0))
+	line := chip + bannerStyle.Render(head) + " " + markStyle.Render(mark)
 	top := []section{{lines: []string{line}}}
 	top = append(top, section{lines: m.copiedLines(), style: &bannerStyle})
 	if m.flash != "" {

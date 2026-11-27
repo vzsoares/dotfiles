@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fake `zen-board project <task> --json`: fails while $FAKE_AM/board-down
+# exists, else answers with the tag in $FAKE_AM/board-tag (default Alpha).
+[ -e "$FAKE_AM/board-down" ] && { echo "zen-board: HTTP 500" >&2; exit 1; }
+tag=Alpha
+[ -e "$FAKE_AM/board-tag" ] && tag=$(cat "$FAKE_AM/board-tag")
+printf '{"id": %s, "project": "%s", "tag": "%s"}\n' "$2" "$tag" "$tag"

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SchemaVersion = 15
+	SchemaVersion = 16
 	Letters       = "abcd"
 	// A 'sending' row older than this is a crashed send, not one in flight.
 	StaleSeconds = 2 * 30
@@ -117,7 +117,7 @@ var ManualOptions = []string{"Done", "Later"}
 
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
 // can build a db of any version.
-var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11, 12: schemaV12, 13: schemaV13, 14: schemaV14, 15: schemaV15}
+var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11, 12: schemaV12, 13: schemaV13, 14: schemaV14, 15: schemaV15, 16: schemaV16}
 
 // Error carries the exit code the CLI reports it with.
 type Error struct {

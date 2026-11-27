@@ -55,6 +55,7 @@ func (a *App) note() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			a.resolveLater(ib, n.Task)
 			a.out(n.Label())
 			return nil
 		},

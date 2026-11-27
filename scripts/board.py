@@ -33,6 +33,7 @@
 #      zen-board wontdo <task> --note TEXT [--json]
 #      zen-board checklist <task> <item> [--check] [--json]
 #      zen-board stale [--days N] [--json]
+#      zen-board project <task> [--json]
 #
 #  OPTIONS
 #      <task>         570, #570, a Notion page URL, or a page UUID.
@@ -71,6 +72,9 @@
 #              the oldest open item's age in days
 #      stale   In Progress, To Do and Blocked tasks whose newest dated note or
 #              checklist item (or creation, with none) is N or more days old
+#      project the task's board project: prints its display tag (the vault
+#              projects[].tag, else the project name); empty when the task
+#              has no mapped project. --json: {id, project, tag}
 #
 #      NOTION_TOKEN comes from the env, else from ~/.zshrc.local. Board and
 #      project IDs and next_order come from the vault config/zen-flow.json,
@@ -201,6 +205,7 @@ class Config:
     projects: dict[str, str]  # name -> page id without dashes
     groups: dict[str, str]  # agent group key -> project name
     next_order: list[str] = field(default_factory=list)  # project or group names
+    tags: dict[str, str] = field(default_factory=dict)  # name -> display tag
 
     def project_name(self, page_id: str) -> str:
         bare = page_id.replace("-", "")
@@ -237,8 +242,17 @@ def load_config() -> Config:
     by_group = {k.lower(): v for k, v in groups.items()}
     order = [text(n) for n in arr(raw.get("next_order")) if text(n)]
     order = [n if n in projects else by_group.get(n.lower(), n) for n in order]
+    tags = {
+        text(p.get("name")): text(p.get("tag"))
+        for p in map(obj, arr(raw.get("projects")))
+        if text(p.get("name")) and text(p.get("tag"))
+    }
     return Config(
-        data_source=source, projects=projects, groups=groups, next_order=order
+        data_source=source,
+        projects=projects,
+        groups=groups,
+        next_order=order,
+        tags=tags,
     )
 
 
@@ -966,6 +980,36 @@ def checklist(
     num = f"#{result.id}" if result.id is not None else "#?"
     oldest = f"{result.oldest_days}d" if result.oldest_days is not None else "-"
     print(f"{num}  open {result.open}  oldest {oldest}")
+
+
+def task_of(client: Notion, cfg: Config, ref: str) -> Task:
+    m = re.fullmatch(r"#?(\d+)", ref.strip())
+    if m:
+        pages = query(
+            client, cfg, {"property": UNIQUE_ID, "unique_id": {"equals": int(m[1])}}
+        )
+        if not pages:
+            raise BoardError(EXIT_USAGE, f"no task #{m[1]} on the board")
+        return parse_task(pages[0], cfg)
+    page_id = resolve(client, cfg, ref)
+    return parse_task(client.request("GET", f"/pages/{page_id}"), cfg)
+
+
+@app.command()
+def project(task: str, as_json: bool = JSON_OPT) -> None:
+    """Print the task's board project tag (empty when it has none)."""
+    try:
+        client, cfg = connect()
+        found = task_of(client, cfg, task)
+    except BoardError as exc:
+        raise fail(exc) from exc
+    mapped = found.project in cfg.projects
+    name = found.project if mapped else ""
+    tag = cfg.tags.get(name, name)
+    if as_json:
+        emit({"id": found.id, "project": name, "tag": tag})
+    else:
+        print(tag)
 
 
 @app.command()

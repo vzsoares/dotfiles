@@ -149,6 +149,8 @@ type listRow struct {
 	item
 	group int
 	style *lipgloss.Style
+	// project is the task's board project tag, shown as a chip before the label.
+	project string
 }
 
 // askLabel is a session's row: the run tags, then its RowLabel with drafting
@@ -186,7 +188,11 @@ func (m *Model) threadRows(room int) []listRow {
 		if prod[r.SessionID] {
 			st = &failStyle
 		}
-		return listRow{item{indent + pyfmt.Clip(m.askLabel(r, prod[r.SessionID]), width), "s:" + r.SessionID}, gThreads, st}
+		row := listRow{item{indent + pyfmt.Clip(m.askLabel(r, prod[r.SessionID]), width), "s:" + r.SessionID}, gThreads, st, ""}
+		if indent == "" {
+			row.project = m.projectOf(r.First)
+		}
+		return row
 	}
 	for _, t := range m.threads() {
 		if t.size() == 1 {
@@ -195,7 +201,7 @@ func (m *Model) threadRows(room int) []listRow {
 			} else {
 				n := t.notes[0]
 				out = append(out, listRow{item{pyfmt.Clip(view.NoteLabel(n, at), room), "n:" + noteValue(n)}, gThreads,
-					noteStyle(n)})
+					noteStyle(n), m.projectOf(n.Task)})
 			}
 			continue
 		}
@@ -209,7 +215,8 @@ func (m *Model) threadRows(room int) []listRow {
 		case t.open > 0 || t.unread() > 0:
 			st = &unreadStyle
 		}
-		out = append(out, listRow{item{pyfmt.Clip(view.ThreadLabel(head, at, room), room), "t:" + t.task}, gThreads, st})
+		out = append(out, listRow{item{pyfmt.Clip(view.ThreadLabel(head, at, room), room), "t:" + t.task}, gThreads, st,
+			m.projectOf(t.task)})
 		if !open {
 			continue
 		}
@@ -218,7 +225,7 @@ func (m *Model) threadRows(room int) []listRow {
 		}
 		for _, n := range t.notes {
 			out = append(out, listRow{item{"  " + pyfmt.Clip(view.ThreadNoteLabel(n, at), room-2), "n:" + noteValue(n)},
-				gThreads, noteStyle(n)})
+				gThreads, noteStyle(n), ""})
 		}
 	}
 	return out
@@ -270,7 +277,7 @@ func (m *Model) listRows() []listRow {
 	}
 	var out []listRow
 	if m.loaded {
-		out = append(out, listRow{item{pyfmt.Clip(m.inboxLabel(), room), "i:"}, gInbox, &unreadStyle})
+		out = append(out, listRow{item{pyfmt.Clip(m.inboxLabel(), room), "i:"}, gInbox, &unreadStyle, ""})
 		if r, ok := m.deliveryRow(room); ok {
 			out = append(out, r)
 		}
@@ -278,14 +285,14 @@ func (m *Model) listRows() []listRow {
 	for _, b := range m.snap.undelivered {
 		label := "retry " + b.Decisions[0].SessionName + ": " + strconv.Itoa(len(b.Decisions)) + " answer(s) · " +
 			view.FailReason(b)
-		out = append(out, listRow{item{pyfmt.Clip(label, room), "r:" + b.SessionID}, gFailed, &failStyle})
+		out = append(out, listRow{item{pyfmt.Clip(label, room), "r:" + b.SessionID}, gFailed, &failStyle, ""})
 	}
 	for _, n := range m.snap.failedNotes {
 		label := "retry reply " + n.Label() + " to " + n.SessionName
 		if n.DeliveryError != "" {
 			label += " · " + n.DeliveryError
 		}
-		out = append(out, listRow{item{pyfmt.Clip(label, room), "nr:" + noteValue(n)}, gFailed, &failStyle})
+		out = append(out, listRow{item{pyfmt.Clip(label, room), "nr:" + noteValue(n)}, gFailed, &failStyle, ""})
 	}
 	for _, w := range m.waitRows() {
 		label := w.label
@@ -293,16 +300,16 @@ func (m *Model) listRows() []listRow {
 			label += " · " + w.reason
 		}
 		label += " · " + view.Age(w.oldest, m.now())
-		out = append(out, listRow{item{pyfmt.Clip(label, room), w.value}, gWaiting, &bannerStyle})
+		out = append(out, listRow{item{pyfmt.Clip(label, room), w.value}, gWaiting, &bannerStyle, ""})
 	}
 	out = append(out, m.threadRows(room)...)
 	loose := m.looseNotes()
 	if m.notesFolded && len(loose) > 0 {
-		return append(out, listRow{item{pyfmt.Clip(m.notesHead(), room), "nh:"}, gNoTask, nil})
+		return append(out, listRow{item{pyfmt.Clip(m.notesHead(), room), "nh:"}, gNoTask, nil, ""})
 	}
 	for _, n := range loose {
 		out = append(out, listRow{item{pyfmt.Clip(view.NoteLabel(n, m.now()), room), "n:" + noteValue(n)}, gNoTask,
-			noteStyle(n)})
+			noteStyle(n), m.projectOf(n.Task)})
 	}
 	return out
 }
@@ -333,12 +340,12 @@ func (m *Model) inboxRows(room int) []listRow {
 		if d.Prod != nil {
 			st = &failStyle
 		}
-		out = append(out, listRow{item{pyfmt.Clip(label, room), "s:" + d.SessionID}, gInbox, st})
+		out = append(out, listRow{item{pyfmt.Clip(label, room), "s:" + d.SessionID}, gInbox, st, m.projectOf(d.Task)})
 	}
 	for _, n := range m.snap.notes {
 		if n.Unread() {
 			out = append(out, listRow{item{pyfmt.Clip(view.NoteLabel(n, m.now()), room), "n:" + noteValue(n)}, gInbox,
-				noteStyle(n)})
+				noteStyle(n), m.projectOf(n.Task)})
 		}
 	}
 	return out

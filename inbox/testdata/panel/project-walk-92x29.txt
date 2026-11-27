@@ -1,0 +1,29 @@
+cockpit                                                                            quota n/a
+ Fakeproj 
+#707
+asked by spec-s1 · idle · 0s
+
+707.1  Which way?
+a) left
+b) right
+› a
+  b
+  Free text
+  Skip
+  Talk
+  View full
+  Back
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter · a-d pick · f free · s skip · t talk · v full · y copy · ←→ move · esc list
+? help

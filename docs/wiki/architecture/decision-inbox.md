@@ -503,9 +503,26 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 ## Storage
 
+### Project tag (#1094)
+
+Each decision and note leads with its board project as a filled chip in the list rows
+and the walk and note headers. The project is the task's `☢️ Projeto`, never the asking
+session's group. `zen-board project <task> --json` returns `{id, project, tag}`; `tag`
+is the vault `projects[].tag` when set, else the project name (empty for a task with no
+mapped project). v16 adds `task_projects (task, project, checked_at)`; an empty
+`project` means the board answered "none", so it is not asked again. The chip colour is
+a hash of the name into an 8-colour adaptive palette (`tui/tags.go`).
+
+The board never blocks anything: `ask` and `note` file first, then start a detached
+`zen-inbox projects <task>`; the panel also retries unanswered tasks off the render
+path every 5 minutes (`tui/projects.go`). A lookup that fails or times out (8 s)
+stores nothing and the row shows no chip. `zen-inbox projects` with no task is the
+backfill: every open decision and visible note without an answer. `ZEN_BOARD_BIN`
+names the lookup binary; `ZEN_INBOX_NO_SPAWN` stops the detached start (tests).
+
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 13. Tables `decisions` and `decision_options` use generic names because the db is
+now 16. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps

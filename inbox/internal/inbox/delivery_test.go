@@ -468,7 +468,7 @@ func TestV14DumpMigratesToLatest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ib.Close()
-	if v, _ := ib.userVersion(); v != 15 {
+	if v, _ := ib.userVersion(); v != SchemaVersion {
 		t.Fatalf("user_version %d", v)
 	}
 	if es := entries(t, ib, true); len(es) != 0 {

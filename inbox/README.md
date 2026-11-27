@@ -66,6 +66,15 @@ for a session that was down (see Waiting) and tracks the status of the undeliver
 The top Inbox row is always shown (`Inbox · all clear` at zero); `enter` lists the unread notes and open decisions flat; finishing
 one opens the next. Expanded threads (`threads_open`) whose task has nothing left are dropped from the state file, except from an empty snapshot.
 
+## Project tag
+
+Every decision and note leads with its board project as a coloured chip (list rows, walk
+and note headers). `zen-inbox projects [TASK]...` asks `zen-board project` and stores the
+answer in `task_projects`; with no task it is the backfill over every open decision and
+visible note without an answer. `ask`/`note` start it detached, and the panel retries
+every 5 minutes, so a failing board only leaves the chip off. Tests set
+`ZEN_INBOX_NO_SPAWN=1` and `ZEN_BOARD_BIN`.
+
 ## Waiting
 
 A message for a session that is down is kept and sent when the session is back:
