@@ -3,7 +3,16 @@
 if [[ $# -eq 1 ]]; then
     selected=$1
 else
-    selected=$(find ~/ ~/code/tests ~/code/personal ~/code/extraneous ~/code/approva ~/code/approva/utils ~/code/approva/back ~/code/approva/layers ~/code/approva/front ~/code/approva/automation ~/Downloads -mindepth 1 -maxdepth 1 -type d | fzf)
+    shopt -s nullglob
+    roots=("$HOME" "$HOME/code" "$HOME"/code/*/ "$HOME/code/tests" "$HOME/code/personal"
+        "$HOME/code/extraneous" "$HOME/code/approva" "$HOME/code/approva/utils"
+        "$HOME/code/approva/back" "$HOME/code/approva/layers" "$HOME/code/approva/front"
+        "$HOME/code/approva/automation" "$HOME/Downloads")
+    existing=()
+    for r in "${roots[@]}"; do
+        [[ -d $r ]] && existing+=("${r%/}")
+    done
+    selected=$(find "${existing[@]}" -mindepth 1 -maxdepth 1 -type d | awk '!seen[$0]++' | fzf)
 fi
 
 if [[ -z $selected ]]; then
