@@ -61,7 +61,7 @@ const (
 	BodyMax      = 16 * 1024
 	VisibleFor   = 24 * time.Hour
 	KeepFor      = 30 * 24 * time.Hour
-	noteColumns  = "id, task, session_id, session_name, title, body, created_at, read_at, reply, replied_at, claimed_at, delivery, message_id, delivery_error"
+	noteColumns  = "id, task, session_id, session_name, title, body, created_at, read_at, reply, replied_at, claimed_at, delivery, message_id, delivery_error, deleted_at"
 	visibleNotes = "(read_at = '' OR read_at >= ? OR delivery IN ('sending', 'failed', 'waiting'))"
 	// failedNotes is a failed reply, or a claim older than StaleSeconds. A v6
 	// binary claims through replied_at only, so the later of the two counts.
@@ -88,6 +88,7 @@ type Note struct {
 	ID                                  int64
 	Task, SessionID, SessionName        string
 	Title, Body                         string
+	DeletedAt                           string
 	CreatedAt, ReadAt, Reply, RepliedAt string
 	ClaimedAt                           string
 	Delivery, MessageID, DeliveryError  string
@@ -198,7 +199,12 @@ func (ib *Inbox) AddNote(in NoteInput) (Note, error) {
 	return n, dbErr(err)
 }
 
+// selNotes is the visible notes matching where; selNotesAny also reads hidden ones.
 func (ib *Inbox) selNotes(where string, args ...any) ([]Note, error) {
+	return ib.selNotesAny("deleted_at = '' AND ("+where+")", args...)
+}
+
+func (ib *Inbox) selNotesAny(where string, args ...any) ([]Note, error) {
 	rows, err := ib.conn.QueryContext(ctx, "SELECT "+noteColumns+" FROM notes WHERE "+where+
 		" ORDER BY created_at DESC, id DESC", args...)
 	if err != nil {
@@ -209,7 +215,7 @@ func (ib *Inbox) selNotes(where string, args ...any) ([]Note, error) {
 	for rows.Next() {
 		var n Note
 		if err := rows.Scan(&n.ID, &n.Task, &n.SessionID, &n.SessionName, &n.Title, &n.Body, &n.CreatedAt,
-			&n.ReadAt, &n.Reply, &n.RepliedAt, &n.ClaimedAt, &n.Delivery, &n.MessageID, &n.DeliveryError); err != nil {
+			&n.ReadAt, &n.Reply, &n.RepliedAt, &n.ClaimedAt, &n.Delivery, &n.MessageID, &n.DeliveryError, &n.DeletedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, n)

@@ -1,0 +1,8 @@
+step 174 del-task-lenient
+args: ["delete" "--task" "50"]
+exit: 0
+-- stdout --
+-- stderr --
+skipped 50.1: open; withdraw it first
+skipped 50.2: open; withdraw it first
+-- sends --

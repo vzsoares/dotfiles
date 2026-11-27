@@ -1,0 +1,7 @@
+step 165 del-dry-run
+args: ["delete" "40.1" "--dry-run"]
+exit: 0
+-- stdout --
+would hide 40.1
+-- stderr --
+-- sends --

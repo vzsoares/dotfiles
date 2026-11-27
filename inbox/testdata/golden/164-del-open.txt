@@ -1,0 +1,7 @@
+step 164 del-open
+args: ["delete" "50.1"]
+exit: 1
+-- stdout --
+-- stderr --
+50.1 is open; withdraw it first
+-- sends --

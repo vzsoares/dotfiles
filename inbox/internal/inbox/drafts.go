@@ -73,7 +73,7 @@ func (ib *Inbox) Drafts() (map[string]Draft, error) {
 	defer ib.mu.Unlock()
 	rows, err := ib.conn.QueryContext(ctx, "SELECT r.decision_id, r.kind, r.option, r.text, r.rev"+
 		" FROM decision_drafts r JOIN decisions d ON d.id = r.decision_id"+
-		" WHERE d.status = 'open'")
+		" WHERE d.status = 'open' AND d.deleted_at = ''")
 	if err != nil {
 		return nil, dbErr(err)
 	}

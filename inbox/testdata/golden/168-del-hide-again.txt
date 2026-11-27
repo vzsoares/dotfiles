@@ -1,0 +1,7 @@
+step 168 del-hide-again
+args: ["delete" "40.1"]
+exit: 1
+-- stdout --
+-- stderr --
+40.1 is already deleted
+-- sends --

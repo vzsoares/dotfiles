@@ -385,6 +385,8 @@ with `zen-board checklist <task> "<item>"`, then `zen-telemetry entry add <key>`
 
 ### Decision inbox
 
+`zen-inbox delete <id>... [--task N] [--purge] [--dry-run]` hides notes (`n12`), chats (`c151`, listed by `zen-inbox chats`) and closed decisions; open ones need `withdraw` first, an approved `--prod` ask is never deleted.
+
 Agents never message chief with decisions. They run `zen-inbox ask <task> -q ... -o ...
 --rec <letter>` (gates: `--gate`), passing `--title "<task title>" --brief "<1-3 lines>"`
 on the first ask, and end the turn; `zen-inbox brief` sets that context later. `-q`

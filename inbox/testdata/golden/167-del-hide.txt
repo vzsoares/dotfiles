@@ -1,0 +1,7 @@
+step 167 del-hide
+args: ["delete" "40.1"]
+exit: 0
+-- stdout --
+hid 40.1
+-- stderr --
+-- sends --

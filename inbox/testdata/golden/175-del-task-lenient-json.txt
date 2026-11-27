@@ -1,0 +1,7 @@
+step 175 del-task-lenient-json
+args: ["delete" "--task" "50" "--json"]
+exit: 0
+-- stdout --
+{"dry_run": false, "deleted": [], "skipped": [{"id": "50.1", "reason": "open; withdraw it first"}, {"id": "50.2", "reason": "open; withdraw it first"}]}
+-- stderr --
+-- sends --

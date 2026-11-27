@@ -19,13 +19,16 @@ func withCmd(create string) string {
 }
 
 // withAdded is a pre-v11 decisions CREATE after the v11 and v12 ALTERs.
+// pre17 is a column list as a v16 binary reads it.
+func pre17(cols string) string { return strings.TrimSuffix(cols, ", deleted_at") }
+
 func withAdded(create string) string {
 	const last = "rev INTEGER NOT NULL DEFAULT 0,"
-	return strings.Replace(create, last, last+" body TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', confirmed_at TEXT NOT NULL DEFAULT '',", 1)
+	return strings.Replace(create, last, last+" body TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', confirmed_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '',", 1)
 }
 
 // v10Columns is what a v10 binary reads from decisions.
-var v10Columns = strings.TrimSuffix(columns, ", body, kind, confirmed_at")
+var v10Columns = strings.TrimSuffix(columns, ", body, kind, confirmed_at, deleted_at")
 
 func askRun(t *testing.T, ib *Inbox) string {
 	t.Helper()
@@ -204,4 +207,9 @@ func TestV5DBMigratesToV6(t *testing.T) {
 	if p, err := ib.Approval("703.1", push, "w1"); err != nil || p.Cmd != "" {
 		t.Fatalf("%+v %v", p, err)
 	}
+}
+
+// withDeleted is a constraint-free table's CREATE as v17 leaves it.
+func withDeleted(create string) string {
+	return strings.Replace(create, "DEFAULT '')", "DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '')", 1)
 }

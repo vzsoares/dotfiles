@@ -1,0 +1,7 @@
+step 158 del-ask
+args: ["ask" "50" "-q" "Cleanup?" "-o" "a" "-o" "b" "--session" "s1"]
+exit: 0
+-- stdout --
+50.1
+-- stderr --
+-- sends --

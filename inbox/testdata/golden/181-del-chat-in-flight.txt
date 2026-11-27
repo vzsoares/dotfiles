@@ -1,0 +1,7 @@
+step 181 del-chat-in-flight
+args: ["delete" "c902"]
+exit: 1
+-- stdout --
+-- stderr --
+c902 in flight; try again in a minute
+-- sends --

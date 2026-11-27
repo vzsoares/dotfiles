@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	SchemaVersion = 16
+	SchemaVersion = 17
 	Letters       = "abcd"
 	// A 'sending' row older than this is a crashed send, not one in flight.
 	StaleSeconds = 2 * 30
@@ -115,9 +115,24 @@ const RanItNote = "user ran it; skip your run"
 
 var ManualOptions = []string{"Done", "Later"}
 
+// schemaV17 adds soft delete and the per-(task, gate) sequence high-water
+// mark that keeps a purged decision's ID from being reissued. Additive: a v16
+// reader keeps working but shows hidden rows.
+const schemaV17 = `
+ALTER TABLE decisions ADD COLUMN deleted_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE notes ADD COLUMN deleted_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE chats ADD COLUMN deleted_at TEXT NOT NULL DEFAULT '';
+CREATE TABLE decision_seq (
+    task TEXT NOT NULL,
+    gate INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    PRIMARY KEY (task, gate)
+);
+`
+
 // Migrations maps a schema version to the SQL that reaches it, so fixtures
 // can build a db of any version.
-var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11, 12: schemaV12, 13: schemaV13, 14: schemaV14, 15: schemaV15, 16: schemaV16}
+var Migrations = map[int]string{1: schemaV1, 2: schemaV2, 3: schemaV3, 4: schemaV4, 5: schemaV5, 6: schemaV6, 7: schemaV7, 8: schemaV8, 9: schemaV9, 10: schemaV10, 11: schemaV11, 12: schemaV12, 13: schemaV13, 14: schemaV14, 15: schemaV15, 16: schemaV16, 17: schemaV17}
 
 // Error carries the exit code the CLI reports it with.
 type Error struct {
@@ -218,6 +233,8 @@ type Decision struct {
 	Kind string
 	// ConfirmedAt is when the panel's confirm recorded a manual ask's Done.
 	ConfirmedAt string
+	// DeletedAt is when delete hid the row; empty for a visible one.
+	DeletedAt string
 }
 
 // UserRan is whether the user ran an --agent-runs ask's command themselves.
@@ -518,9 +535,14 @@ func (ib *Inbox) Exec(query string, args ...any) error {
 
 const columns = "id, task, seq, gate, session_id, session_name, question, context, rec," +
 	" status, amended, answer_kind, answer_option, answer_text, note, created_at," +
-	" updated_at, answered_at, delivery, message_id, delivery_error, rev, body, kind, confirmed_at"
+	" updated_at, answered_at, delivery, message_id, delivery_error, rev, body, kind, confirmed_at, deleted_at"
 
+// sel is the visible decisions matching where; selAny also reads hidden ones.
 func (ib *Inbox) sel(where string, args ...any) ([]Decision, error) {
+	return ib.selAny("deleted_at = '' AND ("+where+")", args...)
+}
+
+func (ib *Inbox) selAny(where string, args ...any) ([]Decision, error) {
 	rows, err := ib.conn.QueryContext(ctx, "SELECT "+columns+" FROM decisions WHERE "+where, args...)
 	if err != nil {
 		return nil, err
@@ -532,7 +554,7 @@ func (ib *Inbox) sel(where string, args ...any) ([]Decision, error) {
 		if err := rows.Scan(&d.ID, &d.Task, &d.Seq, &gate, &d.SessionID, &d.SessionName,
 			&d.Question, &d.Context, &d.Rec, &d.Status, &amended, &d.AnswerKind,
 			&d.AnswerOption, &d.AnswerText, &d.Note, &d.CreatedAt, &d.UpdatedAt,
-			&d.AnsweredAt, &d.Delivery, &d.MessageID, &d.DeliveryError, &d.Rev, &d.Body, &d.Kind, &d.ConfirmedAt); err != nil {
+			&d.AnsweredAt, &d.Delivery, &d.MessageID, &d.DeliveryError, &d.Rev, &d.Body, &d.Kind, &d.ConfirmedAt, &d.DeletedAt); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
@@ -601,18 +623,21 @@ func (ib *Inbox) LastClosed() (string, error) {
 	defer ib.mu.Unlock()
 	var at string
 	err := ib.conn.QueryRowContext(ctx, "SELECT COALESCE(MAX(at), '') FROM ("+
-		"SELECT MAX(answered_at) AS at FROM decisions WHERE answered_at != ''"+
-		" UNION ALL SELECT MAX(read_at) FROM notes WHERE read_at != '')").Scan(&at)
+		"SELECT MAX(answered_at) AS at FROM decisions WHERE answered_at != '' AND deleted_at = ''"+
+		" UNION ALL SELECT MAX(read_at) FROM notes WHERE read_at != '' AND deleted_at = '')").Scan(&at)
 	return at, dbErr(err)
 }
 
 func (ib *Inbox) get(id string) (Decision, error) {
-	found, err := ib.sel("id = ?", id)
+	found, err := ib.selAny("id = ?", id)
 	if err != nil {
 		return Decision{}, err
 	}
-	if len(found) == 0 {
+	switch {
+	case len(found) == 0:
 		return Decision{}, errf(1, "no decision %s", id)
+	case found[0].DeletedAt != "":
+		return Decision{}, errf(1, "%s is deleted", id)
 	}
 	return found[0], nil
 }

@@ -1,0 +1,7 @@
+step 159 del-ask-2
+args: ["ask" "50" "-q" "More?" "-o" "a" "-o" "b" "--session" "s1"]
+exit: 0
+-- stdout --
+50.2
+-- stderr --
+-- sends --

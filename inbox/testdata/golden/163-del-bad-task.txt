@@ -1,0 +1,4 @@
+step 163 del-bad-task
+args: ["delete" "--task" "5x"]
+exit: 2
+(usage error: output not compared)

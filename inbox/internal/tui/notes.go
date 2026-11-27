@@ -70,7 +70,8 @@ func (m *Model) cursorNote() (inbox.Note, bool) {
 	return inbox.Note{}, false
 }
 
-// refreshNote takes the open note's latest row from the snapshot.
+// refreshNote takes the open note's latest row from the snapshot. A note the
+// snapshot no longer holds (deleted) sends its screen back to where it opened.
 func (m *Model) refreshNote() {
 	for _, list := range [][]inbox.Note{m.snap.notes, m.snap.failedNotes} {
 		for _, n := range list {
@@ -79,6 +80,16 @@ func (m *Model) refreshNote() {
 				return
 			}
 		}
+	}
+	if m.snap.thread != nil {
+		for _, it := range m.snap.thread.Items {
+			if it.Note != nil && it.Note.ID == m.note.ID {
+				return
+			}
+		}
+	}
+	if m.scr == scNote || m.scr == scReply {
+		m.scr, m.flash, m.flashOK, m.flashAt = m.noteFrom, "note was deleted", false, m.now()
 	}
 }
 

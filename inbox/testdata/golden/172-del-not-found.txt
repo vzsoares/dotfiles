@@ -1,0 +1,9 @@
+step 172 del-not-found
+args: ["delete" "99.9" "n999" "c999"]
+exit: 1
+-- stdout --
+-- stderr --
+no decision 99.9
+no note n999
+no chat c999
+-- sends --

@@ -77,6 +77,13 @@ every 5 minutes, so a failing board only leaves the name off. Answers are re-ask
 after 24 h. Tests set
 `ZEN_INBOX_NO_SPAWN=1` and `ZEN_BOARD_BIN`.
 
+## Delete
+
+`zen-inbox delete [ID]... [--task N] [--purge] [--dry-run] [--json]` hides notes
+(`n12`), chats (`c151`) and closed decisions (`580.1`, `580.g`); `--purge` removes
+them and their children. `zen-inbox chats [TASK] [--json]` lists chat IDs. Guards,
+exit codes and the `--task` leniency: `docs/wiki/architecture/decision-inbox.md`.
+
 ## Waiting
 
 A message for a session that is down is kept and sent when the session is back:
@@ -155,7 +162,7 @@ recipient's transcript. Schema v15 adds `delivery_log`, one row per problem,
 
 ```
 main.go             wires the CLI to the real agent-manager client and the panel
-internal/inbox      store: schema v15, IDs, guarded transitions, flush, message,
+internal/inbox      store: schema v17, IDs, guarded transitions, flush, message,
                     prod-action approvals, chief's notes, threads, chats, the
                     waiting pass, the delivery log
 internal/guard      refuses prod answers and a manual Done from inside an agent session (env, ps walk)

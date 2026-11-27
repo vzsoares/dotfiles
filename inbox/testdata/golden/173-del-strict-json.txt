@@ -1,0 +1,7 @@
+step 173 del-strict-json
+args: ["delete" "50.1" "99.9" "--json"]
+exit: 1
+-- stdout --
+{"dry_run": false, "deleted": [], "skipped": [{"id": "50.1", "reason": "open; withdraw it first"}, {"id": "99.9", "reason": "not found"}]}
+-- stderr --
+-- sends --

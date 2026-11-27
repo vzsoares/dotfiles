@@ -1,0 +1,7 @@
+step 169 del-show-hidden
+args: ["show" "40.1"]
+exit: 1
+-- stdout --
+-- stderr --
+zen-inbox: 40.1 is deleted
+-- sends --

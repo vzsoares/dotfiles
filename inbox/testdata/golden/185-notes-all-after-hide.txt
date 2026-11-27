@@ -1,0 +1,7 @@
+step 185 notes-all-after-hide
+args: ["notes" "--all" "--json"]
+exit: 0
+-- stdout --
+[]
+-- stderr --
+-- sends --

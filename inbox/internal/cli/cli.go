@@ -80,7 +80,7 @@ func (a *App) root() *cobra.Command {
 	root.SetErr(a.Stderr)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })
 	root.AddCommand(a.ask(), a.brief(), a.amend(), a.withdraw(), a.list(), a.show(),
-		a.answer(), a.resolve(), a.retry(), a.watch(), a.projects(), a.approval(), a.note(), a.notes(), a.read(), a.refile(), a.delivery())
+		a.answer(), a.resolve(), a.retry(), a.watch(), a.projects(), a.approval(), a.note(), a.notes(), a.read(), a.refile(), a.delivery(), a.delete(), a.chats())
 	return root
 }
 

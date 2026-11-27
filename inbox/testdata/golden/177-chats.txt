@@ -1,0 +1,9 @@
+step 177 chats
+args: ["chats"]
+exit: 0
+-- stdout --
+c902 · #51 · 10s · sending · later
+c901 · - · 30m · waiting · xyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…
+c900 · #50 · 3h · queued · first line of a chat
+-- stderr --
+-- sends --

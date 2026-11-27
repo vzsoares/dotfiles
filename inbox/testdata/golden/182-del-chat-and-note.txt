@@ -1,0 +1,8 @@
+step 182 del-chat-and-note
+args: ["delete" "c900" "n900"]
+exit: 0
+-- stdout --
+hid c900
+hid n900
+-- stderr --
+-- sends --

@@ -496,10 +496,48 @@ Setup checklist (this Mac and the phone only):
 5. On cellular with Wi-Fi off: connect, run `zen-cockpit`, answer a test ask,
    approve a test prod ask.
 
+## Delete (#1110)
+
+`zen-inbox delete [ID]... [--task N] [--purge] [--dry-run] [--json]` takes notes
+(`n12`), chats (`c151`) and closed decisions (`580.1`, gates `580.g`, `580.g2`) out
+of the inbox. It hides by default (stamps `deleted_at`); `--purge` removes the rows
+and their children (note replies; a decision's options, drafts and prod action). A
+bare number or any other shape is exit 2. `zen-inbox chats [TASK] [--json]` lists the
+visible chats newest first, which is where chat IDs show.
+
+- **Anyone may run it.** No access guard; the guards are about row state.
+- **Refused** (exit 1, nothing written): an open decision (`withdraw it first`); a
+  decision whose delivery is `held`, `sending` or `waiting`; a `--prod` ask answered
+  Approve, used or not (the audit trail); a chat or note reply `sending` under 60 s
+  (`in flight; try again in a minute`); an unknown or already hidden ID (hiding twice).
+  Allowed: `none`, `sent` and `failed` deliveries (the cleanup for a stuck one),
+  withdrawn, Hold, free-text and talk-resolved prod asks, and a `waiting` chat or reply,
+  which the delete cancels: reads skip hidden rows, so `Pass` and `retry --waiting`
+  never send it.
+- **Strict vs lenient.** Explicit IDs are strict: one failure writes nothing and exits 1
+  with every reason. `--task N` takes every decision, note and chat of the task and
+  skips what a guard keeps, listing each (`skipped 580.3: open; withdraw it first`),
+  exit 0. Both can be mixed; a failing explicit ID stops the task rows too.
+- **One transaction.** Checks and writes share one `BEGIN IMMEDIATE`, so a concurrent
+  answer, flush, retry or pass lands before the delete (which then sees the new state)
+  or sees the row gone.
+- **Hidden means gone.** Every read skips `deleted_at != ''` (`list`, `show` which says
+  `580.1 is deleted`, `notes`, `chats`, threads, the panel, the failed/waiting/held
+  groups, `retry`, the flush, `Pass`, the `projects` backfill). Only ID allocation,
+  `approval` reads and the delete itself read hidden rows. Hide leaves `read_at`,
+  status and delivery alone; the 30-day prune of read notes still removes hidden ones.
+- **IDs never come back.** Purge first writes the row's seq into `decision_seq`
+  (`task, gate, seq`, a high-water mark); allocation takes the larger of `MAX(seq)` and
+  the mark.
+- `--dry-run` runs the same checks and prints `would hide …` / `would purge …`;
+  `--json` is `{dry_run, deleted: [{id, kind, mode}], skipped: [{id, reason}]}`. No y/N
+  prompt. No panel key and no undo yet.
+
 ## IDs
 
 `<task>.<n>` with n = 1 + the highest n ever used for that task (withdrawn included);
-gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get reused.
+gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get reused,
+not even after `delete --purge` (see Delete).
 
 ## Storage
 
@@ -516,6 +554,10 @@ mapped project). v16 adds `task_projects (task, project, checked_at)`; an empty
 again after 24 h; until the new one lands the stored tag keeps showing. The name's colour is
 a hash into an 8-colour adaptive palette (`tui/tags.go`).
 
+v17 adds `deleted_at TEXT NOT NULL DEFAULT ''` to `decisions`, `notes` and `chats`, and
+`decision_seq (task, gate, seq, PRIMARY KEY (task, gate))`; the migration fills nothing.
+It is additive: a v16 reader keeps working on a v17 db but shows hidden rows.
+
 The board never blocks anything: `ask` and `note` file first, then start a detached
 `zen-inbox projects <task>`; the panel also retries unanswered tasks off the render
 path every 5 minutes (`tui/projects.go`). A lookup that fails or times out (8 s)
@@ -525,7 +567,7 @@ names the lookup binary; `ZEN_INBOX_NO_SPAWN` stops the detached start (tests).
 
 `<vault>/config/zen-flow.db` (vault from `~/.claude/second-brain.json`, gitignored
 there); `ZEN_FLOW_DB` overrides it for tests. Schema version in `PRAGMA user_version`,
-now 16. Tables `decisions` and `decision_options` use generic names because the db is
+now 17. Tables `decisions` and `decision_options` use generic names because the db is
 meant to hold other zen-flow state later. v2 adds `decision_briefs (session_id, task,
 title, brief, updated_at)`, keyed by session and task; `connect()` migrates inside its
 `BEGIN IMMEDIATE` guard, so concurrent first opens are safe and a v1 reader keeps

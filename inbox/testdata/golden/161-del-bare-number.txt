@@ -1,0 +1,4 @@
+step 161 del-bare-number
+args: ["delete" "50"]
+exit: 2
+(usage error: output not compared)

@@ -166,8 +166,9 @@ func (ib *Inbox) Ask(in AskInput) (Decision, error) {
 	err := ib.immediate(func() error {
 		var seq int64
 		if err := ib.conn.QueryRowContext(ctx,
-			"SELECT COALESCE(MAX(seq), 0) FROM decisions WHERE task = ? AND gate = ?",
-			in.Task, gate).Scan(&seq); err != nil {
+			"SELECT MAX(COALESCE((SELECT MAX(seq) FROM decisions WHERE task = ? AND gate = ?), 0),"+
+				" COALESCE((SELECT seq FROM decision_seq WHERE task = ? AND gate = ?), 0))",
+			in.Task, gate, in.Task, gate).Scan(&seq); err != nil {
 			return err
 		}
 		seq++

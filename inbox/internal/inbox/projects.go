@@ -97,8 +97,8 @@ func (ib *Inbox) Unresolved() ([]string, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	rows, err := ib.conn.QueryContext(ctx, "SELECT task FROM ("+
-		"SELECT task FROM decisions WHERE task != '' AND status = 'open'"+
-		" UNION SELECT task FROM notes WHERE task != '' AND "+visibleNotes+") "+
+		"SELECT task FROM decisions WHERE task != '' AND status = 'open' AND deleted_at = ''"+
+		" UNION SELECT task FROM notes WHERE task != '' AND deleted_at = '' AND "+visibleNotes+") "+
 		"WHERE task NOT IN (SELECT task FROM task_projects WHERE checked_at >= ?) ORDER BY task",
 		Stamp(Now().Add(-VisibleFor)), Stamp(Now().Add(-ProjectTTL)))
 	if err != nil {

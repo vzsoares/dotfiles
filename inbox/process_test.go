@@ -173,7 +173,7 @@ func TestConcurrentFirstOpensOfV1DB(t *testing.T) {
 			t.Fatalf("%+v", r)
 		}
 	}
-	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "16" {
+	if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "17" {
 		t.Fatal(v)
 	}
 }
@@ -195,7 +195,7 @@ func TestPythonDBsOpenListAndAnswer(t *testing.T) {
 			}
 		}
 		expect("open")
-		if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "16" {
+		if v := strings.TrimSpace(f.sqlite("PRAGMA user_version")); v != "17" {
 			t.Fatalf("user_version %s", v)
 		}
 		f.zen(now, "answer", "7.1", "b")
@@ -273,5 +273,72 @@ func TestForcedWithdrawByOtherSessionStillSends(t *testing.T) {
 	}
 	if s := f.sends(); len(s) != 1 || s[0][1] != "s1" || !slices.Contains(s[0], "--from") {
 		t.Fatal(s)
+	}
+}
+
+// A delete racing the answer that flushes its held batch: the held 7.1 is
+// refused before the flush, hidden after it, and its answer goes out once.
+func TestConcurrentDeleteRacingAnswerAndFlush(t *testing.T) {
+	var refused, hidden int
+	for round := range 12 {
+		f := newFake(t)
+		for range 2 {
+			f.zen(nil, "ask", "7", "-q", "Q?", "-o", "a", "-o", "b", "--session", "s1")
+		}
+		if r := f.zen(nil, "answer", "7.1", "a"); r.code != 0 {
+			t.Fatalf("%+v", r)
+		}
+		cmds := []*exec.Cmd{f.cmd(nil, zenBin, "answer", "7.2", "a"), f.cmd(nil, zenBin, "delete", "7.1")}
+		if round%2 == 1 {
+			cmds[0], cmds[1] = cmds[1], cmds[0]
+		}
+		rs := parallel(cmds)
+		if round%2 == 1 {
+			rs[0], rs[1] = rs[1], rs[0]
+		}
+		if rs[0].code != 0 || strings.Contains(rs[1].stderr, "locked") {
+			t.Fatalf("round %d: %+v", round, rs)
+		}
+		sends := f.sends()
+		if len(sends) != 1 || !strings.Contains(sends[0][2], "7.1 ") || !strings.Contains(sends[0][2], "7.2 ") {
+			t.Fatalf("round %d: sends %q", round, sends)
+		}
+		state := strings.TrimSpace(f.sqlite("SELECT delivery, deleted_at != '' FROM decisions WHERE id = '7.1'"))
+		switch rs[1].code {
+		case 0:
+			hidden++
+			if state != "sent|1" {
+				t.Fatalf("round %d: delete won but the row is %q", round, state)
+			}
+		case 1:
+			refused++
+			if state != "sent|0" || !strings.Contains(rs[1].stderr, "has an answer waiting for delivery") {
+				t.Fatalf("round %d: delete lost but the row is %q: %+v", round, state, rs[1])
+			}
+			if r := f.zen(nil, "delete", "7.1"); r.code != 0 {
+				t.Fatalf("round %d: delete after the flush: %+v", round, r)
+			}
+		default:
+			t.Fatalf("round %d: %+v", round, rs[1])
+		}
+	}
+	t.Logf("delete won %d, was refused %d", hidden, refused)
+}
+
+// Two deletes of one row: one hides it, the other is refused as already deleted.
+func TestConcurrentDeletesOfOneRowHideItOnce(t *testing.T) {
+	f := newFake(t)
+	f.zen(nil, "ask", "7", "-q", "Q?", "-o", "a", "-o", "b", "--session", "s1")
+	f.zen(nil, "answer", "7.1", "a")
+	var cmds []*exec.Cmd
+	for range 6 {
+		cmds = append(cmds, f.cmd(nil, zenBin, "delete", "7.1"))
+	}
+	codes := map[int]int{}
+	for _, r := range parallel(cmds) {
+		codes[r.code]++
+	}
+	if codes[0] != 1 || codes[1] != 5 {
+		t.Fatalf("exit codes %v", codes)
 	}
 }

@@ -504,12 +504,12 @@ func TestRetryTakesWaitingRowsAndKeepsThemWaitingWhileDown(t *testing.T) {
 
 // v12Tables are the tables a v12 db holds, with the columns a v12 binary reads.
 var v12Tables = map[string]string{
-	"decisions":        columns,
+	"decisions":        pre17(columns),
 	"decision_options": "decision_id, letter, text",
 	"decision_briefs":  "session_id, task, title, brief, updated_at",
 	"prod_actions":     "decision_id, action, repo, branch, sha, used_at, used_by, cmd, pushed_sha, pushed_at, pushed_by",
 	"decision_drafts":  "decision_id, kind, option, text, rev, updated_at",
-	"notes":            noteColumns,
+	"notes":            pre17(noteColumns),
 	"note_replies":     "id, note_id, text, replied_at",
 	"chats":            "id, task, text, sent_at, message_id, status, error",
 }
@@ -546,7 +546,13 @@ func TestV12DumpMigratesToLatest(t *testing.T) {
 	for table := range v12Tables {
 		want := before[table]
 		if table == "chats" {
-			want = strings.Replace(want, "\n)", "\n, claimed_at TEXT NOT NULL DEFAULT '')", 1)
+			want = strings.Replace(want, "\n)", "\n, claimed_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '')", 1)
+		}
+		switch table {
+		case "notes":
+			want = withDeleted(want)
+		case "decisions":
+			want = strings.Replace(want, "confirmed_at TEXT NOT NULL DEFAULT '',", "confirmed_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '',", 1)
 		}
 		if got := createSQL(t, ib.conn, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)

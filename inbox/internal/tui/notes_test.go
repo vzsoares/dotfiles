@@ -501,3 +501,21 @@ func TestNoteRowsShowUnreadAsBoldAndReadAsFaint(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenNoteDeletedUnderTheScreenGoesBackToTheList(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
+	d := newDrv(t, 92, 30)
+	d.addNote("707", "Doomed", "body")
+	d.poll()
+	d.keys("enter")
+	if d.m.scr != scNote {
+		t.Fatalf("not on the note:\n%s", d.view())
+	}
+	if res, err := d.other.Delete([]string{"n1"}, "", false, false); err != nil || res.Refused {
+		t.Fatalf("%+v %v", res, err)
+	}
+	d.poll()
+	if d.m.scr != scList || !strings.Contains(d.view(), "note was deleted") {
+		t.Fatalf("screen %v:\n%s", d.m.scr, d.view())
+	}
+}

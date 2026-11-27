@@ -1,0 +1,4 @@
+step 162 del-bad-id
+args: ["delete" "x1"]
+exit: 2
+(usage error: output not compared)

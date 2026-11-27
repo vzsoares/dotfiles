@@ -48,7 +48,7 @@ func TestV11DBMigratesToV12KeepingRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	v11Columns := strings.TrimSuffix(columns, ", kind, confirmed_at")
+	v11Columns := strings.TrimSuffix(columns, ", kind, confirmed_at, deleted_at")
 	create := createSQL(t, raw, "decisions")
 	before := tableRows(t, raw, "decisions", v11Columns)
 	_ = raw.Close()
@@ -61,7 +61,7 @@ func TestV11DBMigratesToV12KeepingRows(t *testing.T) {
 		t.Fatalf("user_version %d", v)
 	}
 	const body = "body TEXT NOT NULL DEFAULT '',"
-	want := strings.Replace(create, body, body+" kind TEXT NOT NULL DEFAULT '', confirmed_at TEXT NOT NULL DEFAULT '',", 1)
+	want := strings.Replace(create, body, body+" kind TEXT NOT NULL DEFAULT '', confirmed_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '',", 1)
 	if got := createSQL(t, ib.conn, "decisions"); got != want {
 		t.Fatalf("decisions:\n%s", got)
 	}

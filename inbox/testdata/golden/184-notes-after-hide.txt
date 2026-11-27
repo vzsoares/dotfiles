@@ -1,0 +1,6 @@
+step 184 notes-after-hide
+args: ["notes"]
+exit: 0
+-- stdout --
+-- stderr --
+-- sends --

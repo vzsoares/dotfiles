@@ -186,3 +186,7 @@ Pages updated: architecture/decision-inbox.md
 ## [2026-11-27] feat | zen-inbox leads each decision and note with its board project (#1094)
 `zen-board project` reads the task's project (vault `projects[].tag` as display name); `task_projects` (schema v16) stores it; asks and notes file first, a detached `zen-inbox projects` and the panel's retry resolve it; `zen-inbox projects` is the one-off backfill. A failing board leaves the row untagged.
 Pages updated: architecture/decision-inbox.md
+
+## [2026-11-27] feat | zen-inbox delete and chats commands (#1110)
+`zen-inbox delete` hides (or `--purge`s) notes, chats and closed decisions behind state guards, in one `BEGIN IMMEDIATE`; schema v17 adds `deleted_at` and `decision_seq` so purged IDs are never reused; `zen-inbox chats` lists chat IDs. A v16 reader shows hidden rows.
+Pages updated: architecture/decision-inbox.md

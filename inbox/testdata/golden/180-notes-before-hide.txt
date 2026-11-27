@@ -1,0 +1,7 @@
+step 180 notes-before-hide
+args: ["notes"]
+exit: 0
+-- stdout --
+n900	unread	chief	#50	Ready
+-- stderr --
+-- sends --

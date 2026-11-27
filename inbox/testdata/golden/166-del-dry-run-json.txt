@@ -1,0 +1,7 @@
+step 166 del-dry-run-json
+args: ["delete" "40.1" "--dry-run" "--json"]
+exit: 0
+-- stdout --
+{"dry_run": true, "deleted": [{"id": "40.1", "kind": "decision", "mode": "hide"}], "skipped": []}
+-- stderr --
+-- sends --

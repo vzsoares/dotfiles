@@ -3,6 +3,7 @@ package inbox
 import (
 	"database/sql"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,7 @@ const schemaV13 = `
 ALTER TABLE chats ADD COLUMN claimed_at TEXT NOT NULL DEFAULT '';
 `
 
-const chatColumns = "id, task, text, sent_at, message_id, status, error, claimed_at"
+const chatColumns = "id, task, text, sent_at, message_id, status, error, claimed_at, deleted_at"
 
 // Chat is one message the panel wrote to chief; Task is blank outside a
 // thread and SentAt is when it was written. Status is sending (claimed by a
@@ -41,6 +42,7 @@ type Chat struct {
 	ID                       int64
 	Task, Text, SentAt       string
 	MessageID, Status, Error string
+	DeletedAt                string
 	ClaimedAt                string
 	// Waited is set by claimChat when chief being down kept the chat waiting;
 	// a chat that only queued behind another is not Waited.
@@ -77,7 +79,7 @@ func (ib *Inbox) AddChat(task, text string) (Chat, error) {
 	c := Chat{Task: task, Text: text, SentAt: stamp(), Status: "sending"}
 	err := ib.immediate(func() error {
 		var behind int64
-		err := ib.conn.QueryRowContext(ctx, "SELECT id FROM chats WHERE status IN ('waiting', 'sending') ORDER BY id DESC LIMIT 1").Scan(&behind)
+		err := ib.conn.QueryRowContext(ctx, "SELECT id FROM chats WHERE deleted_at = '' AND status IN ('waiting', 'sending') ORDER BY id DESC LIMIT 1").Scan(&behind)
 		switch {
 		case err == nil:
 			c.Status, c.Error = "waiting", QueuedBehind+strconv.FormatInt(behind, 10)
@@ -223,7 +225,12 @@ func (ib *Inbox) PendingChats(done []string) ([]Chat, error) {
 	return cs, dbErr(err)
 }
 
+// selChats is the visible chats matching where; selChatsAny also reads hidden ones.
 func (ib *Inbox) selChats(where string, args ...any) ([]Chat, error) {
+	return ib.selChatsAny("deleted_at = '' AND ("+where+")", args...)
+}
+
+func (ib *Inbox) selChatsAny(where string, args ...any) ([]Chat, error) {
 	rows, err := ib.conn.QueryContext(ctx, "SELECT "+chatColumns+" FROM chats WHERE "+where+" ORDER BY id", args...)
 	if err != nil {
 		return nil, err
@@ -232,7 +239,7 @@ func (ib *Inbox) selChats(where string, args ...any) ([]Chat, error) {
 	var out []Chat
 	for rows.Next() {
 		var c Chat
-		if err := rows.Scan(&c.ID, &c.Task, &c.Text, &c.SentAt, &c.MessageID, &c.Status, &c.Error, &c.ClaimedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Task, &c.Text, &c.SentAt, &c.MessageID, &c.Status, &c.Error, &c.ClaimedAt, &c.DeletedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -252,4 +259,30 @@ func (ib *Inbox) Chat(id int64) (Chat, error) {
 		return Chat{}, errf(1, "no chat c%d", id)
 	}
 	return cs[0], nil
+}
+
+// Chats lists the visible chats newest first, those of task when it is set.
+func (ib *Inbox) Chats(task string) ([]Chat, error) {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	where, args := "1", []any(nil)
+	if task != "" {
+		where, args = "task = ?", []any{task}
+	}
+	cs, err := ib.selChats(where, args...)
+	slices.Reverse(cs)
+	return cs, dbErr(err)
+}
+
+// JSON is the chat as `zen-inbox chats --json` prints it.
+func (c Chat) JSON() pyfmt.Object {
+	return pyfmt.Object{
+		{Key: "id", Value: c.Label()},
+		{Key: "task", Value: c.Task},
+		{Key: "text", Value: c.Text},
+		{Key: "sent_at", Value: c.SentAt},
+		{Key: "status", Value: c.Status},
+		{Key: "message_id", Value: c.MessageID},
+		{Key: "error", Value: c.Error},
+	}
 }

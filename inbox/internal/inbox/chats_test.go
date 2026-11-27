@@ -52,7 +52,7 @@ var v9Tables = map[string]string{
 	"decision_briefs":  "session_id, task, title, brief, updated_at",
 	"prod_actions":     "decision_id, action, repo, branch, sha, used_at, used_by, cmd, pushed_sha, pushed_at, pushed_by",
 	"decision_drafts":  "decision_id, kind, option, text, rev, updated_at",
-	"notes":            noteColumns,
+	"notes":            pre17(noteColumns),
 	"note_replies":     "id, note_id, text, replied_at",
 }
 
@@ -91,6 +91,9 @@ func TestV9DumpMigratesToV10(t *testing.T) {
 		want := before[table]
 		if table == "decisions" {
 			want = withAdded(want)
+		}
+		if table == "notes" {
+			want = withDeleted(want)
 		}
 		if got := createSQL(t, ib.conn, table); got != want {
 			t.Fatalf("%s changed:\n%s\n%s", table, got, want)

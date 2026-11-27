@@ -14,6 +14,9 @@ import (
 var goldenPython = flag.String("golden-python", "",
 	"capture goldens with this command (e.g. \"uv run -q --script testdata/golden/pyshim.py\")")
 
+var goldenWrite = flag.Bool("golden-write", false,
+	"rewrite the goldens from the Go binary (steps that postdate inbox.py)")
+
 const goldenNow = "2026-01-01T12:00:00+00:00"
 
 type gstep struct {
@@ -230,6 +233,42 @@ func goldenScenario() []gstep {
 		named("retry-neither", plain("retry")),
 		named("retry-both", plain("retry", "s12", "--waiting")),
 	)
+	// Not from inbox.py: delete and chats (#1110).
+	steps = append(steps,
+		named("del-ask", plain("ask", "50", "-q", "Cleanup?", "-o", "a", "-o", "b", "--session", "s1")),
+		named("del-ask-2", plain("ask", "50", "-q", "More?", "-o", "a", "-o", "b", "--session", "s1")),
+		named("del-no-target", usage("delete")),
+		named("del-bare-number", usage("delete", "50")),
+		named("del-bad-id", usage("delete", "x1")),
+		named("del-bad-task", usage("delete", "--task", "5x")),
+		named("del-open", plain("delete", "50.1")),
+		named("del-dry-run", plain("delete", "40.1", "--dry-run")),
+		named("del-dry-run-json", plain("delete", "40.1", "--dry-run", "--json")),
+		named("del-hide", plain("delete", "40.1")),
+		named("del-hide-again", plain("delete", "40.1")),
+		named("del-show-hidden", plain("show", "40.1")),
+		named("del-list-after-hide", plain("list", "--all")),
+		named("del-purge-json", plain("delete", "40.1", "--purge", "--json")),
+		named("del-not-found", plain("delete", "99.9", "n999", "c999")),
+		named("del-strict-json", plain("delete", "50.1", "99.9", "--json")),
+		named("del-task-lenient", plain("delete", "--task", "50")),
+		named("del-task-lenient-json", plain("delete", "--task", "50", "--json")),
+		gstep{name: "del-seed", args: []string{"chats"}, sql: "INSERT INTO chats (id, task, text, sent_at, status, claimed_at)" +
+			" VALUES (900, '50', 'first line of a chat\nsecond line', '2026-01-01T09:00:00+00:00', 'queued', '')," +
+			" (901, '', 'x' || printf('%.80c', 'y'), '2026-01-01T11:30:00+00:00', 'waiting', '')," +
+			" (902, '51', 'later', '2026-01-01T11:59:50+00:00', 'sending', '2026-01-01T11:59:50+00:00');" +
+			" INSERT INTO notes (id, task, session_id, session_name, title, created_at)" +
+			" VALUES (900, '50', 'c1', 'chief', 'Ready', '2026-01-01T11:00:00+00:00')"},
+		named("chats", plain("chats")),
+		named("chats-json", plain("chats", "--json")),
+		named("chats-task", plain("chats", "50")),
+		named("notes-before-hide", plain("notes")),
+		named("del-chat-in-flight", plain("delete", "c902")),
+		named("del-chat-and-note", plain("delete", "c900", "n900")),
+		named("chats-after-hide", plain("chats")),
+		named("notes-after-hide", plain("notes")),
+		named("notes-all-after-hide", plain("notes", "--all", "--json")),
+	)
 	return steps
 }
 
@@ -289,7 +328,7 @@ func TestGolden(t *testing.T) {
 		got := renderStep(i, st, r, all[seen:], f.root)
 		seen = len(all)
 		path := goldenPath(i, st)
-		if *goldenPython != "" {
+		if *goldenPython != "" || *goldenWrite {
 			if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 				t.Fatal(err)
 			}

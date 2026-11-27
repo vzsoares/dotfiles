@@ -1,0 +1,7 @@
+step 171 del-purge-json
+args: ["delete" "40.1" "--purge" "--json"]
+exit: 0
+-- stdout --
+{"dry_run": false, "deleted": [{"id": "40.1", "kind": "decision", "mode": "purge"}], "skipped": []}
+-- stderr --
+-- sends --
