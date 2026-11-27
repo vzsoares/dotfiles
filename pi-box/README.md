@@ -65,7 +65,7 @@ workspace, 3 that task's container is already running, 4 over the spend cap,
 
 ## agent-manager
 
-pi runs in `tuiMode: "regular"` here so tmux copy-mode handles scrolling (the wheel, Enter to jump back down). `link` adds the key to an existing `agent/settings.json` only when missing; `/settings` or removing the key switches back to fullscreen.
+pi runs in `tuiMode: "regular"` here so tmux copy-mode handles scrolling (the wheel, Enter to jump back down). `link` adds the key to an existing `agent/settings.json` only when missing, so set `tuiMode` to `fullscreen` (via `/settings`) rather than removing it.
 
 `./pi-box/link` also links `~/pi-box/shim/pi` to the wrapper and, when
 agent-manager is installed, sets the `pi-box` env profile

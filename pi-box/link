@@ -78,8 +78,8 @@ if "tuiMode" in data:
     sys.exit(0)
 data["tuiMode"] = want
 fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".settings.json.")
-with os.fdopen(fd, "w") as f:
-    json.dump(data, f, indent=4)
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=4, ensure_ascii=False)
     f.write("\n")
 os.chmod(tmp, 0o644)
 os.replace(tmp, path)
