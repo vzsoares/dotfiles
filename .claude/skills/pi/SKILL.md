@@ -210,6 +210,8 @@ Source: https://docs.pi.dev/latest/security, https://docs.pi.dev/latest/containe
 - `agents/settings.json`, `agents/models.json`, `agents/mcp.json` →
   linked into `~/.pi/agent` by `agents/link pi` (with `.claude/CLAUDE.md` as
   `AGENTS.md`). `agents/mcp.json` is the one MCP list for every agent.
+- pi runs in `tuiMode: "regular"` (host and pi-box) so tmux copy-mode handles
+  scrolling; `/settings` or removing the key switches back to fullscreen.
 - Shared skills (this one, `wiki`, `second-brain`) are linked into
   `~/.agents/skills`, `~/.codex/skills` and `~/.gemini/config/skills` by
   `agents/link`; Claude Code gets them through `./link-claude`.

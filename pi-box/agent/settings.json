@@ -1,5 +1,6 @@
 {
     "defaultProvider": "venice",
     "defaultModel": "glm-5-3-flash-uncensored",
-    "defaultProjectTrust": "always"
+    "defaultProjectTrust": "always",
+    "tuiMode": "regular"
 }

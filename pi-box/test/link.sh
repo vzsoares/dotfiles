@@ -93,6 +93,39 @@ PATH="$base" bash "$LINK" --force >/dev/null
   [ "$(cat "$TMP/host.json")" = '{"secret":"host"}' ]
 check "--force replaces a symlinked mcp.json, not its target" $?
 
+S="$R/agent/settings.json"
+key() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2]))' "$S" "$1"; }
+[ "$(key tuiMode)" = regular ]
+check "a first run copies settings.json with tuiMode regular" $?
+echo '{"lastChangelogVersion":"1.5.2","defaultModel":"mine"}' >"$S"
+PATH="$base" bash "$LINK" >/dev/null
+[ "$(key tuiMode)" = regular ] && [ "$(key lastChangelogVersion)" = 1.5.2 ] &&
+  [ "$(key defaultModel)" = mine ]
+check "a re-run adds a missing tuiMode and keeps the other keys" $?
+echo '{"tuiMode":"fullscreen","x":1}' >"$S"
+PATH="$base" bash "$LINK" >/dev/null
+[ "$(key tuiMode)" = fullscreen ] && [ "$(key x)" = 1 ]
+check "a re-run keeps an existing tuiMode" $?
+PATH="$base" bash "$LINK" --force >/dev/null
+[ "$(key tuiMode)" = regular ] && cmp -s "$S" "$HERE/../agent/settings.json"
+check "--force resets settings.json to the template" $?
+printf '{"tuiMode": ' >"$S"
+cp "$S" "$TMP/bad.json"
+! PATH="$base" bash "$LINK" >/dev/null 2>&1 && cmp -s "$S" "$TMP/bad.json"
+check "a malformed settings.json fails and stays byte-identical" $?
+rm -f "$S"
+echo '{"secret":"host"}' >"$TMP/host-settings.json"
+ln -s "$TMP/host-settings.json" "$S"
+! PATH="$base" bash "$LINK" >/dev/null 2>&1 && [ -L "$S" ] &&
+  [ "$(cat "$TMP/host-settings.json")" = '{"secret":"host"}' ]
+check "refuses a symlinked settings.json without following it" $?
+rm -f "$S"
+
+for f in "$HERE/../../agents/settings.json" "$HERE/../agent/settings.json"; do
+  python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("tuiMode") != "regular")' "$f"
+  check "$(basename "$(dirname "$f")")/settings.json parses with tuiMode regular" $?
+done
+
 echo
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failed"
