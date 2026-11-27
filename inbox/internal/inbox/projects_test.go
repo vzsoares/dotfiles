@@ -2,6 +2,8 @@ package inbox
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -70,5 +72,26 @@ func TestResolveProjectsSkipsAFailingBoardAndStoresNothing(t *testing.T) {
 	d, err := ib.Ask(AskInput{Task: "31", Question: "still files?", Options: []string{"a", "b"}, SessionID: "s1", Name: "spec-s1"})
 	if err != nil || d.ID != "31.2" {
 		t.Fatalf("ask after failure: %+v %v", d, err)
+	}
+}
+
+func fakeBoard(t *testing.T, script string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "zen-board")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestBoardLookupTreatsNotFoundAsNoProjectAndOtherFailuresAsRetryable(t *testing.T) {
+	if tag, err := BoardLookup(fakeBoard(t, "exit 2"))("spec-s2"); tag != "" || err != nil {
+		t.Fatalf("not found: %q %v", tag, err)
+	}
+	if _, err := BoardLookup(fakeBoard(t, "exit 1"))("1"); err == nil {
+		t.Fatal("an API failure must stay retryable")
+	}
+	if tag, err := BoardLookup(fakeBoard(t, `echo '{"tag": "Fakeproj"}'`))("1"); tag != "Fakeproj" || err != nil {
+		t.Fatalf("%q %v", tag, err)
 	}
 }

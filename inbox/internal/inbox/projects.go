@@ -3,6 +3,7 @@ package inbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os/exec"
 	"strings"
 	"time"
@@ -22,6 +23,10 @@ CREATE TABLE task_projects (
 // BoardBinEnv names the command that answers `project <task> --json`.
 const BoardBinEnv = "ZEN_BOARD_BIN"
 
+// boardNotFound is zen-board's exit for a task or reference it cannot find: a
+// permanent answer, stored as no project.
+const boardNotFound = 2
+
 // LookupTimeout bounds one board lookup.
 const LookupTimeout = 8 * time.Second
 
@@ -35,6 +40,10 @@ func BoardLookup(bin string) Lookup {
 		c, cancel := context.WithTimeout(context.Background(), LookupTimeout)
 		defer cancel()
 		out, err := exec.CommandContext(c, bin, "project", task, "--json").Output()
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == boardNotFound {
+			return "", nil
+		}
 		if err != nil {
 			return "", err
 		}
@@ -83,7 +92,7 @@ func (ib *Inbox) Unresolved() ([]string, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	rows, err := ib.conn.QueryContext(ctx, "SELECT task FROM ("+
-		"SELECT task FROM decisions WHERE status = 'open'"+
+		"SELECT task FROM decisions WHERE task != '' AND status = 'open'"+
 		" UNION SELECT task FROM notes WHERE task != '' AND "+visibleNotes+") "+
 		"WHERE task NOT IN (SELECT task FROM task_projects) ORDER BY task",
 		Stamp(Now().Add(-VisibleFor)))
