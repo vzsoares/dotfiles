@@ -73,7 +73,8 @@ Every decision and note leads with its board project in its stable colour (list 
 and note headers). `zen-inbox projects [TASK]...` asks `zen-board project` and stores the
 answer in `task_projects`; with no task it is the backfill over every open decision and
 visible note without an answer. `ask`/`note` start it detached, and the panel retries
-every 5 minutes, so a failing board only leaves the chip off. Tests set
+every 5 minutes, so a failing board only leaves the name off. Answers are re-asked
+after 24 h. Tests set
 `ZEN_INBOX_NO_SPAWN=1` and `ZEN_BOARD_BIN`.
 
 ## Waiting

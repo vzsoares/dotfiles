@@ -512,7 +512,8 @@ tags and has one fixed colour each, with no project the type shows alone. The pr
 session's group. `zen-board project <task> --json` returns `{id, project, tag}`; `tag`
 is the vault `projects[].tag` when set, else the project name (empty for a task with no
 mapped project). v16 adds `task_projects (task, project, checked_at)`; an empty
-`project` means the board answered "none", so it is not asked again. The name's colour is
+`project` means the board answered "none". Every answer, that one included, is asked
+again after 24 h; until the new one lands the stored tag keeps showing. The name's colour is
 a hash into an 8-colour adaptive palette (`tui/tags.go`).
 
 The board never blocks anything: `ask` and `note` file first, then start a detached

@@ -1,0 +1,24 @@
+cockpit                                                                quota n/a
+  pppppppppppppppp ● decision spec-s1 · #21 · Q?
+› pppppppppppppppp ● decision spec-s2 · #22 · Q?
+  pppppppppppppppp ● note ● A fairly long note title that ne… · chief · #23 · 0s
+  pppppppppppppppp ● note ● A fairly long note title that ne… · chief · #21 · 0s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ · enter open · a answer · c chief · M all read · ? help · q quit

@@ -95,3 +95,47 @@ func TestBoardLookupTreatsNotFoundAsNoProjectAndOtherFailuresAsRetryable(t *test
 		t.Fatalf("%q %v", tag, err)
 	}
 }
+
+func TestStoredAnswersAreReaskedAfterAWholeDay(t *testing.T) {
+	t.Setenv("ZEN_INBOX_NOW", "2026-11-10T12:00:00Z")
+	ib, _, _ := open(t)
+	ask(t, ib, "41", "s1", false, "q?")
+	if err := ib.SetProject("41", "Alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := ib.Unresolved(); len(got) != 0 {
+		t.Fatalf("fresh answer asked again: %v", got)
+	}
+	if fresh, _ := ib.ProjectFresh("41"); !fresh {
+		t.Fatal("fresh answer not fresh")
+	}
+	t.Setenv("ZEN_INBOX_NOW", "2026-11-11T11:59:00Z")
+	if got, _ := ib.Unresolved(); len(got) != 0 {
+		t.Fatalf("asked before 24 h: %v", got)
+	}
+	t.Setenv("ZEN_INBOX_NOW", "2026-11-11T12:01:00Z")
+	got, _ := ib.Unresolved()
+	if !slices.Equal(got, []string{"41"}) {
+		t.Fatalf("stale answer not re-asked: %v", got)
+	}
+	if m, _ := ib.Projects(); m["41"] != "Alpha" {
+		t.Fatalf("stale tag hidden while it is re-checked: %v", m)
+	}
+	if fresh, _ := ib.ProjectFresh("41"); fresh {
+		t.Fatal("stale answer reported fresh")
+	}
+	// The board moved the task to another project.
+	ib.ResolveProjects(func(string) (string, error) { return "Beta", nil }, got)
+	if m, _ := ib.Projects(); m["41"] != "Beta" {
+		t.Fatalf("new project not picked up: %v", m)
+	}
+	// A "none" answer is re-asked the same way.
+	if err := ib.SetProject("42", ""); err != nil {
+		t.Fatal(err)
+	}
+	ask(t, ib, "42", "s1", false, "q?")
+	t.Setenv("ZEN_INBOX_NOW", "2026-11-13T00:00:00Z")
+	if got, _ = ib.Unresolved(); !slices.Contains(got, "42") {
+		t.Fatalf("a none answer was never re-asked: %v", got)
+	}
+}

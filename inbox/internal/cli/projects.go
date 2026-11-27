@@ -42,13 +42,13 @@ func (a *App) lookup() inbox.Lookup {
 	return inbox.BoardLookup(bin)
 }
 
-// resolveLater has the board asked about task in the background; a task the
-// board already answered is left alone.
+// resolveLater has the board asked about task in the background; a task answered within
+// the last day is left alone.
 func (a *App) resolveLater(ib *inbox.Inbox, task string) {
 	if a.Spawn == nil || task == "" {
 		return
 	}
-	if done, err := ib.HasProject(task); err != nil || done {
+	if done, err := ib.ProjectFresh(task); err != nil || done {
 		return
 	}
 	a.Spawn("projects", task)

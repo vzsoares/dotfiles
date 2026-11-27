@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -665,6 +666,27 @@ func PanelNoteLines(n inbox.Note, width int, at time.Time, p Painter) []string {
 func ThreadNoteLabel(n inbox.Note, at time.Time) string {
 	n.Task = ""
 	return NoteLabel(n, at)
+}
+
+// fit builds a label that is at most room cells wide by cutting its title, so
+// the age and counts after it stay. A label without a title is returned as is.
+func fit(build func(title string) string, title string, room int) string {
+	full := build(title)
+	over := lipgloss.Width(full) - room
+	if over <= 0 || title == "" {
+		return full
+	}
+	return build(pyfmt.Clip(title, max(utf8.RuneCountInString(title)-over, 1)))
+}
+
+// RowLabelFit is RowLabel cut to room cells through its title.
+func RowLabelFit(r Row, at time.Time, room int) string {
+	return fit(func(title string) string { r.Title = title; return RowLabel(r, at) }, md.Plain(r.Title), room)
+}
+
+// NoteLabelFit is NoteLabel cut to room cells through its title.
+func NoteLabelFit(n inbox.Note, at time.Time, room int) string {
+	return fit(func(title string) string { n.Title = title; return NoteLabel(n, at) }, md.Plain(n.Title), room)
 }
 
 // ThreadHead is a thread's list header: what it holds and how fresh it is.

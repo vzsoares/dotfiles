@@ -20,6 +20,10 @@ CREATE TABLE task_projects (
 );
 `
 
+// ProjectTTL is how long a stored answer stands before the board is asked
+// again, so a task moved to another project, or given one later, is picked up.
+const ProjectTTL = 24 * time.Hour
+
 // BoardBinEnv names the command that answers `project <task> --json`.
 const BoardBinEnv = "ZEN_BOARD_BIN"
 
@@ -87,15 +91,16 @@ func (ib *Inbox) Projects() (map[string]string, error) {
 }
 
 // Unresolved are the tasks of open decisions and visible notes the board has
-// not been asked about, in task order.
+// not been asked about, or not for ProjectTTL, in task order. Until a stale
+// task is answered again its stored tag keeps showing.
 func (ib *Inbox) Unresolved() ([]string, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	rows, err := ib.conn.QueryContext(ctx, "SELECT task FROM ("+
 		"SELECT task FROM decisions WHERE task != '' AND status = 'open'"+
 		" UNION SELECT task FROM notes WHERE task != '' AND "+visibleNotes+") "+
-		"WHERE task NOT IN (SELECT task FROM task_projects) ORDER BY task",
-		Stamp(Now().Add(-VisibleFor)))
+		"WHERE task NOT IN (SELECT task FROM task_projects WHERE checked_at >= ?) ORDER BY task",
+		Stamp(Now().Add(-VisibleFor)), Stamp(Now().Add(-ProjectTTL)))
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -111,12 +116,13 @@ func (ib *Inbox) Unresolved() ([]string, error) {
 	return out, dbErr(rows.Err())
 }
 
-// HasProject is whether the board was already asked about task.
-func (ib *Inbox) HasProject(task string) (bool, error) {
+// ProjectFresh is whether the board answered for task within ProjectTTL.
+func (ib *Inbox) ProjectFresh(task string) (bool, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	var n int
-	err := ib.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM task_projects WHERE task = ?", task).Scan(&n)
+	err := ib.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM task_projects WHERE task = ? AND checked_at >= ?",
+		task, Stamp(Now().Add(-ProjectTTL))).Scan(&n)
 	return n > 0, dbErr(err)
 }
 

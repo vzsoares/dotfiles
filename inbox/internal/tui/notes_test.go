@@ -75,7 +75,7 @@ func TestNotesListGoldens(t *testing.T) {
 		d := newDrv(t, sz[0], sz[1])
 		d.notesFixture()
 		v := d.view()
-		if !strings.Contains(v, "No task · 0 unread") || !strings.Contains(v, "● Task 707 merged") ||
+		if !strings.Contains(v, "No task · 0 unread") || !strings.Contains(v, "● Task 707 m") ||
 			!strings.Contains(v, "○ Session spec-s2") {
 			t.Fatalf("no notes section:\n%s", v)
 		}
