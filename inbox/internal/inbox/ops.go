@@ -15,6 +15,8 @@ const (
 	SendLimit  = 8000
 	SendMargin = 200
 	Header     = "[zen-inbox] Answers to your decisions:"
+	NoteHeader = "[zen-inbox] A note on your open decisions:"
+	LeftOpen   = "Left open: "
 )
 
 var taskRE = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -529,31 +531,57 @@ func (ib *Inbox) batch(ids []string) ([]Decision, error) {
 	return out, nil
 }
 
+// leftOpen is the open non-prod asks in the tasks of batch, which a send
+// with a note delivers ahead of; a retry recomputes it.
+func (ib *Inbox) leftOpen(sid string, batch []Decision) ([]string, error) {
+	ib.mu.Lock()
+	defer ib.mu.Unlock()
+	var out []string
+	seen := map[string]bool{}
+	for _, d := range batch {
+		if seen[d.Task] {
+			continue
+		}
+		seen[d.Task] = true
+		open, err := ib.openIDs(sid, d.Task)
+		if err != nil {
+			return nil, dbErr(err)
+		}
+		out = append(out, open...)
+	}
+	SortIDs(out)
+	return out, nil
+}
+
 // deliver sends claimed answers to the asker's target; answers for the
 // calling session are handed back instead.
 func (ib *Inbox) deliver(sid string, ids []string) (*Delivery, error) {
-	if ib.Self != "" && sid == ib.Self {
-		return ib.handBack(sid, ids)
-	}
 	batch, err := ib.batch(ids)
 	if err != nil {
 		return nil, err
 	}
+	open, err := ib.leftOpen(sid, batch)
+	if err != nil {
+		return nil, err
+	}
+	if ib.Self != "" && sid == ib.Self {
+		return ib.handBack(sid, ids, open)
+	}
 	t := answerTarget(ib.AM.Sessions(), sid, batch[0].SessionName)
 	if ib.Self != "" && t.id == ib.Self {
-		return ib.handBack(sid, ids)
+		return ib.handBack(sid, ids, open)
 	}
-	return ib.send(t, sid, batch)
+	return ib.send(t, sid, batch, open)
 }
 
 // send delivers claimed answers to t in the fewest messages that fit
 // SendLimit. A group that is held back or refused leaves itself and every
 // later group waiting (or failed) with the same error, so none is sent twice.
-func (ib *Inbox) send(t target, sid string, batch []Decision) (*Delivery, error) {
-	groups := packAnswers(batch, SendLimit)
-	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: true}
+func (ib *Inbox) send(t target, sid string, batch []Decision, open []string) (*Delivery, error) {
+	groups := packAnswers(batch, SendLimit-len(leftOpenLine(open)))
+	res := &Delivery{SessionID: sid, Target: t.id, IDs: ids(batch), OK: true, LeftOpen: open}
 	for i, g := range groups {
-		r, err := ib.sendGroup(t, sid, g)
+		r, err := ib.sendGroup(t, sid, g, open)
 		if err != nil {
 			return nil, err
 		}
@@ -585,7 +613,7 @@ func packAnswers(answers []Decision, limit int) [][]Decision {
 	var groups [][]Decision
 	for _, d := range ordered {
 		if n := len(groups); n > 0 {
-			if g := append(groups[n-1][:len(groups[n-1]):len(groups[n-1])], d); len(renderAnswers(g, -1, -1)) <= limit-SendMargin {
+			if g := append(groups[n-1][:len(groups[n-1]):len(groups[n-1])], d); len(renderAnswers(g, nil, -1, -1)) <= limit-SendMargin {
 				groups[n-1] = g
 				continue
 			}
@@ -612,11 +640,11 @@ func (ib *Inbox) settle(batch []Decision, state, mid, errText string) error {
 
 // sendGroup sends one message and records the outcome: sent, waiting when
 // there is no target and it is down or the send was deferred, else failed.
-func (ib *Inbox) sendGroup(t target, sid string, batch []Decision) (*Delivery, error) {
+func (ib *Inbox) sendGroup(t target, sid string, batch []Decision, open []string) (*Delivery, error) {
 	ok, mid, errText, deferred := false, "", t.reason, false
+	text := buildMessage(batch, open, SendLimit)
 	if t.id != "" {
 		var err error
-		text := BuildMessage(batch, SendLimit)
 		ok, mid, errText, deferred, err = ib.attempt(t.id, outgoing{batch[0].SessionName, text}, func() (bool, string, string) {
 			return ib.AM.Send(t.id, text)
 		})
@@ -650,7 +678,7 @@ func (ib *Inbox) sendGroup(t target, sid string, batch []Decision) (*Delivery, e
 		if strings.HasPrefix(errText, GaveUp) {
 			break
 		}
-		if err := ib.NoteRefusal(answers+batch[0].ID, t.id, batch[0].SessionName, BuildMessage(batch, SendLimit), errText); err != nil {
+		if err := ib.NoteRefusal(answers+batch[0].ID, t.id, batch[0].SessionName, text, errText); err != nil {
 			return nil, err
 		}
 	}
@@ -664,8 +692,8 @@ func (ib *Inbox) sendGroup(t target, sid string, batch []Decision) (*Delivery, e
 
 // FlushSession sends a session's held answers, across tasks, as one message
 // (more only when they exceed SendLimit); a task with an open non-prod ask
-// keeps its answers held.
-func (ib *Inbox) FlushSession(sid string) (*Delivery, error) {
+// keeps its answers held unless now is set (a send with a note).
+func (ib *Inbox) FlushSession(sid string, now bool) (*Delivery, error) {
 	ib.mu.Lock()
 	var held []string
 	err := ib.immediate(func() error {
@@ -680,7 +708,7 @@ func (ib *Inbox) FlushSession(sid string) (*Delivery, error) {
 				if err != nil {
 					return err
 				}
-				blocked[d.Task] = len(open) > 0
+				blocked[d.Task] = !now && len(open) > 0
 			}
 			if !blocked[d.Task] {
 				held = append(held, d.ID)
@@ -719,14 +747,14 @@ func (ib *Inbox) flush(sid, task string, self bool) (*Delivery, error) {
 		return nil, err
 	}
 	if self {
-		return ib.handBack(sid, held)
+		return ib.handBack(sid, held, nil)
 	}
 	return ib.deliver(sid, held)
 }
 
 // handBack marks claimed answers sent without agent-manager and returns the
 // message for the caller to print.
-func (ib *Inbox) handBack(sid string, ids []string) (*Delivery, error) {
+func (ib *Inbox) handBack(sid string, ids, open []string) (*Delivery, error) {
 	ib.mu.Lock()
 	defer ib.mu.Unlock()
 	batch := make([]Decision, 0, len(ids))
@@ -737,7 +765,7 @@ func (ib *Inbox) handBack(sid string, ids []string) (*Delivery, error) {
 		}
 		batch = append(batch, d)
 	}
-	msg := BuildMessage(batch, SendLimit)
+	msg := buildMessage(batch, open, SendLimit)
 	err := ib.immediate(func() error {
 		now := stamp()
 		for _, id := range ids {
@@ -751,7 +779,41 @@ func (ib *Inbox) handBack(sid string, ids []string) (*Delivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Delivery{SessionID: sid, IDs: ids, OK: true, Message: msg}, nil
+	return &Delivery{SessionID: sid, IDs: ids, OK: true, Message: msg, LeftOpen: open}, nil
+}
+
+// SendNote sends a review note that answers none of open, the asks it is
+// about; they stay open. Nothing is stored, so a failed send is only logged.
+func (ib *Inbox) SendNote(sid string, open []string, note string) (*Delivery, error) {
+	ds, err := ib.batch(open)
+	if err != nil {
+		return nil, err
+	}
+	msg := NoteMessage(note, open, SendLimit)
+	res := &Delivery{SessionID: sid, LeftOpen: open}
+	t := answerTarget(ib.AM.Sessions(), sid, ds[0].SessionName)
+	if ib.Self != "" && (sid == ib.Self || t.id == ib.Self) {
+		res.OK, res.Message = true, msg
+		return res, nil
+	}
+	res.Target, res.Error = t.id, t.reason
+	if t.id != "" {
+		var deferred bool
+		res.OK, res.MessageID, res.Error, deferred, err = ib.attempt(t.id, outgoing{ds[0].SessionName, msg}, func() (bool, string, string) {
+			return ib.AM.Send(t.id, msg)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if deferred {
+			res.Error = "rate limited: " + res.Error
+		}
+	}
+	if res.OK {
+		res.Followup = ib.AM.Followup(t.id)
+		return res, nil
+	}
+	return res, ib.NoteRefusal("note:"+sid+":"+open[0], t.id, ds[0].SessionName, msg, res.Error)
 }
 
 // Failed, crashed mid-send, or held with nothing left open in its session and
@@ -994,7 +1056,7 @@ var noteWidths = []int{2000, 1000, 500, 200, 100, 40}
 
 // renderAnswers lays out the message, clipping each question to width and
 // each note to noteWidth (negative: no clip).
-func renderAnswers(answers []Decision, width, noteWidth int) string {
+func renderAnswers(answers []Decision, open []string, width, noteWidth int) string {
 	ordered := append([]Decision(nil), answers...)
 	SortByID(ordered)
 	shared, carriers := sharedNotes(ordered)
@@ -1020,17 +1082,40 @@ func renderAnswers(answers []Decision, width, noteWidth int) string {
 		}
 		lines = append(lines, label+clip(n))
 	}
+	if len(open) > 0 {
+		lines = append(lines, leftOpenLine(open))
+	}
 	return strings.Join(lines, "\n")
 }
 
 // BuildMessage clips questions, then notes, to stay under the send limit,
 // and hard-truncates at a UTF-8 boundary as a last resort. A shared note
 // names its answers when others (older held ones) are in the message too.
-func BuildMessage(answers []Decision, limit int) string {
+func BuildMessage(answers []Decision, limit int) string { return buildMessage(answers, nil, limit) }
+
+// leftOpenLine names the asks a send went ahead of; empty when none.
+func leftOpenLine(open []string) string {
+	if len(open) == 0 {
+		return ""
+	}
+	return LeftOpen + strings.Join(open, ", ")
+}
+
+// NoteMessage is a review note sent with no answers, about the asks it leaves open.
+func NoteMessage(note string, open []string, limit int) string {
+	tail := "\n" + leftOpenLine(open)
+	budget := limit - SendMargin - len(NoteHeader) - len("\nNote: ") - len(tail)
+	if len(note) > budget {
+		note = strings.ToValidUTF8(note[:max(budget, 0)], "")
+	}
+	return NoteHeader + "\nNote: " + note + tail
+}
+
+func buildMessage(answers []Decision, open []string, limit int) string {
 	budget := limit - SendMargin
 	ordered := append([]Decision(nil), answers...)
 	SortByID(ordered)
-	build := func(width, noteWidth int) string { return renderAnswers(ordered, width, noteWidth) }
+	build := func(width, noteWidth int) string { return renderAnswers(ordered, open, width, noteWidth) }
 	var msg string
 	for _, width := range []int{-1, 200, 120, 80, 40, 20, 0} {
 		if msg = build(width, -1); len(msg) <= budget {

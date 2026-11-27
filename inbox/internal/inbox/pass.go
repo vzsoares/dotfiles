@@ -118,7 +118,11 @@ func (ib *Inbox) passAnswers(p *passRun, b Batch) (*Outcome, error) {
 		return nil, err
 	}
 	p.sent[t.id] = true
-	res, err := ib.send(t, b.SessionID, batch)
+	open, err := ib.leftOpen(b.SessionID, batch)
+	if err != nil {
+		return nil, err
+	}
+	res, err := ib.send(t, b.SessionID, batch, open)
 	if err != nil {
 		return nil, err
 	}

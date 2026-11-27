@@ -1014,9 +1014,13 @@ func (m *Model) sendCmd(note string) tea.Cmd {
 	return func() tea.Msg {
 		msg := sentMsg{res: prior}
 		task := ""
+		var skipped []string
 		for _, id := range ids {
 			s := byID[id]
 			if s.Kind == "skip" {
+				if d, err := ib.Get(id); err == nil && d.Status == "open" {
+					skipped = append(skipped, id)
+				}
 				continue
 			}
 			var letter, text *string
@@ -1042,18 +1046,25 @@ func (m *Model) sendCmd(note string) tea.Cmd {
 				msg.notes = append(msg.notes, id+" already "+status)
 			}
 		}
-		if len(msg.recorded) > 0 {
-			res, err := ib.FlushSession(sid)
-			if err != nil {
-				msg.flash = err.Error()
-				msg.snap = load(ib, client, w, sessions, false)
-				return msg
-			}
-			if res != nil {
-				msg.res = res
-			}
+		var res *inbox.Delivery
+		var err error
+		switch {
+		case len(msg.recorded) > 0:
+			res, err = ib.FlushSession(sid, note != "")
+		case note != "" && len(msg.amended) == 0 && len(skipped) > 0:
+			res, err = ib.SendNote(sid, skipped, note)
 		}
-		if flash, err := ib.Describe(msg.res, sid, task, name); err == nil {
+		if err != nil {
+			msg.flash = err.Error()
+			msg.snap = load(ib, client, w, sessions, false)
+			return msg
+		}
+		if res != nil {
+			msg.res = res
+		}
+		if flash, ok := noteFlash(res, note, name); ok {
+			msg.flash = flash
+		} else if flash, err := ib.Describe(msg.res, sid, task, name); err == nil {
 			msg.flash = flash
 		} else {
 			msg.flash = err.Error()
@@ -1061,6 +1072,27 @@ func (m *Model) sendCmd(note string) tea.Cmd {
 		msg.snap = load(ib, client, w, sessions, false)
 		return msg
 	}
+}
+
+// noteFlash is the outcome of a send with a note that went out ahead of open
+// asks; ok is false when Describe says it.
+func noteFlash(res *inbox.Delivery, note, name string) (string, bool) {
+	if res == nil || note == "" || len(res.LeftOpen) == 0 || res.Waiting {
+		return "", false
+	}
+	left := "; " + strconv.Itoa(len(res.LeftOpen)) + " left open"
+	switch {
+	case !res.OK && len(res.IDs) == 0:
+		return "note not sent: " + res.Error, true
+	case res.Message != "" && len(res.IDs) == 0:
+		return "note kept: nothing sent to your own session", true
+	case !res.OK || res.Message != "":
+		return "", false
+	case len(res.IDs) == 0:
+		return "sent your note to " + name + left + inbox.FollowupText(res.Followup, res.Target), true
+	}
+	return "sent " + plural(len(res.IDs), "answer") + " + your note to " + name + left +
+		inbox.FollowupText(res.Followup, res.Target), true
 }
 
 func (m *Model) onSent(msg sentMsg) tea.Cmd {

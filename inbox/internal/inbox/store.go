@@ -302,6 +302,8 @@ type Delivery struct {
 	Target string
 	// Waiting marks answers kept for a session that is down; a pass sends them.
 	Waiting bool
+	// LeftOpen is the open asks the send went ahead of (a send with a note).
+	LeftOpen []string
 }
 
 // Inbox is one open db. Its mutex serialises the single connection, so a

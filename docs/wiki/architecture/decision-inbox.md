@@ -1,7 +1,7 @@
 ---
 title: Decision Inbox — zen-inbox
 category: architecture
-updated: 2026-11-24
+updated: 2026-11-27
 related: [overview, release-tooling, agent-rotation]
 ---
 
@@ -43,7 +43,7 @@ message.
    free text (a textarea, `ctrl+d` sends, `esc` keeps the text as a draft), `s` skip, `t` talk, `v` view full, `esc`
    the session's decision list; `?` toggles help and the footer always lists the screen's keys. Answers are
    staged with the decision's `rev` and kept as drafts (see Drafts under Panel); a
-   review screen offers Send / Send with note (`n`: one note for the batch, stored on every answer, printed once after the answers in the delivered message; empty = plain send, esc back) / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
+   review screen offers Send / Send with note (`n`: one note for the batch, stored on every answer, printed once after the answers in the delivered message; empty = plain send, esc back). A non-empty note sends now, ahead of skipped asks in the task, with a `Left open: <ids>` line; with every ask skipped the note alone goes to the asker (`[zen-inbox] A note on your open decisions:`, not stored, so a failed send is only logged) and the asks stay open (#1109) / Change one / Cancel. The open session updates live (2 s poll): an amended question shows
    its new text, a staged answer to it goes stale and is asked again before the
    review, one answered elsewhere shows `answered elsewhere: <answer>` and leaves the
    walk (the db records no answerer, so it names the answer), and new questions join
