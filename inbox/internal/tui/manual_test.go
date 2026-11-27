@@ -32,7 +32,7 @@ func TestManualDoneNeedsTypedY(t *testing.T) {
 				t.Fatalf("%v: a did not confirm:\n%s", sz, d.view())
 			}
 			v := d.text()
-			for _, want := range []string{"YOU RUN THIS", "Rotate the signing key?", "just rotate-key --env prod",
+			for _, want := range []string{"human action", "Rotate the signing key?", "just rotate-key --env prod",
 				"Did you run it? type y", "y I ran it"} {
 				if !strings.Contains(v, want) {
 					t.Fatalf("%v: %q missing:\n%s", sz, want, d.view())
@@ -140,17 +140,17 @@ func TestManualAskIsMarked(t *testing.T) {
 	d.askManual(manualBody)
 	d.ask("7", "s2", "Which way?", "left", "right")
 	d.poll()
-	if v := d.view(); !strings.Contains(v, "YOU RUN THIS · spec-s1") || strings.Contains(v, "YOU RUN THIS · spec-s2") {
+	if v := d.view(); !strings.Contains(v, "human action spec-s1") || strings.Contains(v, "human action spec-s2") {
 		t.Fatalf("list row:\n%s", v)
 	}
 	golden(t, "cockpit-manual-92x29", d.view())
 	d.addNote("929", "Key rotation queued", "")
 	d.poll()
-	if v := d.view(); !strings.Contains(v, "#929 · Key rotation · YOU RUN THIS · 1 open") {
+	if v := d.view(); !strings.Contains(v, "human action ▸ #929 · Key rotation · 1 open") {
 		t.Fatalf("thread header:\n%s", v)
 	}
 	d.m.inboxOpen = true
-	if v := d.view(); !strings.Contains(v, "YOU RUN THIS · spec-s1 · #929") || strings.Contains(v, "YOU RUN THIS · spec-s2") {
+	if v := d.view(); !strings.Contains(v, "human action spec-s1 · #929") || strings.Contains(v, "human action spec-s2") {
 		t.Fatalf("inbox row:\n%s", v)
 	}
 }
@@ -207,7 +207,7 @@ func TestManualMarkerFollowsTheTask(t *testing.T) {
 	d.addNote("7", "Seven merged", "")
 	d.poll()
 	for _, l := range strings.Split(d.view(), "\n") {
-		if strings.Contains(l, "#7 ·") && strings.Contains(l, "items") && strings.Contains(l, "YOU RUN THIS") {
+		if strings.Contains(l, "#7 ·") && strings.Contains(l, "items") && strings.Contains(l, "human action") {
 			t.Fatalf("thread #7 has no manual ask: %q", l)
 		}
 	}

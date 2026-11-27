@@ -93,7 +93,7 @@ func (m *Model) deliveryRow(room int) (listRow, bool) {
 	if lost {
 		st = &failStyle
 	}
-	return listRow{item{pyfmt.Clip(label, room), "dl:"}, gInbox, st, ""}, true
+	return listRow{item{pyfmt.Clip(label, room), "dl:"}, gInbox, st, "", ""}, true
 }
 
 func (m *Model) openDeliveryScreen() {

@@ -1,5 +1,5 @@
 cockpit                                                                            quota n/a
- YOU RUN THIS  929.1
+human action 929.1
 929.1 manual  Rotate the signing key?
   Run on the build machine:
 

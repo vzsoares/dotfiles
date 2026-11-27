@@ -2,7 +2,6 @@ package tui
 
 import (
 	"hash/fnv"
-	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -12,109 +11,121 @@ import (
 	"github.com/vzsoares/dotfiles/inbox/internal/view"
 )
 
-// Tag fills: black on yellow and on cyan, white on red. Black and white text
-// on a filled ANSI colour reads on light and dark terminal themes alike.
-var (
-	tagYouStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("3")).Bold(true)
-	tagAgentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("6")).Bold(true)
-	tagProdStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("1")).Bold(true)
+// Item types, most urgent first; every list row and header leads with one.
+const (
+	typeApproval = "approval"
+	typeHuman    = "human action"
+	typeGate     = "gate"
+	typeDecision = "decision"
+	typeNote     = "note"
 )
 
-// projectPalette holds one filled chip per hue: a light fill under dark text
-// on dark terminals, a deep fill under white text on light ones.
+// colour is one adaptive foreground: a light shade on dark terminals, a deep
+// one on light terminals, so text reads on either.
+func colour(dark, light string) lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: dark, Light: light})
+}
+
+// typeStyles give each type one fixed colour.
+var typeStyles = map[string]lipgloss.Style{
+	typeApproval: colour("203", "124"),
+	typeHuman:    colour("220", "130"),
+	typeGate:     colour("213", "90"),
+	typeDecision: colour("120", "22"),
+	typeNote:     colour("75", "26"),
+}
+
+// projectPalette holds the hues a project name hashes into.
 var projectPalette = []lipgloss.Style{
-	chipStyle("209", "166"), chipStyle("114", "28"), chipStyle("111", "25"), chipStyle("176", "91"),
-	chipStyle("179", "130"), chipStyle("80", "30"), chipStyle("204", "125"), chipStyle("146", "61"),
+	colour("209", "166"), colour("114", "28"), colour("111", "25"), colour("176", "91"),
+	colour("179", "94"), colour("80", "30"), colour("204", "125"), colour("146", "61"),
 }
 
-func chipStyle(dark, light string) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).
-		Foreground(lipgloss.AdaptiveColor{Dark: "0", Light: "15"}).
-		Background(lipgloss.AdaptiveColor{Dark: dark, Light: light})
-}
+// projectNameMax is the widest project name a lead shows.
+const projectNameMax = 16
 
-// projectChipMax is the widest project name a chip shows.
-const projectChipMax = 16
-
-// projectChip is a task's board project as a filled chip; its colour comes
-// from the name alone, so it stays the same across runs. "" for no project.
-func projectChip(project string) string {
+// lead is "{project} ● {type}": the name in its stable colour, then the type in
+// its fixed one. With no project it is the type alone, with no dot.
+func lead(project, typ string) string {
+	out := typeStyles[typ].Render(typ)
 	if project == "" {
-		return ""
+		return out
 	}
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(strings.ToLower(project)))
-	return projectPalette[int(h.Sum32())%len(projectPalette)].Render(" " + pyfmt.Clip(project, projectChipMax) + " ")
+	name := projectPalette[int(h.Sum32())%len(projectPalette)].Render(pyfmt.Clip(project, projectNameMax))
+	return name + " ● " + out
 }
 
 // projectOf is a task's board project tag, "" while unknown.
 func (m *Model) projectOf(task string) string { return m.snap.projects[task] }
 
-// paintRow is a list row led by the project chip after its cursor prefix; st
-// styles the rest, and run tags in the label are filled.
-func paintRow(prefix, project, label string, st *lipgloss.Style) string {
-	plain := func(s string) string {
-		if st == nil || s == "" {
-			return s
-		}
-		return st.Render(s)
-	}
-	return plain(prefix) + projectChip(project) + plain(" ") + paintTags(label, st)
-}
-
-func tagStyle(label string) *lipgloss.Style {
-	switch label {
-	case view.TagYou:
-		return &tagYouStyle
-	case view.TagAgent:
-		return &tagAgentStyle
-	}
-	return &tagProdStyle
-}
-
-// tagOf is the run tag for an ask and its one-line copy, "" when it has none.
-func tagOf(d inbox.Decision) (label, hint string) {
+// typeOf is an ask's type.
+func typeOf(d inbox.Decision) string {
 	switch {
 	case d.Prod != nil:
-		return view.TagProd, "Approve and the agent runs it. Nothing runs until you do."
+		return typeApproval
 	case d.Kind == inbox.KindManual:
-		return view.TagYou, "Run it yourself, then pick Done and type y."
+		return typeHuman
+	case d.Gate:
+		return typeGate
+	}
+	return typeDecision
+}
+
+// rowType is a session row's most urgent type.
+func rowType(r view.Row, prod bool) string {
+	switch {
+	case prod:
+		return typeApproval
+	case r.Manual:
+		return typeHuman
+	case r.Gate:
+		return typeGate
+	}
+	return typeDecision
+}
+
+var urgency = map[string]int{typeNote: 1, typeDecision: 2, typeGate: 3, typeHuman: 4, typeApproval: 5}
+
+// moreUrgent is whichever of two types ranks higher; "" ranks lowest.
+func moreUrgent(a, b string) string {
+	if urgency[b] > urgency[a] {
+		return b
+	}
+	return a
+}
+
+// leadType is a thread's most urgent type; a thread of notes alone is a note.
+func (t thread) leadType() string { return moreUrgent(typeNote, t.typ) }
+
+// hintOf is the one-line explanation under a header, "" for a plain ask.
+func hintOf(d inbox.Decision) string {
+	switch {
+	case d.Prod != nil:
+		return "Approve and the agent runs it. Nothing runs until you do."
+	case d.Kind == inbox.KindManual:
+		return "Run it yourself, then pick Done and type y."
 	case d.UserRan():
-		return view.TagAgent, "You ran it; the agent skips its run."
+		return "You ran it; the agent skips its run."
 	case d.Kind == inbox.KindAgentRuns:
-		return view.TagAgent, "The agent runs this after you answer. Don't run it yourself."
+		return "The agent runs this after you answer. Don't run it yourself."
 	}
-	return "", ""
+	return ""
 }
 
-// tagHead is a one-line screen head led by the project chip and the ask's
-// filled tag.
+// tagHead is a one-line screen head led by the ask's lead.
 func tagHead(d inbox.Decision, project, text string, width int) string {
-	label, _ := tagOf(d)
-	lead := ""
-	if chip := projectChip(project); chip != "" {
-		lead = chip + " "
-	}
-	if label != "" {
-		lead += tagStyle(label).Render(" "+label+" ") + " "
-	}
-	return lead + pyfmt.Clip(text, max(width-lipgloss.Width(lead), 1))
+	l := lead(project, typeOf(d)) + " "
+	return l + pyfmt.Clip(text, max(width-lipgloss.Width(l), 1))
 }
 
-// tagLines is the pinned tag over an ask: the project chip, the filled run
-// label, then its copy.
+// tagLines is the pinned lead over an ask, with its explanation after it.
 func tagLines(d inbox.Decision, project string, width int) []string {
-	label, hint := tagOf(d)
-	chip := projectChip(project)
-	if label == "" {
-		if chip == "" {
-			return nil
-		}
-		return []string{chip}
-	}
-	head := tagStyle(label).Render(" " + label + " ")
-	if chip != "" {
-		head = chip + " " + head
+	head := lead(project, typeOf(d))
+	hint := hintOf(d)
+	if hint == "" {
+		return []string{head}
 	}
 	pad := strings.Repeat(" ", lipgloss.Width(head)+1)
 	lines := view.WrapRest(hint, max(width-len(pad), view.MinWidth), "", "")
@@ -128,26 +139,16 @@ func tagLines(d inbox.Decision, project string, width int) []string {
 	return lines
 }
 
-var tagWord = regexp.MustCompile(`(YOU RUN THIS|AGENT RUNS THIS|PROD)( · |$)`)
-
-// paintTags fills the run tags in a list row and styles the rest with st.
-func paintTags(line string, st *lipgloss.Style) string {
+// paintRow is a list row led by its lead after the cursor prefix; st styles
+// the rest.
+func paintRow(prefix, project, typ, label string, st *lipgloss.Style) string {
 	plain := func(s string) string {
 		if st == nil || s == "" {
 			return s
 		}
 		return st.Render(s)
 	}
-	var out strings.Builder
-	last := 0
-	for _, m := range tagWord.FindAllStringSubmatchIndex(line, -1) {
-		if m[0] > 0 && line[m[0]-1] != ' ' {
-			continue
-		}
-		out.WriteString(plain(line[last:m[0]]))
-		out.WriteString(tagStyle(line[m[2]:m[3]]).Render(line[m[2]:m[3]]))
-		last = m[3]
-	}
-	out.WriteString(plain(line[last:]))
-	return out.String()
+	rest := strings.TrimLeft(label, " ")
+	indent := label[:len(label)-len(rest)]
+	return plain(prefix+indent) + lead(project, typ) + plain(" "+rest)
 }

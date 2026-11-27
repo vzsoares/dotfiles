@@ -1,5 +1,5 @@
 cockpit · 1 prod                                                                   quota n/a
- PROD  Approve and the agent runs it. Nothing runs until you do.
+approval Approve and the agent runs it. Nothing runs until you do.
 » copied 1
 #736
 asked by spec-s1 · idle · 0s

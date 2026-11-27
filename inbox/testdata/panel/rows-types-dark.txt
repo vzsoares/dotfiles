@@ -1,0 +1,5 @@
+␛[1;35m› ␛[0m␛[1;38;5;146mFakeproj␛[0m ● ␛[1;38;5;120mdecision␛[0m␛[1;35m spec-s1 · #11 · A decision?␛[0m
+  ␛[1;38;5;146mFakeproj␛[0m ● ␛[1;38;5;213mgate␛[0m spec-s2 · #12 · A gate?
+  ␛[1;38;5;146mFakeproj␛[0m ● ␛[1;38;5;220mhuman action␛[0m spec-s3 · #13 · A human action?
+␛[31m  ␛[0m␛[1;38;5;146mFakeproj␛[0m ● ␛[1;38;5;203mapproval␛[0m␛[31m spec-s4 · #14 · release dotfiles prod@0123456789ab?␛[0m
+␛[1m  ␛[0m␛[1;38;5;146mFakeproj␛[0m ● ␛[1;38;5;75mnote␛[0m␛[1m ● A note · chief · #15 · 0s␛[0m

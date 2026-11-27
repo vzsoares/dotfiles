@@ -336,7 +336,7 @@ with their replies, and in the thread screen also its closed decisions and chats
   asking for several tasks sits under its oldest open decision's task. The title is
   the task's newest `decision_briefs.title`.
 - **List.** One `Threads · n` group. A thread with one row shows it flat; otherwise a
-  header `▸ #task · PROD · n open · k unread · m items · age · title` (only the title
+  header `▸ #task · n open · k unread · m items · age · title` (only the title
   is cut), bold with open asks or unread notes, red with a prod ask. Order: prod ask,
   open ask, unread notes, newest activity. Collapsed by default; `z`/`→`/`←` toggle,
   expand, collapse (`←` on a child collapses its parent). Expanded children are the
@@ -505,18 +505,20 @@ gates `<task>.g`, `<task>.g2`, … in their own sequence. IDs never shift or get
 
 ### Project tag (#1094)
 
-Each decision and note leads with its board project as a filled chip in the list rows
-and the walk and note headers. The project is the task's `☢️ Projeto`, never the asking
+Each decision and note leads with `{project} ● {type}` in the list rows and the walk,
+confirm and note headers; the type (`note`, `decision`, `gate`, `human action` for a
+`--manual` ask, `approval` for a `--prod` ask) replaces #1092's YOU RUN THIS / PROD
+tags and has one fixed colour each, with no project the type shows alone. The project is the task's `☢️ Projeto`, never the asking
 session's group. `zen-board project <task> --json` returns `{id, project, tag}`; `tag`
 is the vault `projects[].tag` when set, else the project name (empty for a task with no
 mapped project). v16 adds `task_projects (task, project, checked_at)`; an empty
-`project` means the board answered "none", so it is not asked again. The chip colour is
-a hash of the name into an 8-colour adaptive palette (`tui/tags.go`).
+`project` means the board answered "none", so it is not asked again. The name's colour is
+a hash into an 8-colour adaptive palette (`tui/tags.go`).
 
 The board never blocks anything: `ask` and `note` file first, then start a detached
 `zen-inbox projects <task>`; the panel also retries unanswered tasks off the render
 path every 5 minutes (`tui/projects.go`). A lookup that fails or times out (8 s)
-stores nothing and the row shows no chip. `zen-inbox projects` with no task is the
+stores nothing and the row shows the type alone. `zen-inbox projects` with no task is the
 backfill: every open decision and visible note without an answer. `ZEN_BOARD_BIN`
 names the lookup binary; `ZEN_INBOX_NO_SPAWN` stops the detached start (tests).
 

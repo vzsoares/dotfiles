@@ -362,13 +362,6 @@ type Row struct {
 	AgentRuns bool
 }
 
-// Row and thread tags: who runs the command in an ask.
-const (
-	TagProd  = "PROD"
-	TagYou   = "YOU RUN THIS"
-	TagAgent = "AGENT RUNS THIS"
-)
-
 // Rows is one row per asking session, oldest open decision first.
 func Rows(open []inbox.Decision, sessions am.Sessions) []Row {
 	byAge := append([]inbox.Decision(nil), open...)
@@ -677,15 +670,14 @@ func ThreadNoteLabel(n inbox.Note, at time.Time) string {
 // ThreadHead is a thread's list header: what it holds and how fresh it is.
 type ThreadHead struct {
 	Task, Title         string
-	Expanded, Prod      bool
-	Manual, AgentRuns   bool
+	Expanded            bool
 	Open, Unread, Items int
 	// Held is how many open asks hold this thread's answered ones back.
 	Held   int
 	Newest string
 }
 
-// ThreadLabel is ▸/▾ #task, the title, the run tags, the counts and the age of the
+// ThreadLabel is ▸/▾ #task, the title, the counts and the age of the
 // newest item; only the title is cut to fit room.
 func ThreadLabel(h ThreadHead, at time.Time, room int) string {
 	arrow := "▸ "
@@ -693,15 +685,6 @@ func ThreadLabel(h ThreadHead, at time.Time, room int) string {
 		arrow = "▾ "
 	}
 	var rest []string
-	if h.Prod {
-		rest = append(rest, TagProd)
-	}
-	if h.Manual {
-		rest = append(rest, TagYou)
-	}
-	if h.AgentRuns {
-		rest = append(rest, TagAgent)
-	}
 	if h.Open > 0 {
 		rest = append(rest, strconv.Itoa(h.Open)+" open")
 	}
@@ -774,7 +757,7 @@ func PanelThreadEntry(it inbox.ThreadItem, width int, at time.Time, p Painter) [
 		d := *it.Decision
 		head := d.ID + QuestionTags(d) + " · " + d.SessionName + " · " + Age(d.CreatedAt, at)
 		if d.Prod != nil {
-			head += " · PROD"
+			head += " · approval"
 		}
 		out := faint(WrapRest(head, width, "", "  "))
 		out = append(out, Painted(p, md.Key{ID: d.ID, Rev: d.Rev, Field: "question"}, d.Question, width, "", "")...)

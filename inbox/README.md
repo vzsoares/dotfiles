@@ -45,11 +45,12 @@ markdown in a ~92x29 pane (titles and list rows stay one plain line):
   the panel asks "Did you run it? type y"; on `y` the answer reads `... (user ran
   it; skip your run)` and `show <id> --json` has a non-empty `confirmed_at` with
   `"kind": "agent-runs"`, so the asker skips its run.
-- Every ask that runs a command wears a filled tag at the top of its view and on
-  its list row: `YOU RUN THIS` (black on yellow, a `--manual` ask), `AGENT RUNS
-  THIS` (black on cyan, an `--agent-runs` ask) and `PROD` (white on red). ANSI
-  colours 3, 6 and 1, so they follow the terminal theme; the text stays black or
-  white on the fill, which reads on light and dark themes.
+- Every list row and view header leads with `{project} ● {type}`, the project name
+  in its stable colour and the type in a fixed one: `note`, `decision` (an
+  `--agent-runs` ask is one and keeps its "The agent runs this" line), `gate`,
+  `human action` (a `--manual` ask, with its "Did you run it? type y" confirm) and
+  `approval` (a `--prod` ask). With no project the type shows alone. Colours are
+  adaptive: light shades on dark terminals, deep ones on light terminals.
 - `y` then a block's number copies its source exactly; a `--prod run` ask shows
   its `--cmd` as such a block. A code line wider than the pane wraps at the pane
   edge on screen only.
@@ -68,7 +69,7 @@ one opens the next. Expanded threads (`threads_open`) whose task has nothing lef
 
 ## Project tag
 
-Every decision and note leads with its board project as a coloured chip (list rows, walk
+Every decision and note leads with its board project in its stable colour (list rows, walk
 and note headers). `zen-inbox projects [TASK]...` asks `zen-board project` and stores the
 answer in `task_projects`; with no task it is the backfill over every open decision and
 visible note without an answer. `ask`/`note` start it detached, and the panel retries

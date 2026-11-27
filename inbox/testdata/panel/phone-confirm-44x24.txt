@@ -1,5 +1,5 @@
 cockpit · 1 prod                   quota n/a
- PROD  680.1  prod approval
+approval 680.1  prod approval
 action release
 repo   dotfiles
 branch prod

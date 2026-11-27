@@ -1,8 +1,0 @@
-dark Fakeproj: ␛[1;30;48;5;146m Fakeproj ␛[0m
-dark Otherproj: ␛[1;30;48;5;204m Otherproj ␛[0m
-dark Third: ␛[1;30;48;5;204m Third ␛[0m
-dark fakeproj: ␛[1;30;48;5;146m fakeproj ␛[0m
-light Fakeproj: ␛[1;97;48;5;61m Fakeproj ␛[0m
-light Otherproj: ␛[1;97;48;5;125m Otherproj ␛[0m
-light Third: ␛[1;97;48;5;125m Third ␛[0m
-light fakeproj: ␛[1;97;48;5;61m fakeproj ␛[0m

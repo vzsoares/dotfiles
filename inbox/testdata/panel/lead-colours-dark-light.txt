@@ -1,0 +1,18 @@
+dark note: ␛[1;38;5;75mnote␛[0m
+dark decision: ␛[1;38;5;120mdecision␛[0m
+dark human action: ␛[1;38;5;220mhuman action␛[0m
+dark approval: ␛[1;38;5;203mapproval␛[0m
+dark gate: ␛[1;38;5;213mgate␛[0m
+dark Fakeproj: ␛[1;38;5;146mFakeproj␛[0m ● ␛[1;38;5;75mnote␛[0m
+dark Otherproj: ␛[1;38;5;204mOtherproj␛[0m ● ␛[1;38;5;75mnote␛[0m
+dark Third: ␛[1;38;5;204mThird␛[0m ● ␛[1;38;5;75mnote␛[0m
+dark fakeproj: ␛[1;38;5;146mfakeproj␛[0m ● ␛[1;38;5;75mnote␛[0m
+light note: ␛[1;38;5;26mnote␛[0m
+light decision: ␛[1;38;5;22mdecision␛[0m
+light human action: ␛[1;38;5;130mhuman action␛[0m
+light approval: ␛[1;38;5;124mapproval␛[0m
+light gate: ␛[1;38;5;90mgate␛[0m
+light Fakeproj: ␛[1;38;5;61mFakeproj␛[0m ● ␛[1;38;5;26mnote␛[0m
+light Otherproj: ␛[1;38;5;125mOtherproj␛[0m ● ␛[1;38;5;26mnote␛[0m
+light Third: ␛[1;38;5;125mThird␛[0m ● ␛[1;38;5;26mnote␛[0m
+light fakeproj: ␛[1;38;5;61mfakeproj␛[0m ● ␛[1;38;5;26mnote␛[0m

@@ -917,7 +917,7 @@ func TestListCursorFollowsShrinkingList(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.poll()
-	if !strings.Contains(d.view(), "› spec-s1") {
+	if !strings.Contains(d.view(), "› decision spec-s1") {
 		t.Fatalf("no row under the cursor:\n%s", d.view())
 	}
 }
@@ -1264,7 +1264,7 @@ func TestTallListScrollsWithTheCursor(t *testing.T) {
 		d.keys("down")
 	}
 	d.fits()
-	if !strings.Contains(d.view(), "› spec-t49") || !strings.Contains(d.view(), "↑ ") {
+	if !strings.Contains(d.view(), "› decision spec-t49") || !strings.Contains(d.view(), "↑ ") {
 		t.Fatalf("cursor row not in view:\n%s", d.view())
 	}
 	golden(t, "scroll-list-end", d.view())

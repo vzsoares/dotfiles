@@ -2,7 +2,7 @@ cockpit                                                                         
   Inbox · 1 decision · 0 notes
 
 Threads · 1
-› spec-s1 · #7 · 1 open · 0s · [idle]
+› decision spec-s1 · #7 · 1 open · 0s · [idle]
 
 
 

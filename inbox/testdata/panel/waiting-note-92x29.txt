@@ -1,5 +1,5 @@
 cockpit · ◷ chief is down · 1 queued · sends when back                             quota n/a
-n1 · #707 · chief · 0s ● unread
+note n1 · #707 · chief · 0s ● unread
 Task 707 merged
 
 Tag v1.2.3.

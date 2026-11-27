@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+
+	"github.com/vzsoares/dotfiles/inbox/internal/inbox"
 )
 
 // projectFixture is an ask and a note on one task of a fake project, plus an
@@ -31,8 +33,8 @@ func TestProjectChipLeadsListRowsAndHeaders(t *testing.T) {
 	d := newDrv(t, 92, 29)
 	d.projectFixture()
 	v := d.view()
-	if !strings.Contains(v, "› Fakeproj  ▸ #707") && !strings.Contains(v, " Fakeproj  ▸ #707") {
-		t.Errorf("thread row lacks the chip:\n%s", v)
+	if !strings.Contains(v, "› Fakeproj ● decision ▸ #707") {
+		t.Errorf("thread row lacks its lead:\n%s", v)
 	}
 	if strings.Contains(lineWith(v, "#808"), "Fakeproj") {
 		t.Errorf("a task without a project got a chip:\n%s", v)
@@ -42,7 +44,7 @@ func TestProjectChipLeadsListRowsAndHeaders(t *testing.T) {
 	d.poll()
 	v = d.view()
 	for _, want := range []string{"Which way?", "Task 707 merged"} {
-		if !strings.Contains(lineWith(v, want), " Fakeproj ") {
+		if !strings.Contains(lineWith(v, want), "Fakeproj ● ") {
 			t.Errorf("row %q lacks the chip:\n%s", want, v)
 		}
 	}
@@ -53,7 +55,7 @@ func TestProjectChipLeadsListRowsAndHeaders(t *testing.T) {
 	d.cursorTo("Which way?")
 	d.keys("enter", "enter")
 	d.fits()
-	if d.m.scr != scWalk || !strings.Contains(strings.Split(d.view(), "\n")[1], " Fakeproj ") {
+	if d.m.scr != scWalk || !strings.HasPrefix(strings.Split(d.view(), "\n")[1], "Fakeproj ● decision") {
 		t.Fatalf("walk header lacks the chip:\n%s", d.view())
 	}
 	golden(t, "project-walk-92x29", d.view())
@@ -62,7 +64,7 @@ func TestProjectChipLeadsListRowsAndHeaders(t *testing.T) {
 	d.poll()
 	d.cursorTo("Task 707 merged")
 	d.keys("enter")
-	if d.m.scr != scNote || !strings.HasPrefix(strings.Split(d.view(), "\n")[1], " Fakeproj ") {
+	if d.m.scr != scNote || !strings.HasPrefix(strings.Split(d.view(), "\n")[1], "Fakeproj ● note") {
 		t.Fatalf("note header lacks the chip:\n%s", d.view())
 	}
 	golden(t, "project-note-92x29", d.view())
@@ -79,51 +81,65 @@ func lineWith(v, text string) string {
 
 func esc(s string) string { return strings.ReplaceAll(s, "\x1b", "␛") }
 
-// A chip keeps its hue across runs and has dark text on a dark terminal's
-// light fill and white text on a light terminal's deep fill.
-func TestProjectChipLightAndDarkGolden(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev); lipgloss.SetHasDarkBackground(true) })
-	lipgloss.SetColorProfile(termenv.ANSI256)
-	var out []string
-	for _, dark := range []bool{true, false} {
-		lipgloss.SetHasDarkBackground(dark)
-		mode := map[bool]string{true: "dark", false: "light"}[dark]
-		for _, name := range []string{"Fakeproj", "Otherproj", "Third", "fakeproj"} {
-			chip := projectChip(name)
-			if chip != projectChip(name) {
-				t.Fatalf("%s chip changes between calls", name)
-			}
-			out = append(out, mode+" "+name+": "+esc(chip))
+// typesFixture is one row of each type, all on one fake project.
+func (d *drv) typesFixture() {
+	d.t.Helper()
+	ask := func(task, sid, q string, in inbox.AskInput) {
+		in.Task, in.SessionID, in.Name, in.Question = task, sid, "spec-"+sid, q
+		var err error
+		if in.Prod != nil {
+			_, err = d.other.AskProd(in, *in.Prod)
+		} else {
+			_, err = d.other.Ask(in)
+		}
+		if err != nil {
+			d.t.Fatal(err)
+		}
+		if err := d.other.SetProject(task, "Fakeproj"); err != nil {
+			d.t.Fatal(err)
 		}
 	}
-	golden(t, "project-chip-dark-light", strings.Join(out, "\n"))
+	ask("11", "s1", "A decision?", inbox.AskInput{Options: []string{"yes", "no"}})
+	ask("12", "s2", "A gate?", inbox.AskInput{Gate: true, Options: []string{"yes", "no"}})
+	ask("13", "s3", "A human action?", inbox.AskInput{Manual: true})
+	prod := prodWant()
+	ask("14", "s4", "", inbox.AskInput{Prod: &prod})
+	d.addNote("15", "A note", "")
+	if err := d.other.SetProject("15", "Fakeproj"); err != nil {
+		d.t.Fatal(err)
+	}
+	d.poll()
 }
 
-func TestProjectChipRowsInColour(t *testing.T) {
+func TestEveryTypeLeadsItsRowInLightAndDark(t *testing.T) {
 	t.Setenv("ZEN_INBOX_NOW", pinnedNow)
 	prev := lipgloss.ColorProfile()
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev); lipgloss.SetHasDarkBackground(true) })
 	lipgloss.SetColorProfile(termenv.ANSI256)
 	for _, dark := range []bool{true, false} {
 		lipgloss.SetHasDarkBackground(dark)
-		d := newDrv(t, 92, 29)
+		d := newDrvWith(t, 92, 29, userPanel)
 		d.m.inboxOpen = true
-		d.projectFixture()
+		d.typesFixture()
 		var rows []string
 		for _, l := range strings.Split(d.view(), "\n") {
-			if strings.Contains(l, "Which way?") {
+			if strings.Contains(l, "●") {
 				rows = append(rows, esc(l))
 			}
 		}
-		if len(rows) != 1 || !strings.Contains(rows[0], "Fakeproj") {
-			t.Fatalf("rows %q", rows)
+		if len(rows) != 5 {
+			t.Fatalf("%d typed rows:\n%s", len(rows), d.view())
 		}
-		name := "project-row-light"
+		for i, typ := range []string{typeDecision, typeGate, typeHuman, typeApproval, typeNote} {
+			if !strings.Contains(rows[i], typ) {
+				t.Errorf("row %d lacks %q: %s", i, typ, rows[i])
+			}
+		}
+		name := "rows-types-light"
 		if dark {
-			name = "project-row-dark"
+			name = "rows-types-dark"
 		}
-		golden(t, name, rows[0])
+		golden(t, name, strings.Join(rows, "\n"))
 	}
 }
 
@@ -157,7 +173,7 @@ func TestProjectsResolveOffThreadAndTheBoardFailingTagsNothing(t *testing.T) {
 	}
 	boardUp, clock = true, clock.Add(ProjectRetry)
 	d.poll()
-	if calls != 2 || !strings.Contains(d.view(), " Fakeproj ") {
+	if calls != 2 || !strings.Contains(d.view(), "Fakeproj ● decision") {
 		t.Fatalf("retry after the window did not tag (calls %d):\n%s", calls, d.view())
 	}
 	d.poll()

@@ -117,7 +117,7 @@ func TestNotesOnlyStatusAndCursorAcrossRows(t *testing.T) {
 	if n, ok := d.m.cursorNote(); !ok || n.Title != "one" {
 		t.Fatalf("cursor did not reach the note row:\n%s", d.view())
 	}
-	if !strings.Contains(d.view(), "› ● one") {
+	if !strings.Contains(d.view(), "› note ● one") {
 		t.Fatalf("%s", d.view())
 	}
 }
@@ -144,7 +144,7 @@ func TestNoteScreenScrollsLongMarkdown(t *testing.T) {
 	}
 	d.fits()
 	golden(t, "note-top", d.view())
-	if !strings.HasPrefix(d.line(1), "n1 · #707 · chief · 0s") {
+	if !strings.HasPrefix(d.line(1), "note n1 · #707 · chief · 0s") {
 		t.Fatalf("%s", d.view())
 	}
 	d.keys("j")

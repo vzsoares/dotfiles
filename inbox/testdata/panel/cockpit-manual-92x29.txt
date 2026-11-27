@@ -2,8 +2,8 @@ cockpit                                                                         
   Inbox · 2 decisions · 0 notes
 
 Threads · 2
-› spec-s2 · #7 · 1 open · 0s · [idle]
-  YOU RUN THIS · spec-s1 · #929 Key rotation · 1 open · 0s · [idle]
+› decision spec-s2 · #7 · 1 open · 0s · [idle]
+  human action spec-s1 · #929 Key rotation · 1 open · 0s · [idle]
 
 
 

@@ -2,8 +2,8 @@ cockpit                                                                         
   Inbox · 2 decisions · 1 note
 
 Threads · 2
-›  Fakeproj  ▸ #707 · Task 707 merged · 1 open · 1 unread · 2 items · 0s
-  spec-s2 · #808 · 1 open · 0s · [idle]
+› Fakeproj ● decision ▸ #707 · Task 707 merged · 1 open · 1 unread · 2 items · 0s
+  decision spec-s2 · #808 · 1 open · 0s · [idle]
 
 
 

@@ -2,11 +2,11 @@ cockpit                                            quota n/a
   Inbox · 1 decision · 1 note
 
 Threads · 2
-› spec-s1 · #7 · 1 open · 0s · [idle]
-  ● Task 707 merged · chief · #707 · 0s
+› decision spec-s1 · #7 · 1 open · 0s · [idle]
+  note ● Task 707 merged · chief · #707 · 0s
 
 No task · 0 unread
-  ○ Session spec-s2 died after a revive · chief · 0s
+  note ○ Session spec-s2 died after a revive · chief · 0s
 
 
 

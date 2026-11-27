@@ -3,7 +3,7 @@ cockpit                                                                         
 › Delivery · 2 open · 1 lost
 
 Threads · 1
-  spec-s1 · #7 · 1 open · 0s · [idle]
+  decision spec-s1 · #7 · 1 open · 0s · [idle]
 
 
 

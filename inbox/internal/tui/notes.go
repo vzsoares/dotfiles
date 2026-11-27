@@ -282,10 +282,7 @@ func (m *Model) viewNote() frame {
 	if n.Unread() {
 		mark, markStyle = "● unread", &cursorStyle
 	}
-	chip := projectChip(m.projectOf(n.Task))
-	if chip != "" {
-		chip += " "
-	}
+	chip := lead(m.projectOf(n.Task), typeNote) + " "
 	head := pyfmt.Clip(view.NoteHead(n, m.now()), max(m.w-lipgloss.Width(mark)-lipgloss.Width(chip)-1, 0))
 	line := chip + bannerStyle.Render(head) + " " + markStyle.Render(mark)
 	top := []section{{lines: []string{line}}}

@@ -2,8 +2,8 @@ cockpit · 1 prod                                                               
   Inbox · 2 decisions · 0 notes
 
 Threads · 2
-› PROD · spec-s2 · #680 · 1 open · 0s · [idle]
-  spec-s1 · #7 · 1 open · 0s · [idle]
+› approval spec-s2 · #680 · 1 open · 0s · [idle]
+  decision spec-s1 · #7 · 1 open · 0s · [idle]
 
 
 

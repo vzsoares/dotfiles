@@ -470,10 +470,8 @@ func (m *Model) viewList() frame {
 			if r.group != last && r.group != gInbox {
 				body = group(body, heads[r.group], headStyle[r.group])
 			}
-			if r.project != "" {
-				body = append(body, section{lines: []string{paintRow(prefix, r.project, r.label, st)}})
-			} else if tagWord.MatchString(r.label) {
-				body = append(body, section{lines: []string{paintTags(prefix+r.label, st)}})
+			if r.typ != "" {
+				body = append(body, section{lines: []string{paintRow(prefix, r.project, r.typ, r.label, st)}})
 			} else {
 				body = append(body, section{lines: []string{prefix + r.label}, style: st})
 			}

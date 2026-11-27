@@ -2,10 +2,10 @@ cockpit                                                                         
   Inbox · 0 decisions · 2 notes
 
 Threads · 1
-› ● Task 707 merged · chief · #707 · 0s
+› note ● Task 707 merged · chief · #707 · 0s
 
 No task · 1 unread
-  ● Session spec-s2 died · chief · 0s
+  note ● Session spec-s2 died · chief · 0s
 
 
 

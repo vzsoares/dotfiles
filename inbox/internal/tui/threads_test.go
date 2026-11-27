@@ -80,7 +80,7 @@ func TestThreadGoldens(t *testing.T) {
 	d.addNote("", "Swept 6 finished agents; kept 5", "")
 	d.poll()
 	d.fits()
-	d.has("Threads · 2", "› ▸ #843 · Phone cockpit setup · 1 open · 2 unread · 11 items · 1h", "  spec-s2 · #9",
+	d.has("Threads · 2", "› decision ▸ #843 · Phone cockpit setup · 1 open · 2 unread · 11 items · 1h", "  decision spec-s2 · #9",
 		"No task · 1 unread", "enter expand")
 	if strings.Contains(d.view(), "Phone step") {
 		t.Fatalf("thread not collapsed:\n%s", d.view())
@@ -89,7 +89,7 @@ func TestThreadGoldens(t *testing.T) {
 
 	d.keys("z")
 	d.fits()
-	d.has("› ▾ #843", "    spec-s1 · #843", "    ● Phone step 10 · chief · 1h", "    ○ Phone step 9 · chief · 1h ↩")
+	d.has("› decision ▾ #843", "    decision spec-s1 · #843", "    note ● Phone step 10 · chief · 1h", "    note ○ Phone step 9 · chief · 1h ↩")
 	if strings.Contains(d.view(), "· #843 · 1h") {
 		t.Fatalf("child note repeats the task:\n%s", d.view())
 	}
@@ -127,7 +127,7 @@ func TestThreadNoTaskAndRefileGoldens(t *testing.T) {
 	}
 	d.poll()
 	d.fits()
-	d.has("Threads · 1", "› spec-s1 · #861", "No task · 2 unread", "○ Good night")
+	d.has("Threads · 1", "› decision spec-s1 · #861", "No task · 2 unread", "○ Good night")
 	golden(t, "cockpit-threads-notask-92x29", d.view())
 	d.cursorTo("Swept")
 	d.keys("T")
@@ -177,7 +177,7 @@ func TestThreadsGroupingOrderAndSingletons(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("rows %v, want %v:\n%s", got, want, d.view())
 	}
-	d.has("PROD", "spec-s1 · #7, #8", "● eight note · chief · #8")
+	d.has("approval", "spec-s1 · #7, #8", "● eight note · chief · #8")
 	if th, _ := d.m.threadOf("s:s1"); th.open != 1 {
 		t.Fatalf("#7 counts %d open, want only its own ask", th.open)
 	}

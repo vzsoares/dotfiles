@@ -41,7 +41,7 @@ func TestCockpitGoldens(t *testing.T) {
 		{"cockpit-prod-92x29", func(d *drv) {
 			d.ask("7", "s1", "First?", "a", "b")
 			d.askProd("s2")
-		}, []string{"cockpit · 1 prod", "Inbox · 2 decisions · 0 notes", "› PROD · spec-s2"}},
+		}, []string{"cockpit · 1 prod", "Inbox · 2 decisions · 0 notes", "› approval spec-s2"}},
 	}
 	for _, c := range cases {
 		d := newDrv(t, 92, 29)
@@ -143,7 +143,7 @@ func TestCockpitCursorStaysOnItsRowWhenAProdAskArrives(t *testing.T) {
 	d.poll()
 	d.askProd("s2")
 	d.poll()
-	if !strings.Contains(d.view(), "› spec-s1") {
+	if !strings.Contains(d.view(), "› decision spec-s1") {
 		t.Fatalf("cursor left spec-s1 when spec-s2 moved above it:\n%s", d.view())
 	}
 }
@@ -219,7 +219,7 @@ func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 		t.Fatalf("fold not restored:\n%s", v)
 	}
 	again.keys("enter")
-	if v := again.view(); !strings.Contains(v, "Task 707 merged") || !strings.Contains(v, "› ● Task 707 merged") {
+	if v := again.view(); !strings.Contains(v, "Task 707 merged") || !strings.Contains(v, "› note ● Task 707 merged") {
 		t.Fatalf("enter did not expand onto the first note:\n%s", v)
 	}
 	third := newDrvWith(t, 92, 29, func(n *drv) { n.m.stateFile = d.m.stateFile })
@@ -230,7 +230,7 @@ func TestCockpitNotesFoldKeysAndPersist(t *testing.T) {
 	}
 	third.keys("z")
 	third.keys("z")
-	if v := third.view(); !strings.Contains(v, "› ● Task 707 merged") {
+	if v := third.view(); !strings.Contains(v, "› note ● Task 707 merged") {
 		t.Fatalf("z did not expand from the header:\n%s", v)
 	}
 }

@@ -1,5 +1,5 @@
 cockpit                                            quota n/a
-n1 · #707 · chief · 0s ● unread
+note n1 · #707 · chief · 0s ● unread
 ↑ 106 more
 ## Part 26
 lorem ipsum dolor sit amet consectetur adipiscing elit sed

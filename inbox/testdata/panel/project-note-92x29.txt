@@ -1,5 +1,5 @@
 cockpit                                                                            quota n/a
- Fakeproj  n1 · #707 · chief · 0s ● unread
+Fakeproj ● note n1 · #707 · chief · 0s ● unread
 Task 707 merged
 
 Tag v1.2.3.

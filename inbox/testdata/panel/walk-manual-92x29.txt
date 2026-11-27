@@ -1,5 +1,5 @@
 cockpit                                                                            quota n/a
- YOU RUN THIS  Run it yourself, then pick Done and type y.
+human action Run it yourself, then pick Done and type y.
 #929 Key rotation
 asked by spec-s1 · idle · 0s
 

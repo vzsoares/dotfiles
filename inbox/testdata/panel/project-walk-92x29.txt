@@ -1,5 +1,5 @@
 cockpit                                                                            quota n/a
- Fakeproj 
+Fakeproj ● decision
 #707
 asked by spec-s1 · idle · 0s
 

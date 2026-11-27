@@ -1,5 +1,5 @@
 cockpit                                                                            quota n/a
- AGENT RUNS THIS  The agent runs this after you answer. Don't run it yourself.
+decision The agent runs this after you answer. Don't run it yourself.
 #926 Deploy steps
 926.1  Run the deploy steps now?
   Three commands, run in this order:
