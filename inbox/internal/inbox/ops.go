@@ -816,7 +816,9 @@ func (ib *Inbox) SendNote(sid string, open []string, note string) (*Delivery, er
 	}
 	if res.OK {
 		res.Followup = ib.AM.Followup(t.id)
-		return res, ib.closeRefusals("note:" + sid + ":")
+		// A failed close is retried by the next clean send.
+		_ = ib.closeRefusals("note:" + sid + ":")
+		return res, nil
 	}
 	if strings.HasPrefix(res.Error, GaveUp) {
 		return res, nil

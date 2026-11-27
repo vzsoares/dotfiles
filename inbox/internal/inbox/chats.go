@@ -160,7 +160,9 @@ func (ib *Inbox) sendChat(c Chat) (Chat, error) {
 		return c, err
 	}
 	if errText == "" {
-		return c, ib.closeRefusals("chat:")
+		// A failed close is retried by the next clean send.
+		_ = ib.closeRefusals("chat:")
+		return c, nil
 	}
 	if c.Status == "failed" && !strings.HasPrefix(errText, GaveUp) {
 		target := ""
