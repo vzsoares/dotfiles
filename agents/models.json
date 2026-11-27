@@ -71,6 +71,75 @@
                         "cacheRead": 0.00825,
                         "cacheWrite": 0
                     }
+                },
+                {
+                    "id": "deepseek-v4-1-flash-uncensored",
+                    "name": "DeepSeek V4.1 Flash Uncensored (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": ["text", "image"],
+                    "contextWindow": 1000000,
+                    "maxTokens": 32768,
+                    "cost": {
+                        "input": 0.33,
+                        "output": 1.32,
+                        "cacheRead": 0.00825,
+                        "cacheWrite": 0
+                    }
+                },
+                {
+                    "id": "abliteration-abliterated-model-large-flash",
+                    "name": "Abliterated Large Flash (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": ["text", "image"],
+                    "contextWindow": 1000000,
+                    "maxTokens": 131072,
+                    "cost": {
+                        "input": 1.25,
+                        "output": 2.5,
+                        "cacheRead": 0.125,
+                        "cacheWrite": 0
+                    }
+                },
+                {
+                    "id": "abliteration-abliterated-model-large-v2",
+                    "name": "Abliterated Large V2 (Venice)",
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": null,
+                        "minimal": "low",
+                        "low": "low",
+                        "medium": "high",
+                        "high": "high",
+                        "xhigh": "max",
+                        "max": "max"
+                    },
+                    "input": ["text"],
+                    "contextWindow": 1000000,
+                    "maxTokens": 32768,
+                    "cost": {
+                        "input": 3,
+                        "output": 5,
+                        "cacheRead": 0.3,
+                        "cacheWrite": 0
+                    }
                 }
             ]
         },
